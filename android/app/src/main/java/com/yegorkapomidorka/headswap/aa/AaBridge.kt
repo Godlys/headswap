@@ -18,6 +18,9 @@ interface CarlifeLink {
      */
     fun sendVideoTakeover(payload: ByteArray): Boolean = sendVideo(payload)
 
+    /** Связь по воздуху (6 TCP-сокетов), а не USB / tcp-debug. */
+    val isAir: Boolean get() = false
+
     /** Текущий кадр заглушки (null = её нет): с него перекодирование начинает переход в картинку AA. */
     fun placeholderSnapshot(): android.graphics.Bitmap? = null
 
@@ -336,10 +339,24 @@ class AaBridgeCore(
         // Desay G6S (Mazda) шлёт START без PAUSE на каждое нажатие NAVI/MEDIA: звук уже идёт, повторный INIT
         // посреди трека рвёт его на ГУ (лог 2026-10-11). Звук сбрасываем только на первом START и после PAUSE.
         val warm = carlifeStarted && !carlifePaused
+        // Воздух, возврат после PAUSE: декодер всю паузу ел кадры AA (гейт выкидывал только выход энкодера), его
+        // состояние живо. Не ждём IDR от AA (цикл VideoFocus, 0.2-2 с тишины), а сразу берём IDR у энкодера.
+        // VW BT 1420 (лог Павла 2026-10-16) закрывал сокет через 0.16-0.42 с после такого START.
+        val resume = AIR_WARM_RESUME_ENABLED && link.isAir && carlifeStarted && carlifePaused &&
+            transcodeEnabled && transcoder != null && gotIdr && active == Source.AA
         carlifeStarted = true
         carlifePaused = false
         if (warm) log("BRIDGE CarLife START без PAUSE: звук не трогаю, INIT не повторяю", true)
         else resetAudio()                      // новый START: MEDIA/TTS init заново на первом пакете
+        if (resume) {
+            lastKeyframeRequest = NEVER
+            log("BRIDGE CarLife START после PAUSE (воздух): декодер жив, сразу IDR энкодера, AA не жду", true)
+            startTranscoder()
+            outputEnabled = true
+            if (!warm) meta.onCarlifeStart()
+            if (huPausedAa) log("BRIDGE CarLife START: AA на паузе после ухода ГУ на свой источник, музыку не запускаю", true)
+            return
+        }
         gotIdr = false
         waitSince = if (aaVideoSeen) clockMs() - KEYFRAME_WAIT_MS else 0L
         lastKeyframeRequest = NEVER
@@ -1357,6 +1374,9 @@ class AaBridgeCore(
          * (в окне после HFP, без ввода с ГУ) паузу не снимает, а снова получает KEYCODE 127.
          */
         @Volatile @JvmStatic var BT_AUTOPLAY_GUARD_ENABLED = true
+
+        /** Воздух: START после PAUSE сразу с IDR энкодера (декодер жив), без ожидания IDR от AA. */
+        @Volatile @JvmStatic var AIR_WARM_RESUME_ENABLED = true
 
         const val BT_AUTOPLAY_WINDOW_MS = 20_000L
         const val USER_INPUT_WINDOW_MS = 3_000L

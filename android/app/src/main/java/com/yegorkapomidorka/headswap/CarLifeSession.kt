@@ -536,6 +536,8 @@ class CarLifeSession(
         }
     }
 
+    override val isAir: Boolean get() = air
+
     override fun sendVideoTakeover(payload: ByteArray): Boolean {
         if (closed.get() || paused) return false
         synchronized(videoLock) {
@@ -940,6 +942,8 @@ class CarLifeSession(
     //   и раз в 100 мс, как Baidu Recorder.sendEmptyPacketBackground (~50 мс).
     private fun pauseHeartbeat() {
         if (closed.get() || !paused || !PAUSE_KEEPALIVE_ENABLED) return
+        // На воздухе пустой VIDEO_DATA не шлём: VW BT 1420 после него рвал сессию на START (лог Павла 2026-10-16)
+        if (air && !bridge.huVw20082120 && !PAUSE_KEEPALIVE_AIR_ENABLED) return
         val (type, period) =
             if (bridge.huVw20082120) Msg.VIDEO_HEARTBEAT to PAUSE_HEARTBEAT_MS else Msg.VIDEO_DATA to pauseKeepaliveMs
         val now = SystemClock.elapsedRealtime()
@@ -1032,6 +1036,9 @@ class CarLifeSession(
 
         /** Keepalive на PAUSE: пустой VIDEO_DATA, у VW 20082120 VIDEO_HEARTBEAT. */
         @Volatile @JvmStatic var PAUSE_KEEPALIVE_ENABLED = true
+
+        /** То же по воздуху (6 сокетов). Выключено: VW BT 1420 рвал сессию на START после паузы. */
+        @Volatile @JvmStatic var PAUSE_KEEPALIVE_AIR_ENABLED = false
         private const val FEATURE_CONTENT_ENCRYPTION = "CONTENT_ENCRYPTION"
 
         /** moduleID подписки CARLIFE_DATA_SUBSCRIBE на навигацию (CarlifeDataSubscribe: 0 навигация, 2 музыка). */
