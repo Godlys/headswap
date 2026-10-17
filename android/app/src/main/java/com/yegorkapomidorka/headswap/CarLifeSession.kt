@@ -937,7 +937,8 @@ class CarLifeSession(
     //   как Baidu sendEmptyPacketBackground, раз в 2 с по USB и раз в ~1 с на воздухе (ГУ на Wi-Fi рвут видео-сокет быстрее);
     // - VW channel 20082120 рвёт канал через 3,6-4 с после PAUSE даже при 0x20001 раз в 1-2 с (h93, логи 2026-10-15 USB
     //   и 2026-10-16 Wi-Fi), реконнект с FOREGROUND выдёргивал юзера из меню ГУ в CarLife: VIDEO_HEARTBEAT 0x20002 сразу
-    //   и раз в 100 мс, как Baidu Recorder.sendEmptyPacketBackground (~50 мс).
+    //   и раз в 100 мс, как Baidu Recorder.sendEmptyPacketBackground (~50 мс). VW CNS3 channel 20082122 так же,
+    //   через ~5,6 с (h222, 2026-10-17 USB).
     private fun pauseHeartbeat() {
         if (closed.get() || !paused || !PAUSE_KEEPALIVE_ENABLED) return
         val (type, period) =

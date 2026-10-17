@@ -602,6 +602,18 @@ class AaMetaTest {
     }
 
     @Test
+    fun pauseHeartbeatForVwCns3Channel20082122() {
+        val r = Rig()
+        r.core.onHuInfo("Volkswagen", "CNS3")
+        r.core.onHuStatistic("20082122")
+        assertTrue(r.core.huVw20082120)
+        assertTrue(!r.core.huVw20082138)
+        r.core.onCarlifeClosed()
+        r.core.attach(MetaLink())
+        assertTrue("новая сессия - флаг заново", !r.core.huVw20082120)
+    }
+
+    @Test
     fun routeNaviOffForDesayByChannel() {
         val r = Rig()
         r.core.onHuInfo("", "")

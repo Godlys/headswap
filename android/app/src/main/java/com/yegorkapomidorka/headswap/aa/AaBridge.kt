@@ -151,7 +151,7 @@ class AaBridgeCore(
     @Volatile private var btAudio = false
     @Volatile var huDesayG6S = false           // ГУ Desay G6S (Mazda CX-5): NAVI=1 глушит штатное радио, маршрутный NAVI не шлём
         private set
-    @Volatile var huVw20082120 = false         // VW (STATISTIC_INFO channel 20082120, h93): без heartbeat рвёт USB через ~3,7 с PAUSE
+    @Volatile var huVw20082120 = false         // VW (STATISTIC_INFO channel 20082120 h93, 20082122 h222): без heartbeat рвёт USB через 3,7-5,6 с PAUSE
         private set
     @Volatile var huVw20082138 = false         // VW ID (channel 20082138, "VW BT 1538", h196): IDR > ~600 КиБ рвёт USB EIO
         private set
@@ -497,7 +497,7 @@ class AaBridgeCore(
     /** STATISTIC_INFO ГУ разобран: запасной признак Desay G6S и признак VW 20082120 - канал сборки прошивки. */
     fun onHuStatistic(channel: String?) {
         if (channel == DESAY_G6S_CHANNEL) huDesayG6S = true
-        if (channel == VW_20082120_CHANNEL) huVw20082120 = true
+        if (channel == VW_20082120_CHANNEL || channel == VW_CNS3_20082122_CHANNEL) huVw20082120 = true
         if (channel == VW_20082138_CHANNEL) huVw20082138 = true
     }
 
@@ -1411,7 +1411,8 @@ class AaBridgeCore(
         const val DESAY_MANUFACTURER = "Desay SV Automotive"
         const val DESAY_G6S_MODEL = "G6S"
         const val DESAY_G6S_CHANNEL = "20622116"          // STATISTIC_INFO.channel у Mazda CX-5; Vezel - 20832125, другая Mazda - 21520001
-        const val VW_20082120_CHANNEL = "20082120"        // VW, protocol 1.0, versionName="RADIO" (h93); Tharu CNS3 - 20082122
+        const val VW_20082120_CHANNEL = "20082120"        // VW, protocol 1.0, versionName="RADIO" (h93)
+        const val VW_CNS3_20082122_CHANNEL = "20082122"   // VW CNS3 (Tharu и др.): рвёт USB через ~5,6 с PAUSE без heartbeat (h222)
         const val VW_20082138_CHANNEL = "20082138"        // VW ID (h196): HU_INFO manufacturer=model="VW BT 1538"
         const val VW_20082138_MANUFACTURER = "VW BT 1538"
         const val HYUNDAI_CN7_PRODUCT = "wp_cn7cpe_cn"    // HU_INFO.product Hyundai Elantra CN7 (h218): manufacturer QTI, model "sm6150_au for arm64"
