@@ -46,6 +46,13 @@ class MinInterval(private val intervalMs: Long, private val clock: () -> Long) {
 /** Через сколько ожидания по Wi-Fi без 6/6 просим вход в сеть машины (до этого ГУ может успеть сама прийти в сеть телефона). */
 const val CAR_NET_DELAY_MS = 15_000L
 
+/**
+ * Машина была на связи (сессия USB/воздух, сеть машины) не дольше этого назад: сеть машины просим сразу, без
+ * [CAR_NET_DELAY_MS]. Выдернули кабель, оборвался Wi-Fi: машина рядом, ждать её в сети телефона незачем (лог Павла
+ * 2026-10-17: 15 с тишины на каждом переключении провод -> воздух).
+ */
+const val CAR_RECENT_MS = 60_000L
+
 /** Сколько система ищет сеть машины и ждёт одобрения; не нашла - подсказка про Wi-Fi вручную. */
 const val CAR_NET_TIMEOUT_MS = 90_000L
 
@@ -68,7 +75,7 @@ enum class CarNetEvent { AUTO_OFF, STOP, USB_WINS, DESTROY, SESSION_START, SESSI
 object CarNetPolicy {
     /**
      * Пора ли слать запрос: сеть машины задана, идёт ожидание по Wi-Fi (авто или ручное), никакой сессии (ни USB, ни
-     * воздух) и 6/6 ещё нет, запрос не висит и не выдан, с начала ожидания прошло не меньше [CAR_NET_DELAY_MS].
+     * воздух) и 6/6 ещё нет, запрос не висит и не выдан, с начала ожидания прошло не меньше [delayMs].
      * Wi-Fi Direct-машине ([wifiDirectCar]) сеть не запрашиваем: телефон входит в группу ГУ, а запрос только мешает.
      */
     fun shouldRequest(
@@ -80,8 +87,13 @@ object CarNetPolicy {
         waitedMs: Long,
         sixOfSixReady: Boolean,
         wifiDirectCar: Boolean,
+        delayMs: Long = CAR_NET_DELAY_MS,
     ): Boolean = carWifiSet && autoOrManualWaiting && !sessionActive && !usbActive && !alreadyRequesting &&
-        !sixOfSixReady && !wifiDirectCar && waitedMs >= CAR_NET_DELAY_MS
+        !sixOfSixReady && !wifiDirectCar && waitedMs >= delayMs
+
+    /** Задержка запроса сети машины: 0, если машина была на связи меньше [CAR_RECENT_MS] назад ([sinceCarMs], null = не была). */
+    fun delayMs(sinceCarMs: Long?): Long =
+        if (sinceCarMs != null && sinceCarMs in 0 until CAR_RECENT_MS) 0L else CAR_NET_DELAY_MS
 
     /**
      * Отпускать ли сеть. Остановка ожидания, кабель и смерть сервиса - да. Начало и конец беспроводной сессии - нет: сеть
