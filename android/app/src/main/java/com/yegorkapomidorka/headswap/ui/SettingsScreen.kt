@@ -85,10 +85,7 @@ enum class SettingsSection(val key: String, val titleRes: Int, val iconRes: Int)
 
     /** Беспровод: только в сборке с BuildConfig.WIRELESS_BETA. */
     WIRELESS("wireless", R.string.wl_title, R.drawable.ic_wifi),
-    UPDATES("updates", R.string.upd_title, R.drawable.ic_download),
-
-    /** Выбор машины: разом применяет проверенные сообществом настройки (CarPreset). Последний в меню. */
-    CAR("car", R.string.car_title, R.drawable.ic_car_preset);
+    UPDATES("updates", R.string.upd_title, R.drawable.ic_download);
 
     companion object {
         /** Разделы этой сборки: без беты беспровода его нет ни в меню, ни по ключу. */
@@ -261,14 +258,6 @@ class SettingsScreen(host: MainActivity) : Screen(host) {
         val (upd, color) = c.updateStatus()
         set(SettingsSection.UPDATES, upd, color)
 
-        val preset = aa.carPreset
-        if (preset == null) {
-            set(SettingsSection.CAR, c.getString(R.string.car_sum_none))
-        } else {
-            val name = c.getString(preset.titleRes)
-            set(SettingsSection.CAR, if (aa.carSettings == preset.settings) name else c.getString(R.string.car_sum_modified, name))
-        }
-
         if (BuildConfig.WIRELESS_BETA) {
             val car = CarProfile(c)
             val carText = if (car.isSet) c.getString(R.string.wl_car_line, car.btName ?: car.btMac ?: "") else null
@@ -359,9 +348,6 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     private val micRows = HashMap<MicMode, RadioRow>()
     private val rateRows = LinkedHashMap<MusicRate, RadioRow>()
     private val modeRows = LinkedHashMap<VideoMode, RadioRow>()
-    private var carChooser: CarChooser? = null
-    private var carApply: View? = null
-    private var carStatus: TextView? = null
     private var makeValue: TextView? = null
     private var transcodeSeg: Segmented? = null
     private var transcodeNote: TextView? = null
@@ -416,7 +402,6 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
             SettingsSection.APPS -> buildApps()
             SettingsSection.UPDATES -> body.addView(updateCard(), lp(MATCH, WRAP).margins(ctx, 0, 8, 0, 0))
             SettingsSection.WIRELESS -> body.addView(wirelessCard(), lp(MATCH, WRAP).margins(ctx, 0, 8, 0, 0))
-            SettingsSection.CAR -> buildCar()
         }
         view = scaffold(ctx, ctx.getString(section.titleRes), { host.back() }, body)
     }
@@ -429,7 +414,6 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         refreshApps()
         refreshUpdate()
         refreshWireless()
-        refreshCar()
         if (section == SettingsSection.APPS) maybeShowAppsWarning()
     }
 
@@ -648,59 +632,6 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
 
     private fun note(text: String, color: Int = R.color.on2): TextView =
         ctx.text(text, 13f, 400, ctx.clr(color)).also { body.addView(it, lp(WRAP, WRAP).margins(ctx, 8, 2, 8, 0)) }
-
-    // --- мой автомобиль ---
-
-    private fun buildCar() {
-        val c = ctx
-        note(c.getString(R.string.car_intro))
-        // выбор в выпадашке только показывает настройки машины, пишет их кнопка «Применить»
-        val chooser = CarChooser(c, withOther = true) { refreshCar() }
-        chooser.show(aa.carPreset)
-        carChooser = chooser
-        body.addView(chooser.view, lp(MATCH, WRAP).margins(c, 0, 8, 0, 0))
-        carApply = c.primaryButton(c.getString(R.string.car_apply)).apply { setOnClickListener { applyCar() } }
-            .also { body.addView(it, lp(MATCH, c.dp(64)).margins(c, 0, 12, 0, 0)) }
-        // под кнопкой, с запасом высоты: появление и смена текста ничего не сдвигают
-        carStatus = c.text("", 13f, 400, c.clr(R.color.on2)).apply { minHeight = c.dp(36) }
-            .also { body.addView(it, lp(MATCH, WRAP).margins(c, 8, 8, 8, 0)) }
-        refreshCar()
-    }
-
-    /** «Применить»: настройки выбранной машины; «Моей машины нет в списке» - только снять выбор. */
-    private fun applyCar() {
-        val chooser = carChooser ?: return
-        val p = chooser.choice
-        if (p == null) {
-            aa.carPreset = null
-            AppLog.i("мой автомобиль: не выбран, настройки не тронуты")
-        } else {
-            aa.applyCar(p)
-            AppLog.i("мой автомобиль: ${p.name}, применены ${p.settings}")
-        }
-        refreshCar(justApplied = p != null)
-    }
-
-    /** Кнопка активна, если выбрана другая машина или настройки текущей поменяли вручную. */
-    private fun refreshCar(justApplied: Boolean = false) {
-        val status = carStatus ?: return
-        val pick = carChooser?.choice
-        val c = ctx
-        val cur = aa.carPreset
-        val modified = cur != null && aa.carSettings != cur.settings
-        val can = pick != cur || (modified && pick != null)
-        carApply?.apply {
-            isEnabled = can
-            alpha = if (can) 1f else 0.45f
-        }
-        val (text, color) = when {
-            modified && pick == cur -> c.getString(R.string.car_status_modified) to R.color.warn
-            !can && cur != null -> c.getString(if (justApplied) R.string.car_status_applied else R.string.car_status_current) to R.color.ok
-            else -> "" to R.color.on2
-        }
-        status.text = text
-        status.setTextColor(c.clr(color))
-    }
 
     // --- язык и тема ---
 
