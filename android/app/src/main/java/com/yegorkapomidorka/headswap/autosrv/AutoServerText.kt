@@ -8,7 +8,7 @@ import java.util.Locale
  */
 object AutoServerText {
     /** contentDescription кнопки меню ⋮ в тулбаре настроек AA. */
-    val MORE = listOf("ещё", "more options", "дополнительные параметры", "дополнительно", "больше настроек")
+    val MORE = listOf("ещё", "more options", "дополнительные параметры", "дополнительно", "больше настроек", "другие параметры")   // Samsung ru (h224)
 
     val STOP = listOf(
         "остановить сервер головного устройства",
