@@ -788,6 +788,7 @@ class AaBridgeCore(
             audioInited[ch] = true
             log("BRIDGE CarLife ${chName(ch)} INIT ${rate}Гц ${channels}к 16бит (0x%08x)".format(CarlifeAudio.initType(ch)), true)
             if (ch == CarlifeAudio.CH_TTS) {
+                if (huVw20082120) sendTtsPreroll()
                 ttsPackets = 0
                 mediaGuard = false
                 mediaReleaseTimer.cancel()
@@ -909,6 +910,26 @@ class AaBridgeCore(
         link.sendAudio(CarlifeAudio.CH_MEDIA, CarlifeAudio.MEDIA_PAUSE, ByteArray(0))
         log("BRIDGE CarLife MEDIA PAUSE (0x%08x), $why".format(CarlifeAudio.MEDIA_PAUSE), true)
         musicStatus(0)
+    }
+
+    /**
+     * Тишина сразу после TTS_INIT (VW CNS3 20082122, h222: шипение в начале подсказки). Baidu копит фразу
+     * и шлёт её пачкой по 4096 Б быстрее реального времени (NaviTTSController.splitAndSendTTSData), у ГУ
+     * есть запас; AA отдаёт речь в реальном времени с первого пакета, запаса нет. Нули дают ГУ открыть
+     * тракт на тишине и держат буфер на TTS_PREROLL_MS впереди до конца фразы.
+     */
+    private fun sendTtsPreroll() {
+        val zeros = ByteArray(TTS_PREROLL_BYTES)
+        var off = 0
+        while (off < zeros.size) {
+            val n = minOf(TTS_PREROLL_CHUNK, zeros.size - off)
+            if (!link.sendAudio(CarlifeAudio.CH_TTS, CarlifeAudio.TTS_DATA, zeros.copyOfRange(off, off + n))) {
+                log("BRIDGE TTS пре-ролл: очередь полна, отправлено ${off * 1000 / TTS_BYTES_PER_SEC} из $TTS_PREROLL_MS мс", true)
+                return
+            }
+            off += n
+        }
+        log("BRIDGE TTS пре-ролл $TTS_PREROLL_MS мс тишины (${zeros.size} Б) после INIT", true)
     }
 
     /** Фактический TTS_STOP (таймер debounce); после него MEDIA-пакеты ждут ещё MEDIA_AFTER_TTS_MS. */
@@ -1407,6 +1428,11 @@ class AaBridgeCore(
         const val MEDIA_AFTER_TTS_MS = 300L
         const val VOICE_EXIT_DELAY_MS = 500L
         private const val TTS_DIAG_PACKETS = 3
+        /** Пре-ролл тишины TTS на VW 20082120/20082122/20082134 (h222); 16 кГц моно 16 бит, куски как у Baidu. */
+        const val TTS_PREROLL_MS = 400
+        private const val TTS_BYTES_PER_SEC = 16000 * 2
+        const val TTS_PREROLL_BYTES = TTS_PREROLL_MS * TTS_BYTES_PER_SEC / 1000
+        private const val TTS_PREROLL_CHUNK = 4096
 
         /** Android KEYCODE_SEARCH: в AA запускает голосового ассистента. */
         const val KEYCODE_SEARCH = 84
