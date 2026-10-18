@@ -62,4 +62,7 @@
     <string name="onb_status_ready">готово</string>
     <string name="onb_status_unmarked">не отмечено</string>
     <string name="onb_status_off">не включено</string>
+    <string name="step_car_title">Какой у вас автомобиль?</string>
+    <string name="step_car_short">Автомобиль</string>
+    <string name="step_car_body">Подставим настройки, проверенные сообществом на этой машине. Опытные пользователи могут пропустить шаг.</string>
 </resources>

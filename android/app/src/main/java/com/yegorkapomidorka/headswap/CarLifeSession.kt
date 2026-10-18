@@ -14,6 +14,9 @@ import com.yegorkapomidorka.headswap.aa.CarlifeMediaInfo
 import com.yegorkapomidorka.headswap.aa.LinkVideoStats
 import com.yegorkapomidorka.headswap.aa.NaviField6
 import com.yegorkapomidorka.headswap.aa.NaviTurnInfo
+import com.yegorkapomidorka.headswap.aa.ThermalLevel
+import com.yegorkapomidorka.headswap.aa.ThermalSource
+import com.yegorkapomidorka.headswap.aa.ThermalThrottle
 import com.yegorkapomidorka.headswap.aa.TranscodeOutput
 import com.yegorkapomidorka.headswap.aa.VideoMode
 import com.yegorkapomidorka.headswap.aa.VideoQueueLimit
@@ -51,6 +54,8 @@ class CarLifeSession(
     private val transport: CarTransport,
     private val cfg: SessionConfig,
     private val bridge: AaBridgeCore,
+    /** Нагрев телефона: по нему перекодирование снижает fps и битрейт. */
+    private val thermal: ThermalSource = ThermalSource.NONE,
     private val onClosed: (String) -> Unit,
 ) : VideoSource.Listener, CarlifeLink {
 
@@ -64,6 +69,11 @@ class CarLifeSession(
     private val air = transport.caps == TransportCaps.TCP6
     private val bitratePolicy = BitratePolicy(mode.bitrate, profile = if (air) BitrateProfile.WIFI else BitrateProfile.USB)
     @Volatile private var vwIdrCutMs = NEVER_MS
+    private val thermalThrottle = ThermalThrottle()
+    private var thermalStatus = 0                       // только нить cl-sched
+    private var thermalHeadroom = Float.NaN
+    private var headroomAtMs = NEVER_MS
+    private var thermalPassthroughLogged = false
     private val pauseKeepaliveMs = if (air) PAUSE_KEEPALIVE_AIR_MS else PAUSE_KEEPALIVE_MS
     private var overflows = 0
     private var maxQueueFrames = 0
@@ -349,7 +359,7 @@ class CarLifeSession(
             Msg.VIDEO_ENCODER_START -> onVideoStart()
             Msg.VIDEO_ENCODER_PAUSE -> {
                 paused = true
-                if (bridge.huVw20082120) { // первый heartbeat сразу; Desay - как раньше, через 2 с
+                if (pauseHeartbeatHu) { // первый heartbeat сразу; Desay - как раньше, через 2 с
                     lastVideoTx = 0L
                     pauseHeartbeat()
                 }
@@ -415,8 +425,10 @@ class CarLifeSession(
         val applied = maxOf(fps, Handshake.MIN_APPLIED_FPS)
         val old = targetFps
         targetFps = applied
-        val live = bridge.setTargetFps(applied)
-        AppLog.i("видео: FRAME_RATE_CHANGE fps=$fps, целевой fps $old -> $applied${if (live) "" else " (транскодер ещё не создан, применится при старте)"}")
+        val capped = thermalThrottle.capFps(applied)
+        val live = bridge.setTargetFps(capped)
+        val heat = if (capped != applied) ", из-за нагрева $capped" else ""
+        AppLog.i("видео: FRAME_RATE_CHANGE fps=$fps, целевой fps $old -> $applied$heat${if (live) "" else " (транскодер ещё не создан, применится при старте)"}")
     }
 
     private fun onVideoInit(m: CmdMsg) {
@@ -536,6 +548,8 @@ class CarLifeSession(
         }
     }
 
+    override val isAir: Boolean get() = air
+
     override fun sendVideoTakeover(payload: ByteArray): Boolean {
         if (closed.get() || paused) return false
         synchronized(videoLock) {
@@ -619,8 +633,9 @@ class CarLifeSession(
     }
 
     /**
-     * VW ID (h196): ГУ рвёт USB EIO на IDR > ~600 КиБ. Потолок перекодирования 4 Мбит/с под флагом ГУ (флаг мог прийти
-     * после старта энкодера - битрейт снижается на лету). Остальные ГУ не затрагиваются.
+     * VW ID (h196): ГУ рвёт USB EIO на IDR > ~600 КиБ. Потолок перекодирования 2 Мбит/с под флагом ГУ (флаг мог прийти
+     * после старта энкодера - битрейт снижается на лету). С 4 Мбит/с сессия рвалась в первые 10-15 с, пока страховка
+     * опускала потолок; за поездку он сам сходился к 1,7 Мбит/с. Остальные ГУ не затрагиваются.
      */
     private fun applyVwCeiling() {
         if (!bridge.huVw20082138) return
@@ -756,7 +771,7 @@ class CarLifeSession(
     override fun createTranscoder(out: TranscodeOutput): VideoTranscoder? = try {
         applyVwCeiling()
         AaTranscoder(
-            mode.outW, mode.outH, targetFps, bitratePolicy.current, out, { AppLog.i(it, false) },
+            mode.outW, mode.outH, thermalThrottle.capFps(targetFps), bitratePolicy.current, out, { AppLog.i(it, false) },
             srcWidth = mode.aaW, srcHeight = mode.aaH, crop = mode.crop,
         ).also { it.start() }
     } catch (e: Exception) {
@@ -936,11 +951,18 @@ class CarLifeSession(
     //   как Baidu sendEmptyPacketBackground, раз в 2 с по USB и раз в ~1 с на воздухе (ГУ на Wi-Fi рвут видео-сокет быстрее);
     // - VW channel 20082120 рвёт канал через 3,6-4 с после PAUSE даже при 0x20001 раз в 1-2 с (h93, логи 2026-10-15 USB
     //   и 2026-10-16 Wi-Fi), реконнект с FOREGROUND выдёргивал юзера из меню ГУ в CarLife: VIDEO_HEARTBEAT 0x20002 сразу
-    //   и раз в 100 мс, как Baidu Recorder.sendEmptyPacketBackground (~50 мс).
+    //   и раз в 100 мс, как Baidu Recorder.sendEmptyPacketBackground (~50 мс). VW CNS3 channel 20082122 так же,
+    //   через ~5,6 с (h222, 2026-10-17 USB).
+    /**
+     * ГУ, которым на PAUSE нужен VIDEO_HEARTBEAT раз в 100 мс: VW 20082120/20082122 (h93, h222) и VW BT 1420 по воздуху
+     * (Павел 2026-10-18: без keepalive на PAUSE ГУ закрыла сокет через ~1 мин, с пустым VIDEO_DATA рвала на START).
+     */
+    private val pauseHeartbeatHu: Boolean get() = bridge.huVw20082120 || (air && bridge.huVwBt1420)
+
     private fun pauseHeartbeat() {
         if (closed.get() || !paused || !PAUSE_KEEPALIVE_ENABLED) return
         val (type, period) =
-            if (bridge.huVw20082120) Msg.VIDEO_HEARTBEAT to PAUSE_HEARTBEAT_MS else Msg.VIDEO_DATA to pauseKeepaliveMs
+            if (pauseHeartbeatHu) Msg.VIDEO_HEARTBEAT to PAUSE_HEARTBEAT_MS else Msg.VIDEO_DATA to pauseKeepaliveMs
         val now = SystemClock.elapsedRealtime()
         if (now - lastVideoTx < period) return
         if (vBeats == 0L) AppLog.i("видео: PAUSE, шлю пустой ${Msg.name(type)} раз в $period мс, чтобы ГУ не рвало USB")
@@ -951,6 +973,7 @@ class CarLifeSession(
     private fun tick() {
         if (closed.get()) return
         val now = SystemClock.elapsedRealtime()
+        checkThermal(now)
         if (transport.rxBytes == 0L && now - t0 > SILENCE_MS && (now - t0) % 10_000 < 1000) {
             AppLog.i("ГУ не прислало ни одного байта за ${(now - t0) / 1000} с (ждём HU_PROTOCOL_VERSION)")
             CarLifeState.status = "ГУ молчит, байт от него нет"
@@ -963,6 +986,53 @@ class CarLifeSession(
         }
     }
 
+    /**
+     * Раз в секунду: статус нагрева (прогноз headroom - раз в 10 с, чаще PowerManager отдаёт NaN) -> ThermalThrottle.
+     * Сменилась ступень - потолок fps и битрейта перекодирования на лету. В passthrough разгружать нечего, только лог.
+     */
+    private fun checkThermal(now: Long) {
+        try {
+            val status = thermal.status()
+            if (headroomAtMs == NEVER_MS || now - headroomAtMs >= HEADROOM_POLL_MS) {
+                headroomAtMs = now
+                thermalHeadroom = thermal.headroom()
+            }
+            if (status != thermalStatus) {
+                AppLog.i("нагрев: статус телефона ${thermalName(thermalStatus)} -> ${thermalName(status)} (headroom ${headroomText()})")
+                thermalStatus = status
+            }
+            val level = thermalThrottle.update(now, status, thermalHeadroom) ?: return
+            applyThermal(level)
+        } catch (e: Exception) {
+            AppLog.e("нагрев", e)
+        }
+    }
+
+    private fun applyThermal(level: ThermalLevel) {
+        val why = "статус ${thermalName(thermalStatus)}, headroom ${headroomText()}"
+        if (!bridge.transcodeEnabled) {
+            if (level != ThermalLevel.NORMAL && !thermalPassthroughLogged) {
+                thermalPassthroughLogged = true
+                AppLog.i("нагрев: ступень ${level.name} ($why), но видео passthrough: fps и битрейт не регулируются")
+            }
+            return
+        }
+        val fps = thermalThrottle.capFps(targetFps)
+        val live = bridge.setTargetFps(fps)
+        val old = bitratePolicy.current
+        val cap = if (level == ThermalLevel.NORMAL) Int.MAX_VALUE else thermalThrottle.capBitrate(bitratePolicy.ceilingBps)
+        if (bitratePolicy.setThermalCap(cap)) bridge.setEncoderBitrate(bitratePolicy.current)
+        val capText = if (cap == Int.MAX_VALUE) "снят" else "${bitratePolicy.thermalCapBps / 1000} кбит/с"
+        AppLog.i("нагрев: ступень ${level.name} ($why): fps $fps (ГУ/настройка $targetFps), потолок битрейта $capText, " +
+            "битрейт ${old / 1000} -> ${bitratePolicy.current / 1000} кбит/с${if (live) "" else " (транскодера нет, применится при старте)"}")
+        if (air) WLog.ev(WLog.VIDEO, "thermal", "level" to level.name, "status" to thermalStatus, "fps" to fps,
+            "capKbps" to if (cap == Int.MAX_VALUE) 0 else bitratePolicy.thermalCapBps / 1000)
+    }
+
+    private fun headroomText(): String = if (thermalHeadroom.isNaN()) "н/д" else "%.2f".format(thermalHeadroom)
+
+    private fun thermalName(status: Int): String = THERMAL_NAMES.getOrElse(status) { "$status" }
+
     private fun logSummary(reason: String) {
         val sb = StringBuilder("== РЕЗЮМЕ СЕССИИ (${(SystemClock.elapsedRealtime() - t0) / 1000} с, причина: $reason)\n")
         sb.append("  принято байт: ${transport.rxBytes}\n")
@@ -972,6 +1042,7 @@ class CarLifeSession(
         sb.append("  запрошенное разрешение: $requested; ответ: $chosen\n")
         sb.append("  тач: $touchMode, событий=$touchCount\n")
         sb.append("  видео: кадров=$vFrames ключевых=$vKeys heartbeat=$vBeats сброшено=$vDropped\n")
+        sb.append("  нагрев: статус ${thermalName(thermalStatus)}, макс. ступень ${thermalThrottle.maxLevel.name}, разгрузка ${thermalThrottle.throttledMs / 1000} с\n")
         sb.append("  HU_INFO: ${huInfo ?: "не приходил"}\n")
         sb.append("  принятые типы: ")
         for ((t, c) in rxByType) sb.append("${Msg.hex(t)} ${Msg.name(t)} x$c; ")
@@ -1017,11 +1088,17 @@ class CarLifeSession(
         private val TOUCH_TO_AA = setOf(0, 1, 2, 5, 6)
         private const val MAX_AUDIO_QUEUE = 180       // звук не принимается, если в общей очереди больше пакетов
         private const val BITRATE_POLL_MS = 100L
-        private const val VW_20082138_CEILING_BPS = 4_000_000
+        private const val VW_20082138_CEILING_BPS = 2_000_000
         private const val VW_20082138_MIN_BPS = 1_500_000
         private const val VW_20082138_IDR_LIMIT = 450_000
         private const val VW_20082138_CUT_INTERVAL_MS = 1000L
         private const val NEVER_MS = Long.MIN_VALUE
+
+        /** getThermalHeadroom чаще раза в секунду отдаёт NaN, прогноз на 10 с - хватает раза в 10 с. */
+        private const val HEADROOM_POLL_MS = 10_000L
+
+        /** PowerManager.THERMAL_STATUS_* по порядку. */
+        private val THERMAL_NAMES = listOf("NONE", "LIGHT", "MODERATE", "SEVERE", "CRITICAL", "EMERGENCY", "SHUTDOWN")
         private const val SILENCE_MS = 10_000L
         private const val PAUSE_KEEPALIVE_MS = 2_000L  // Desay G6S: пустой VIDEO_DATA
         private const val PAUSE_HEARTBEAT_MS = 100L    // VW 20082120: пустой VIDEO_HEARTBEAT
@@ -1031,6 +1108,7 @@ class CarLifeSession(
 
         /** Keepalive на PAUSE: пустой VIDEO_DATA, у VW 20082120 VIDEO_HEARTBEAT. */
         @Volatile @JvmStatic var PAUSE_KEEPALIVE_ENABLED = true
+
         private const val FEATURE_CONTENT_ENCRYPTION = "CONTENT_ENCRYPTION"
 
         /** moduleID подписки CARLIFE_DATA_SUBSCRIBE на навигацию (CarlifeDataSubscribe: 0 навигация, 2 музыка). */

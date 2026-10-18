@@ -99,6 +99,29 @@ class CarLogicTest {
     }
 
     @Test
+    fun carNetDelayZeroOnlyRightAfterCarWasOnline() {
+        assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(null))              // машины не было: ждём её в сети телефона
+        assertEquals(0L, CarNetPolicy.delayMs(0))
+        assertEquals(0L, CarNetPolicy.delayMs(11_000))                         // выдернули кабель, AA grace 8 с
+        assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(CAR_RECENT_MS))
+        assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(-1))              // часы назад: как не было
+    }
+
+    @Test
+    fun carNetDelayZeroWhenCarConnectedByBluetooth() {
+        assertEquals(0L, CarNetPolicy.delayMs(null, carBtNear = true))         // холодный старт, машина по BT рядом
+        assertEquals(0L, CarNetPolicy.delayMs(CAR_RECENT_MS * 10, carBtNear = true))
+        assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(null, carBtNear = false))
+    }
+
+    @Test
+    fun carNetRequestedAtOnceWithZeroDelay() {
+        assertTrue(CarNetPolicy.shouldRequest(true, true, false, false, false, 0, false, false, delayMs = 0))
+        assertFalse(CarNetPolicy.shouldRequest(true, true, true, false, false, 0, false, false, delayMs = 0))
+        assertFalse(CarNetPolicy.shouldRequest(true, true, false, false, false, 0, false, true, delayMs = 0))
+    }
+
+    @Test
     fun carNetNotRequestedWithoutCarWifi() {
         assertFalse(request(carWifiSet = false))
     }

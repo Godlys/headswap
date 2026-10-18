@@ -18,6 +18,9 @@ interface CarlifeLink {
      */
     fun sendVideoTakeover(payload: ByteArray): Boolean = sendVideo(payload)
 
+    /** Связь по воздуху (6 TCP-сокетов), а не USB / tcp-debug. */
+    val isAir: Boolean get() = false
+
     /** Текущий кадр заглушки (null = её нет): с него перекодирование начинает переход в картинку AA. */
     fun placeholderSnapshot(): android.graphics.Bitmap? = null
 
@@ -151,7 +154,8 @@ class AaBridgeCore(
     @Volatile private var btAudio = false
     @Volatile var huDesayG6S = false           // ГУ Desay G6S (Mazda CX-5): NAVI=1 глушит штатное радио, маршрутный NAVI не шлём
         private set
-    @Volatile var huVw20082120 = false         // VW (STATISTIC_INFO channel 20082120, h93): без heartbeat рвёт USB через ~3,7 с PAUSE
+    @Volatile var huVwBt1420 = false           // VW BT 1420 (Павел, канал 20082138): по воздуху без heartbeat на PAUSE рвёт CarLife через ~1 мин
+    @Volatile var huVw20082120 = false         // VW (STATISTIC_INFO channel 20082120 h93, 20082122 h222): без heartbeat рвёт USB через 3,7-5,6 с PAUSE
         private set
     @Volatile var huVw20082138 = false         // VW ID (channel 20082138, "VW BT 1538", h196): IDR > ~600 КиБ рвёт USB EIO
         private set
@@ -320,7 +324,10 @@ class AaBridgeCore(
         gotIdr = false
         huDesayG6S = false                     // HU_INFO / STATISTIC_INFO придут заново в этой сессии
         huVw20082120 = false                   // HU_INFO / STATISTIC_INFO придут заново в этой сессии
+        huVwBt1420 = false                     // HU_INFO придёт заново в этой сессии
         huVw20082138 = false                   // HU_INFO / STATISTIC_INFO придут заново в этой сессии
+        vwIdName = false
+        vwIdChannel = false
         huHyundaiCn7 = false                   // HU_INFO придёт заново в этой сессии
         mediaRateLogged = MEDIA_RATE
         resampler?.reset()
@@ -336,10 +343,25 @@ class AaBridgeCore(
         // Desay G6S (Mazda) шлёт START без PAUSE на каждое нажатие NAVI/MEDIA: звук уже идёт, повторный INIT
         // посреди трека рвёт его на ГУ (лог 2026-10-11). Звук сбрасываем только на первом START и после PAUSE.
         val warm = carlifeStarted && !carlifePaused
+        // Воздух, возврат после PAUSE: декодер всю паузу ел кадры AA (гейт выкидывал только выход энкодера), его
+        // состояние живо. Не ждём IDR от AA (цикл VideoFocus, 0.2-2 с тишины), а сразу берём IDR у энкодера.
+        // VW BT 1420 (лог Павла 2026-10-16) закрывал сокет через 0.16-0.42 с после такого START. Только для него:
+        // остальные ГУ (Mazda G6S по воздуху, задний ход) - как было, через IDR от AA.
+        val resume = AIR_WARM_RESUME_ENABLED && huVwBt1420 && link.isAir && carlifeStarted && carlifePaused &&
+            transcodeEnabled && transcoder != null && gotIdr && active == Source.AA
         carlifeStarted = true
         carlifePaused = false
         if (warm) log("BRIDGE CarLife START без PAUSE: звук не трогаю, INIT не повторяю", true)
         else resetAudio()                      // новый START: MEDIA/TTS init заново на первом пакете
+        if (resume) {
+            lastKeyframeRequest = NEVER
+            log("BRIDGE CarLife START после PAUSE (воздух): декодер жив, сразу IDR энкодера, AA не жду", true)
+            startTranscoder()
+            outputEnabled = true
+            if (!warm) meta.onCarlifeStart()
+            if (huPausedAa) log("BRIDGE CarLife START: AA на паузе после ухода ГУ на свой источник, музыку не запускаю", true)
+            return
+        }
         gotIdr = false
         waitSince = if (aaVideoSeen) clockMs() - KEYFRAME_WAIT_MS else 0L
         lastKeyframeRequest = NEVER
@@ -490,15 +512,31 @@ class AaBridgeCore(
      */
     fun onHuInfo(manufacturer: String?, model: String?, product: String? = null) {
         if (manufacturer == DESAY_MANUFACTURER && model == DESAY_G6S_MODEL) huDesayG6S = true
-        if (manufacturer == VW_20082138_MANUFACTURER) huVw20082138 = true
+        vwIdName = manufacturer == VW_20082138_MANUFACTURER
+        if (manufacturer == VW_BT_1420_MANUFACTURER) huVwBt1420 = true
+        updateVwId()
         if (product == HYUNDAI_CN7_PRODUCT) huHyundaiCn7 = true
+    }
+
+    private var vwIdName = false               // HU_INFO manufacturer = BT-имя ГУ "VW BT 1538"
+    private var vwIdChannel = false            // STATISTIC_INFO channel = прошивка 20082138
+
+    /**
+     * VW ID (h196) - только прошивка 20082138 И BT-имя "VW BT 1538": тот же канал у VW BT 1420 (Павел), которому
+     * потолок 2 Мбит/с не нужен (8 Мбит/с по воздуху и USB без обрывов, лог 2026-10-16).
+     */
+    private fun updateVwId() {
+        val was = huVw20082138
+        huVw20082138 = vwIdName && vwIdChannel
+        if (huVw20082138 && !was) log("BRIDGE ГУ VW ID (20082138, VW BT 1538): потолок битрейта по размеру IDR", true)
     }
 
     /** STATISTIC_INFO ГУ разобран: запасной признак Desay G6S и признак VW 20082120 - канал сборки прошивки. */
     fun onHuStatistic(channel: String?) {
         if (channel == DESAY_G6S_CHANNEL) huDesayG6S = true
-        if (channel == VW_20082120_CHANNEL) huVw20082120 = true
-        if (channel == VW_20082138_CHANNEL) huVw20082138 = true
+        if (channel == VW_20082120_CHANNEL || channel == VW_CNS3_20082122_CHANNEL || channel == VW_CNS3_20082134_CHANNEL) huVw20082120 = true
+        vwIdChannel = channel == VW_20082138_CHANNEL
+        updateVwId()
     }
 
     /** CarLife-сессия закрыта (USB EIO / detach / Стоп). AA не трогаем; from - закрываемая ссылка, чужую не отцепляем. */
@@ -1358,6 +1396,9 @@ class AaBridgeCore(
          */
         @Volatile @JvmStatic var BT_AUTOPLAY_GUARD_ENABLED = true
 
+        /** Воздух, VW BT 1420: START после PAUSE сразу с IDR энкодера (декодер жив), без ожидания IDR от AA. */
+        @Volatile @JvmStatic var AIR_WARM_RESUME_ENABLED = true
+
         const val BT_AUTOPLAY_WINDOW_MS = 20_000L
         const val USER_INPUT_WINDOW_MS = 3_000L
         private const val REPAUSE_MIN_MS = 1_000L
@@ -1411,8 +1452,11 @@ class AaBridgeCore(
         const val DESAY_MANUFACTURER = "Desay SV Automotive"
         const val DESAY_G6S_MODEL = "G6S"
         const val DESAY_G6S_CHANNEL = "20622116"          // STATISTIC_INFO.channel у Mazda CX-5; Vezel - 20832125, другая Mazda - 21520001
-        const val VW_20082120_CHANNEL = "20082120"        // VW, protocol 1.0, versionName="RADIO" (h93); Tharu CNS3 - 20082122
+        const val VW_20082120_CHANNEL = "20082120"        // VW, protocol 1.0, versionName="RADIO" (h93)
+        const val VW_CNS3_20082122_CHANNEL = "20082122"   // VW CNS3 (Tharu и др.): рвёт USB через ~5,6 с PAUSE без heartbeat (h222)
+        const val VW_CNS3_20082134_CHANNEL = "20082134"   // VW CNS3 Tiguan L Pro: рвёт CarLife по Wi-Fi через ~5,1-5,7 с PAUSE (h224)
         const val VW_20082138_CHANNEL = "20082138"        // VW ID (h196): HU_INFO manufacturer=model="VW BT 1538"
+        const val VW_BT_1420_MANUFACTURER = "VW BT 1420"  // VW (Павел): HU_INFO manufacturer=model, канал 20082138
         const val VW_20082138_MANUFACTURER = "VW BT 1538"
         const val HYUNDAI_CN7_PRODUCT = "wp_cn7cpe_cn"    // HU_INFO.product Hyundai Elantra CN7 (h218): manufacturer QTI, model "sm6150_au for arm64"
         const val MEDIA_RATE = 48000
@@ -1479,8 +1523,23 @@ class AaConnector(
         }, "aa-connector-stop").start()
     }
 
+    /** Подряд идущие подключения, закрытые AA до установления сессии (connect+EOF). */
+    @Volatile var bareEofs = 0
+        private set
+
+    /** После BARE_EOF_SUSPEND голых EOF подряд автозапуск не трогает сервер до удачной сессии. */
+    @Volatile var prepSuspended = false
+        private set
+
+    private fun bareEofBackoffMs(n: Int): Long =
+        if (n <= 0) retryMs else minOf(retryMs shl minOf(n - 1, 4), BARE_EOF_BACKOFF_MAX_MS).coerceAtLeast(retryMs)
+
     private fun prep(phase: ServerPhase) {
         val p = serverPrep ?: return
+        if (prepSuspended && phase != ServerPhase.FIRST) {
+            log("BRIDGE автозапуск сервера ($phase) пропущен: приостановлен после $bareEofs голых EOF подряд", true)
+            return
+        }
         try {
             p(phase)
         } catch (e: Throwable) {
@@ -1536,9 +1595,22 @@ class AaConnector(
                 log("BRIDGE AA-сессия завершена (established=${s.established}, video=${s.videoStarted})", true)
                 AaState.status = "мост: AA отключился"
                 core.onAaEnded(s.established)
-                if (!stopping) prep(ServerPhase.AFTER_SESSION)
+                if (s.established) {
+                    bareEofs = 0
+                    if (prepSuspended) log("BRIDGE автозапуск сервера ГУ снова включён: сессия AA установилась", true)
+                    prepSuspended = false
+                    if (!stopping) prep(ServerPhase.AFTER_SESSION)
+                } else {
+                    // сервер принял TCP и сразу закрыл: он жив, перезапуск его не лечит, а петля
+                    // Stop+Start выкидывает AA на экран снова и снова (h224). Ждём дольше, после N подряд - без автозапуска.
+                    bareEofs++
+                    if (bareEofs >= BARE_EOF_SUSPEND && !prepSuspended) {
+                        prepSuspended = true
+                        log("BRIDGE AA закрыл $bareEofs подключения подряд до установления сессии: автозапуск сервера ГУ приостановлен до первой удачной сессии", true)
+                    }
+                }
             }
-            var left = retryMs
+            var left = if (s.connected && !s.established) bareEofBackoffMs(bareEofs) else retryMs
             while (left > 0 && !stopping) {
                 Thread.sleep(minOf(left, 100))
                 left -= 100
@@ -1549,5 +1621,11 @@ class AaConnector(
     companion object {
         /** Не чаще раза в 5 с просить автозапуск повторить (он сам пропустит, если повторять нечего). */
         private const val RETRY_PREP_MS = 5_000L
+
+        /** Сколько голых EOF подряд (connect+EOF без сессии) до приостановки автозапуска. */
+        const val BARE_EOF_SUSPEND = 3
+
+        /** Потолок паузы между подключениями после голых EOF: 3, 6, 12, 24, 30 с. */
+        const val BARE_EOF_BACKOFF_MAX_MS = 30_000L
     }
 }

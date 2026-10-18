@@ -55,8 +55,9 @@ class AaConnectorPrepTest {
     }
 
     @Test
-    fun prepRunsAfterEstablishedAaSessionEnds() {
-        // «сервер» принимает и сразу закрывает: сессия подключилась (connected), версия не пришла - сессия закончилась
+    fun bareEofDoesNotRestartServerAndSuspendsAutostart() {
+        // «сервер» принимает и сразу закрывает: connect+EOF без сессии (h224). Перезапуск сервера тут не нужен:
+        // AFTER_SESSION не просим, паузы растут, после BARE_EOF_SUSPEND подряд автозапуск приостановлен.
         val server = ServerSocket(0, 5, InetAddress.getByName("127.0.0.1"))
         server.use {
             Thread {
@@ -69,12 +70,12 @@ class AaConnectorPrepTest {
                 java.net.Socket().also { s -> s.connect(java.net.InetSocketAddress("127.0.0.1", server.localPort), 2000) }
             }
             c.start()
-            waitFor { events.contains("prep:AFTER_SESSION") }
+            waitFor { c.prepSuspended && events.count { it == "session" } > AaConnector.BARE_EOF_SUSPEND }
             c.stop()
-            val firstAfter = events.indexOf("prep:AFTER_SESSION")
-            assertTrue(events.toString(), firstAfter > 0)
+            assertTrue(events.toString(), c.prepSuspended)
+            assertTrue(c.bareEofs >= AaConnector.BARE_EOF_SUSPEND)
             assertEquals(listOf("prep:FIRST", "session"), events.take(2))
-            assertEquals("между сессией и повтором ровно один AFTER_SESSION", "session", events[firstAfter - 1])
+            assertEquals(events.toString(), listOf("prep:FIRST"), events.filter { it.startsWith("prep:") })
         }
     }
 

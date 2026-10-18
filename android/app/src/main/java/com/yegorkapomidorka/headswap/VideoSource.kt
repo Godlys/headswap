@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
@@ -207,36 +209,129 @@ class VideoSource(
     private fun drawBanner(c: Canvas, width: Int, height: Int, msg: String, n: Long, text: Paint, fill: Paint) {
         val w = width.toFloat()
         val h = height.toFloat()
-        c.drawColor(Color.rgb(16, 24, 56))
+        // плоские цвета: на CBR 4 Мбит/с градиенты слабого энкодера идут полосами
+        c.drawColor(BG)
+        drawLogo(c, w / 2, h * 0.34f, minOf(h * 0.36f, w * 0.3f), n / fps.toFloat(), fill)
+
+        // словесный знак: Head белым, swap янтарным
+        text.textAlign = Paint.Align.LEFT
+        text.typeface = WORDMARK
+        text.textSize = h * 0.085f
+        val head = "Head"
+        val swap = "swap"
+        val wHead = text.measureText(head)
+        var x = w / 2 - (wHead + text.measureText(swap)) / 2
+        val yWord = h * 0.66f
         text.color = Color.WHITE
+        c.drawText(head, x, yWord, text)
+        x += wHead
+        text.color = AMBER
+        c.drawText(swap, x, yWord, text)
+
+        // статус моста: по нему видно, чего ждём (сервер ГУ, разблокировка, кадр)
+        text.typeface = Typeface.DEFAULT_BOLD
         text.textAlign = Paint.Align.CENTER
-        text.textSize = h * 0.09f
-        // перенос по словам в 90% ширины
-        val lines = ArrayList<String>()
-        var cur = ""
-        for (word in msg.split(' ')) {
-            val t = if (cur.isEmpty()) word else "$cur $word"
-            if (text.measureText(t) > w * 0.9f && cur.isNotEmpty()) {
-                lines.add(cur)
-                cur = word
-            } else {
-                cur = t
-            }
-        }
-        if (cur.isNotEmpty()) lines.add(cur)
+        text.color = STATUS
+        text.textSize = h * 0.065f
         val lh = text.textSize * 1.25f
-        var y = h * 0.5f - lh * (lines.size - 1) / 2f
-        for (l in lines) {
+        var y = h * 0.81f
+        for (l in wrapBalanced(msg, w * 0.88f, text)) {
             c.drawText(l, w / 2, y, text)
             y += lh
         }
-        // живой индикатор: видно, что картинка не замерла
-        fill.color = Color.rgb(255, 160, 0)
-        val x = w * 0.1f + (w * 0.8f) * ((n % 90) / 90f)
-        c.drawRect(x - 12f, h * 0.82f, x + 12f, h * 0.82f + 10f, fill)
-        text.textSize = h * 0.035f
-        text.color = Color.LTGRAY
-        c.drawText("Headswap: мост AA", w / 2, h * 0.92f, text)
+    }
+
+    /**
+     * Перенос по словам на минимум строк, но строки примерно равной ширины:
+     * на 4:3 «...перезапустите сервер ГУ» иначе оставляет «ГУ» одно на второй строке.
+     */
+    private fun wrapBalanced(msg: String, maxW: Float, p: Paint): List<String> {
+        val words = msg.split(' ')
+        fun greedy(limit: Float): List<String> {
+            val lines = ArrayList<String>()
+            var cur = ""
+            for (word in words) {
+                val t = if (cur.isEmpty()) word else "$cur $word"
+                if (p.measureText(t) > limit && cur.isNotEmpty()) {
+                    lines.add(cur)
+                    cur = word
+                } else {
+                    cur = t
+                }
+            }
+            if (cur.isNotEmpty()) lines.add(cur)
+            return lines
+        }
+        val base = greedy(maxW)
+        if (base.size < 2) return base
+        // сужаем лимит, пока число строк не растёт: последняя строка добирает слова у предыдущих
+        var best = base
+        var limit = p.measureText(msg) / base.size
+        while (limit < maxW) {
+            val l = greedy(limit)
+            if (l.size == base.size) {
+                best = l
+                break
+            }
+            limit += maxW * 0.02f
+        }
+        return best
+    }
+
+    /**
+     * Глиф иконки (ic_launcher_foreground.xml, 48×48): дуги-стрелки раз в [SWAP_S] меняются местами
+     * поворотом на 180° вокруг экрана, на каждом обмене от логотипа расходится янтарное кольцо.
+     * Состояние только от t: snapshot() с любой нити рисует тот же кадр.
+     */
+    private fun drawLogo(c: Canvas, cx: Float, cy: Float, size: Float, t: Float, p: Paint) {
+        val phase = t % SWAP_S
+        val k = (phase / SPIN_S).coerceAtMost(1f)
+        val ease = k * k * (3 - 2 * k)
+        val angle = (t / SWAP_S).toInt() * 180f + ease * 180f
+
+        val s = size / 48f
+        c.save()
+        c.translate(cx - 24f * s, cy - 24f * s)
+        c.scale(s, s)
+
+        // волна обмена: кольцо от радиуса дуг наружу, тает к концу цикла
+        val r = phase / SWAP_S
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 1.2f
+        p.color = AMBER
+        p.alpha = ((1 - r) * 110).toInt()
+        c.drawCircle(24f, 24f, 15f + r * 9f, p)
+        p.alpha = 255
+
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeJoin = Paint.Join.ROUND
+        c.save()
+        c.rotate(angle, 24f, 24f)
+        drawArrow(c, ARC_WHITE, HEAD_WHITE, Color.WHITE, p)
+        drawArrow(c, ARC_AMBER, HEAD_AMBER, AMBER, p)
+        c.restore()
+
+        // экран в центре неподвижен
+        p.style = Paint.Style.STROKE
+        p.color = Color.WHITE
+        p.strokeWidth = 2f
+        c.drawRoundRect(16.5f, 19.25f, 31.5f, 29.25f, 2.2f, 2.2f, p)
+        p.color = AMBER
+        p.strokeWidth = 1.8f
+        c.drawLine(19.6f, 25.4f, 28.4f, 25.4f, p)
+        c.restore()
+        p.strokeCap = Paint.Cap.BUTT
+        p.style = Paint.Style.FILL
+    }
+
+    private fun drawArrow(c: Canvas, arc: Path, head: Path, color: Int, p: Paint) {
+        p.color = color
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = 3.2f
+        c.drawPath(arc, p)
+        p.style = Paint.Style.FILL_AND_STROKE
+        p.strokeWidth = 1f
+        c.drawPath(head, p)
     }
 
     private fun draw(c: Canvas) {
@@ -245,5 +340,27 @@ class VideoSource(
 
     companion object {
         const val MIME = "video/avc"
+
+        private val BG = Color.rgb(0x0E, 0x14, 0x1A) // фон иконки
+        private val AMBER = Color.rgb(0xF2, 0xB3, 0x3D)
+        private val STATUS = Color.rgb(0xB8, 0xC4, 0xCC)
+        private val WORDMARK: Typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
+
+        /** Цикл обмена стрелок и длительность самого поворота внутри него, секунды. */
+        private const val SWAP_S = 2.2f
+        private const val SPIN_S = 0.8f
+
+        // дуги — окружность r=15 вокруг (24,24): 195°..318° и её отражение 15°..138°
+        private val ARC_WHITE = Path().apply { addArc(RectF(9f, 9f, 39f, 39f), 195f, 123f) }
+        private val ARC_AMBER = Path().apply { addArc(RectF(9f, 9f, 39f, 39f), 15f, 123f) }
+        private val HEAD_WHITE = triangle(39.24f, 10.28f, 40.5f, 19.9f, 31.06f, 17.64f)
+        private val HEAD_AMBER = triangle(8.76f, 37.72f, 7.5f, 28.1f, 16.94f, 30.36f)
+
+        private fun triangle(x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float) = Path().apply {
+            moveTo(x1, y1)
+            lineTo(x2, y2)
+            lineTo(x3, y3)
+            close()
+        }
     }
 }

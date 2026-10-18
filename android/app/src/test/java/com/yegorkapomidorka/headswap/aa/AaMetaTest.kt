@@ -584,12 +584,30 @@ class AaMetaTest {
         val r = Rig()
         assertTrue(!r.core.huVw20082138)
         r.core.onHuInfo("VW BT 1538", "VW BT 1538")
+        assertTrue("одного имени мало", !r.core.huVw20082138)
+        r.core.onHuStatistic("20082138")
         assertTrue(r.core.huVw20082138)
         r.core.onCarlifeClosed()
         r.core.attach(MetaLink())
         assertTrue("новая сессия - флаг заново", !r.core.huVw20082138)
-        r.core.onHuStatistic("20082138")
+        r.core.onHuStatistic("20082138")                       // порядок любой: канал раньше имени
+        assertTrue("одного канала мало", !r.core.huVw20082138)
+        r.core.onHuInfo("VW BT 1538", "VW BT 1538")
         assertTrue(r.core.huVw20082138)
+    }
+
+    @Test
+    fun vwIdFlagNotSetForVwBt1420OnSameChannel() {
+        val r = Rig()
+        r.core.onHuInfo("VW BT 1420", "VW BT 1420")             // Павел: тот же канал прошивки, другое BT-имя
+        r.core.onHuStatistic("20082138")
+        assertTrue(!r.core.huVw20082138)
+        assertTrue(r.core.huVwBt1420)
+        r.core.onCarlifeClosed()
+        r.core.attach(MetaLink())
+        assertTrue("новая сессия - флаг заново", !r.core.huVwBt1420)
+        r.core.onHuInfo("VW BT 1538", "VW BT 1538")
+        assertTrue(!r.core.huVwBt1420)
     }
 
     @Test
@@ -599,6 +617,18 @@ class AaMetaTest {
         r.core.onHuStatistic("20082120")
         assertTrue(r.core.huVw20082120)
         assertTrue(!r.core.huVw20082138)
+    }
+
+    @Test
+    fun pauseHeartbeatForVwCns3Channel20082122() {
+        val r = Rig()
+        r.core.onHuInfo("Volkswagen", "CNS3")
+        r.core.onHuStatistic("20082122")
+        assertTrue(r.core.huVw20082120)
+        assertTrue(!r.core.huVw20082138)
+        r.core.onCarlifeClosed()
+        r.core.attach(MetaLink())
+        assertTrue("новая сессия - флаг заново", !r.core.huVw20082120)
     }
 
     @Test
