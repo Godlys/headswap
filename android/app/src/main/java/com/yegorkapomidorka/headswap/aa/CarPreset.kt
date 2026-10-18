@@ -21,20 +21,26 @@ data class CarSettings(
 enum class CarPreset(val titleRes: Int, val settings: CarSettings = CarSettings()) {
     PEUGEOT_5008_2024(R.string.car_peugeot_5008_2024),
     HONDA_BREEZE_2(R.string.car_honda_breeze_2),
-    HONDA_CRV_6(R.string.car_honda_crv_6),
-    HONDA_CRV_2026(R.string.car_honda_crv_2026),
-    HONDA_CRV_2026_HYBRID(R.string.car_honda_crv_2026_hybrid),
-    HONDA_VEZEL_2022(R.string.car_honda_vezel_2022),
+    /** h243: 1920×1080, «работает достойно». */
+    HONDA_CRV_6(R.string.car_honda_crv_6, CarSettings(videoMode = VideoMode.R1080)),
+    /** SEMIDRIVE X9, экран 1920×720; на кадрах «Авто» полосы и мерцание (h72). */
+    HONDA_CRV_2026(R.string.car_honda_crv_2026, CarSettings(videoMode = VideoMode.WIDE_HD, fps = FpsSetting.FPS30)),
+    HONDA_CRV_2026_HYBRID(R.string.car_honda_crv_2026_hybrid, CarSettings(videoMode = VideoMode.WIDE_HD, fps = FpsSetting.FPS30)),
+    /** Машина Егора: 1920×1080, 30 кадров. */
+    HONDA_VEZEL_2022(R.string.car_honda_vezel_2022, CarSettings(videoMode = VideoMode.R1080, fps = FpsSetting.FPS30)),
     HYUNDAI_ELANTRA_7(R.string.car_hyundai_elantra_7),
-    HYUNDAI_IX35_2021(R.string.car_hyundai_ix35_2021),
+    /** HSAE, вертикальный экран: 1280×480 работает шустро (h86). */
+    HYUNDAI_IX35_2021(R.string.car_hyundai_ix35_2021, CarSettings(videoMode = VideoMode.WIDE)),
     JETTA_VS(R.string.car_jetta_vs),
     KIA_K3_2023(R.string.car_kia_k3_2023),
     KIA_SPORTAGE_ACE(R.string.car_kia_sportage_ace),
 
     /** Desay SV G6S: нативный экран 1728×648. */
     MAZDA_CX5_2025(R.string.car_mazda_cx5_2025, CarSettings(videoMode = VideoMode.WIDE_MID)),
-    MAZDA_CX50(R.string.car_mazda_cx50),
-    MITSUBISHI_OUTLANDER_4(R.string.car_mitsubishi_outlander_4),
+    /** alps, CarLife 4.1: 1920×720 (h166). */
+    MAZDA_CX50(R.string.car_mazda_cx50, CarSettings(videoMode = VideoMode.WIDE_HD)),
+    /** yftech: заработало на 15 кадрах (h10, h41). */
+    MITSUBISHI_OUTLANDER_4(R.string.car_mitsubishi_outlander_4, CarSettings(fps = FpsSetting.FPS15)),
     SKODA_KAMIQ_GT_2021(R.string.car_skoda_kamiq_gt_2021),
     SKODA_OCTAVIA_PRO(R.string.car_skoda_octavia_pro),
     TOYOTA_COROLLA_CROSS_2024(R.string.car_toyota_corolla_cross_2024),
