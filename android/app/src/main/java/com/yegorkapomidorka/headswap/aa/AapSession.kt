@@ -669,8 +669,6 @@ class AapSession(
         val sensorType = firstVarint(payload, 1)?.toInt()
         send(M.sensorStartResponse())
         if (sensorType == 10) send(M.nightModeEvent(false))               // NIGHT
-        // DRIVING_STATUS: событие на CHANNEL_OPEN приходит до подписки, AA может его не учесть (h224, видео в движении)
-        if (sensorType == 13) send(M.drivingStatusEvent(0))               // UNRESTRICTED
     }
 
     private fun onMediaControl(chan: Int, type: Int, payload: ByteArray) {

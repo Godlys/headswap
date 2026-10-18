@@ -207,7 +207,6 @@ class AapSessionTest {
             // сенсоры, input
             sendMsg(1, M.SENSOR_START_REQUEST, AapPb().v(1, 13).v(2, 0).toByteArray())
             assertArrayEquals(Golden["sensor_start_response"], expect(1, M.SENSOR_START_RESPONSE))
-            assertArrayEquals(Golden["driving_status"], expect(1, M.SENSOR_EVENT))   // повтор после подписки (h224)
             sendMsg(1, M.SENSOR_START_REQUEST, AapPb().v(1, 10).v(2, 0).toByteArray())
             assertArrayEquals(Golden["sensor_start_response"], expect(1, M.SENSOR_START_RESPONSE))
             assertArrayEquals(Golden["night"], expect(1, M.SENSOR_EVENT))
