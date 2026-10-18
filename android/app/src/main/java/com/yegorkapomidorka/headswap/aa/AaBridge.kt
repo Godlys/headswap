@@ -345,8 +345,9 @@ class AaBridgeCore(
         val warm = carlifeStarted && !carlifePaused
         // Воздух, возврат после PAUSE: декодер всю паузу ел кадры AA (гейт выкидывал только выход энкодера), его
         // состояние живо. Не ждём IDR от AA (цикл VideoFocus, 0.2-2 с тишины), а сразу берём IDR у энкодера.
-        // VW BT 1420 (лог Павла 2026-10-16) закрывал сокет через 0.16-0.42 с после такого START.
-        val resume = AIR_WARM_RESUME_ENABLED && link.isAir && carlifeStarted && carlifePaused &&
+        // VW BT 1420 (лог Павла 2026-10-16) закрывал сокет через 0.16-0.42 с после такого START. Только для него:
+        // остальные ГУ (Mazda G6S по воздуху, задний ход) - как было, через IDR от AA.
+        val resume = AIR_WARM_RESUME_ENABLED && huVwBt1420 && link.isAir && carlifeStarted && carlifePaused &&
             transcodeEnabled && transcoder != null && gotIdr && active == Source.AA
         carlifeStarted = true
         carlifePaused = false
@@ -1395,7 +1396,7 @@ class AaBridgeCore(
          */
         @Volatile @JvmStatic var BT_AUTOPLAY_GUARD_ENABLED = true
 
-        /** Воздух: START после PAUSE сразу с IDR энкодера (декодер жив), без ожидания IDR от AA. */
+        /** Воздух, VW BT 1420: START после PAUSE сразу с IDR энкодера (декодер жив), без ожидания IDR от AA. */
         @Volatile @JvmStatic var AIR_WARM_RESUME_ENABLED = true
 
         const val BT_AUTOPLAY_WINDOW_MS = 20_000L

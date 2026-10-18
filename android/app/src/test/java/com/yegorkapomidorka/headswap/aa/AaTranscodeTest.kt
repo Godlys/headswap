@@ -132,6 +132,7 @@ class AaTranscodeCoreTest {
     @Test
     fun airStartAfterPauseKeepsDecoderAndSendsEncoderIdrAtOnce() {
         link.air = true
+        core.onHuInfo("VW BT 1420", "VW BT 1420")
         playThenPause()
         val fed = tr.frames.size
         val syncs = tr.syncs.get()
@@ -148,7 +149,20 @@ class AaTranscodeCoreTest {
     }
 
     @Test
+    fun airStartAfterPauseOnOtherHuStillWaitsForAaIdr() {
+        link.air = true                                        // Mazda G6S по воздуху и др.: как в main
+        core.onHuInfo("Desay SV", "G6S")
+        playThenPause()
+        val fed = tr.frames.size
+        core.onCarlifeStart()
+        core.onFrame(aaP, 3)
+        assertEquals(fed, tr.frames.size)
+        assertFalse(logs.any { it.contains("AA не жду") })
+    }
+
+    @Test
     fun usbStartAfterPauseStillWaitsForAaIdr() {
+        core.onHuInfo("VW BT 1420", "VW BT 1420")              // даже у Павла по USB - как было
         playThenPause()
         val fed = tr.frames.size
         core.onCarlifeStart()
