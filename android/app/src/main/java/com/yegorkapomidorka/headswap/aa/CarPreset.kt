@@ -48,6 +48,8 @@ enum class CarPreset(val titleRes: Int, val settings: CarSettings = CarSettings(
     SKODA_OCTAVIA_PRO(R.string.car_skoda_octavia_pro),
     TOYOTA_COROLLA_CROSS_2024(R.string.car_toyota_corolla_cross_2024),
     TOYOTA_LEVIN(R.string.car_toyota_levin),
+    /** Китай: 1920×1080, 30 кадров (Егор, 18.10). */
+    VW_BORA_2021(R.string.car_vw_bora_2021, CarSettings(videoMode = VideoMode.R1080, fps = FpsSetting.FPS30)),
     VW_GOLF_8_PRO(R.string.car_vw_golf_8_pro),
     VW_ID_UNYX(R.string.car_vw_id_unyx),
     VW_LAMANDO_L(R.string.car_vw_lamando_l),
