@@ -1,10 +1,14 @@
 package com.yegorkapomidorka.headswap.ui
 
-import android.app.AlertDialog
 import android.content.Context
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.AbsListView
+import android.widget.BaseAdapter
 import android.widget.LinearLayout
+import android.widget.ListPopupWindow
 import android.widget.TextView
 import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.aa.AaDensity
@@ -12,7 +16,7 @@ import com.yegorkapomidorka.headswap.aa.CarPreset
 import com.yegorkapomidorka.headswap.aa.CarSettings
 
 /**
- * Выбор машины: поле-выпадашка (диалог со списком CarPreset) и под ним карточка «Будет применено» с названием каждой настройки.
+ * Выбор машины: поле-выпадашка (список CarPreset раскрывается прямо под полем, его ширины) и под ним карточка «Будет применено» с названием каждой настройки.
  * Строки карточки фиксированной высоты, при выборе меняются только значения: ничего не прыгает.
  * Общий для раздела «Мой автомобиль» и последнего шага онбординга. Сам ничего не пишет, только сообщает выбор в [onPick];
  * применяет экран по своей кнопке «Применить».
@@ -24,6 +28,9 @@ class CarChooser(val ctx: Context, private val withOther: Boolean, private val o
         ellipsize = TextUtils.TruncateAt.END
     }
     private val values = ArrayList<TextView>()
+    private val chevron = ctx.icon(R.drawable.ic_chevron, 20, ctx.clr(R.color.on2)).apply { rotation = 90f }
+    private val field: LinearLayout
+    private val opts: List<CarPreset?> = CarPreset.values().toList() + if (withOther) listOf(null) else emptyList()
 
     /** false - ещё ничего не выбрано (поле «Выберите машину», значения «—»). */
     var hasChoice = false
@@ -34,9 +41,8 @@ class CarChooser(val ctx: Context, private val withOther: Boolean, private val o
 
     init {
         val c = ctx
-        val field = c.hbox(12).apply {
+        field = c.hbox(12).apply {
             pad(c, 16, 0, 16, 0)
-            background = c.rippleBg(c.shape(c.clr(R.color.surf), 16, c.clr(R.color.line), 1.5f), 16)
             isClickable = true
             isFocusable = true
             setOnClickListener { openList() }
@@ -44,8 +50,9 @@ class CarChooser(val ctx: Context, private val withOther: Boolean, private val o
                 addView(c.text(c.getString(R.string.car_field), 13f, 500, c.clr(R.color.on2)))
                 addView(fieldValue, lp(MATCH, WRAP))
             }, lp(0, WRAP, 1f))
-            addView(c.icon(R.drawable.ic_chevron, 20, c.clr(R.color.on2)).apply { rotation = 90f })
+            addView(chevron)
         }
+        setOpen(false)
         val card = c.card().apply { pad(c, 0, 6, 0, 6) }
         card.addView(c.text(c.getString(R.string.car_will_apply), 14f, 600, c.clr(R.color.acc)).apply { pad(c, 16, 10, 16, 4) })
         for (label in LABELS) {
@@ -87,21 +94,69 @@ class CarChooser(val ctx: Context, private val withOther: Boolean, private val o
         for ((v, t) in values.zip(texts)) v.text = t
     }
 
+    /** Раскрытое поле: рамка цвета акцента той же толщины (ничего не сдвигается), шеврон вверх. */
+    private fun setOpen(open: Boolean) {
+        val c = ctx
+        field.background = c.rippleBg(c.shape(c.clr(R.color.surf), 16, c.clr(if (open) R.color.acc else R.color.line), 1.5f), 16)
+        chevron.rotation = if (open) -90f else 90f
+    }
+
+    /** Список под полем: шириной с поле, до ~6 строк, дальше прокрутка; нажатие мимо закрывает. */
     private fun openList() {
-        val opts: List<CarPreset?> = CarPreset.values().toList() + if (withOther) listOf(null) else emptyList()
-        val labels = opts.map { ctx.getString(it?.titleRes ?: R.string.car_other_title) }.toTypedArray()
-        AlertDialog.Builder(ctx, R.style.Theme_Headswap_Dialog)
-            .setTitle(R.string.car_field)
-            .setSingleChoiceItems(labels, if (hasChoice) opts.indexOf(choice) else -1) { d, i ->
-                show(opts[i])
-                d.dismiss()
-                onPick(opts[i])
+        val c = ctx
+        val popup = ListPopupWindow(c)
+        popup.anchorView = field
+        popup.width = field.width
+        popup.height = minOf(opts.size * c.dp(ITEM_DP) + c.dp(12), c.dp(ITEM_DP * 6 + 12))
+        popup.verticalOffset = c.dp(4)
+        popup.isModal = true
+        popup.setBackgroundDrawable(c.shape(c.clr(R.color.surf), 16))
+        popup.setAdapter(Adapter())
+        popup.setOnItemClickListener { _, _, i, _ ->
+            popup.dismiss()
+            show(opts[i])
+            onPick(opts[i])
+        }
+        popup.setOnDismissListener { setOpen(false) }
+        setOpen(true)
+        popup.show()
+        popup.listView?.apply {
+            divider = null
+            setPadding(0, c.dp(6), 0, c.dp(6))
+            clipToPadding = false
+            if (hasChoice) setSelection(opts.indexOf(choice).coerceAtLeast(0))
+        }
+    }
+
+    /** Строка списка: выбранная залита pric, начертание у всех одно (не прыгает). */
+    private inner class Adapter : BaseAdapter() {
+        override fun getCount() = opts.size
+
+        override fun getItem(i: Int) = opts[i]
+
+        override fun getItemId(i: Int) = i.toLong()
+
+        override fun getView(i: Int, convertView: View?, parent: ViewGroup): View {
+            val c = ctx
+            val tv = convertView as? TextView ?: c.text("", 16f, 400).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                pad(c, 16, 0, 16, 0)
+                maxLines = 2
+                ellipsize = TextUtils.TruncateAt.END
+                layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, c.dp(ITEM_DP))
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            val p = opts[i]
+            val on = hasChoice && p == choice
+            tv.text = c.getString(p?.titleRes ?: R.string.car_other_title)
+            tv.setTextColor(c.clr(if (on) R.color.onpric else R.color.on))
+            tv.background = c.rippleBg(if (on) c.shape(c.clr(R.color.pric), 0) else null, 0)
+            return tv
+        }
     }
 
     private companion object {
+        const val ITEM_DP = 48
+
         /** Подписи строк «Будет применено», в порядке [settingNames]. */
         val LABELS = listOf(R.string.car_label_mode, R.string.set_resolution, R.string.set_aa_density, R.string.set_fps, R.string.set_music_rate)
     }
