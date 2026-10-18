@@ -11,6 +11,9 @@ data class CarSettings(
     val musicRate: MusicRate = MusicRate.DEFAULT,
 )
 
+/** Корейские ГУ слабые: на 30 кадрах и 48 кГц рвут USB, советуем 1280×720, 15 кадров, 32 кГц (h139, h218, h260). */
+private val KOREAN = CarSettings(fps = FpsSetting.FPS15, musicRate = MusicRate.HZ32)
+
 /**
  * Подтверждённые машины (README, «Совместимость») и проверенные сообществом настройки для каждой.
  * Выбор машины разом пишет [settings] в AaPrefs, дальше любую настройку можно поменять вручную.
@@ -28,13 +31,12 @@ enum class CarPreset(val titleRes: Int, val settings: CarSettings = CarSettings(
     HONDA_CRV_2026_HYBRID(R.string.car_honda_crv_2026_hybrid, CarSettings(videoMode = VideoMode.WIDE_HD, fps = FpsSetting.FPS30)),
     /** Машина Егора: 1920×1080, 30 кадров. */
     HONDA_VEZEL_2022(R.string.car_honda_vezel_2022, CarSettings(videoMode = VideoMode.R1080, fps = FpsSetting.FPS30)),
-    /** Hyundai: на высоком разрешении, 30 кадрах и 48 кГц рвёт USB; советуем 1280×720, 15 кадров, 32 кГц (h139, h218, h260). */
-    HYUNDAI_ELANTRA_7(R.string.car_hyundai_elantra_7, CarSettings(fps = FpsSetting.FPS15, musicRate = MusicRate.HZ32)),
+    HYUNDAI_ELANTRA_7(R.string.car_hyundai_elantra_7, KOREAN),
     /** HSAE, вертикальный экран: 1280×480 работает шустро (h86). */
-    HYUNDAI_IX35_2021(R.string.car_hyundai_ix35_2021, CarSettings(videoMode = VideoMode.WIDE, fps = FpsSetting.FPS15, musicRate = MusicRate.HZ32)),
+    HYUNDAI_IX35_2021(R.string.car_hyundai_ix35_2021, KOREAN.copy(videoMode = VideoMode.WIDE)),
     JETTA_VS(R.string.car_jetta_vs),
-    KIA_K3_2023(R.string.car_kia_k3_2023),
-    KIA_SPORTAGE_ACE(R.string.car_kia_sportage_ace),
+    KIA_K3_2023(R.string.car_kia_k3_2023, KOREAN),
+    KIA_SPORTAGE_ACE(R.string.car_kia_sportage_ace, KOREAN),
 
     /** Desay SV G6S: нативный экран 1728×648. */
     MAZDA_CX5_2025(R.string.car_mazda_cx5_2025, CarSettings(videoMode = VideoMode.WIDE_MID)),
