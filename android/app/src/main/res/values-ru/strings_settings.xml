@@ -187,17 +187,11 @@
     <string name="car_title">Мой автомобиль</string>
     <string name="car_sum_none">Не выбран</string>
     <string name="car_sum_modified">%1$s · изменено вручную</string>
-    <string name="car_intro_title">Выберите машину — и получите проверенные настройки</string>
-    <string name="car_intro">Для каждой машины есть настройки, рекомендованные сообществом и проверенные на ней: режим и разрешение видео, частота кадров, частота музыки. Они применяются сразу, а любую можно потом поменять в разделах «Видео» и «Звук».</string>
-    <string name="car_list">Поддерживаемые автомобили</string>
-    <string name="car_sub_fps">кадры: %1$s</string>
-    <string name="car_sub_music">музыка: %1$s</string>
+    <string name="car_intro">Выберите машину — подставим настройки, проверенные сообществом на ней.</string>
     <string name="car_other_title">Моей машины нет в списке</string>
-    <string name="car_other_sub">Настройки остаются как есть</string>
-    <string name="car_missing_note">Нет вашей машины? Попробуйте настройки по умолчанию и отправьте отчёт через «Помощь» — машину добавим.</string>
-    <string name="car_status_applied">Применены настройки для %1$s. Вступят в силу при следующем подключении.</string>
-    <string name="car_status_current">Используются рекомендованные настройки для %1$s.</string>
-    <string name="car_status_modified">Настройки изменены вручную. Нажмите на машину ещё раз, чтобы вернуть рекомендованные.</string>
+    <string name="car_status_applied">Применено. Вступит в силу при следующем подключении.</string>
+    <string name="car_status_current">Используются рекомендованные настройки этой машины.</string>
+    <string name="car_status_modified">Настройки изменены вручную. «Применить» вернёт рекомендованные.</string>
     <string name="car_peugeot_5008_2024">Dongfeng Peugeot 5008 2024</string>
     <string name="car_honda_breeze_2">Honda Breeze, 2 поколение</string>
     <string name="car_honda_crv_6">Honda CR-V, 6 поколение, дорестайл</string>
@@ -223,4 +217,11 @@
     <string name="car_vw_troc_2026">Volkswagen T-Roc рестайлинг 2026</string>
     <string name="car_vw_tharu_xr">Volkswagen Tharu XR 2025–2026</string>
     <string name="car_vw_tiguan_l_pro">Volkswagen Tiguan L Pro / Teramont Pro</string>
+    <string name="car_field">Автомобиль</string>
+    <string name="car_pick_hint">Выберите машину</string>
+    <string name="car_will_apply">Будет применено</string>
+    <string name="car_label_mode">Режим видео</string>
+    <string name="car_auto">Авто</string>
+    <string name="car_value_keep">Без изменений</string>
+    <string name="car_apply">Применить</string>
 </resources>

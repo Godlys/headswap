@@ -187,17 +187,11 @@
     <string name="car_title">My car</string>
     <string name="car_sum_none">Not selected</string>
     <string name="car_sum_modified">%1$s · changed manually</string>
-    <string name="car_intro_title">Pick your car to get proven settings</string>
-    <string name="car_intro">Each car comes with settings recommended by the community and verified on that car: video mode and resolution, frame rate, music sample rate. They are applied right away, and you can still change any of them in Video and Sound.</string>
-    <string name="car_list">Supported cars</string>
-    <string name="car_sub_fps">frames: %1$s</string>
-    <string name="car_sub_music">music: %1$s</string>
+    <string name="car_intro">Pick your car and we will fill in the settings the community verified on it.</string>
     <string name="car_other_title">My car is not on the list</string>
-    <string name="car_other_sub">Settings stay as they are</string>
-    <string name="car_missing_note">Not on the list? Try the defaults and send a report via Help: the car will be added.</string>
-    <string name="car_status_applied">Applied settings for %1$s. They take effect on the next connection.</string>
-    <string name="car_status_current">Recommended settings for %1$s are in use.</string>
-    <string name="car_status_modified">Settings were changed manually. Tap the car again to restore the recommended ones.</string>
+    <string name="car_status_applied">Applied. Takes effect on the next connection.</string>
+    <string name="car_status_current">The recommended settings for this car are in use.</string>
+    <string name="car_status_modified">Settings were changed manually. Apply restores the recommended ones.</string>
     <string name="car_peugeot_5008_2024">Dongfeng Peugeot 5008 2024</string>
     <string name="car_honda_breeze_2">Honda Breeze, 2nd generation</string>
     <string name="car_honda_crv_6">Honda CR-V, 6th generation, pre-facelift</string>
@@ -223,4 +217,11 @@
     <string name="car_vw_troc_2026">Volkswagen T-Roc facelift 2026</string>
     <string name="car_vw_tharu_xr">Volkswagen Tharu XR 2025–2026</string>
     <string name="car_vw_tiguan_l_pro">Volkswagen Tiguan L Pro / Teramont Pro</string>
+    <string name="car_field">Car</string>
+    <string name="car_pick_hint">Choose your car</string>
+    <string name="car_will_apply">Will be applied</string>
+    <string name="car_label_mode">Video mode</string>
+    <string name="car_auto">Auto</string>
+    <string name="car_value_keep">Unchanged</string>
+    <string name="car_apply">Apply</string>
 </resources>

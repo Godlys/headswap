@@ -157,7 +157,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
     }
 
     /**
-     * Последний шаг: какая у вас машина. Выбор в списке только отмечается, «Применить» пишет настройки машины (AaPrefs.applyCar),
+     * Последний шаг: какая у вас машина. Выпадашка только показывает настройки машины, «Применить» пишет их (AaPrefs.applyCar),
      * «Пропустить» (для опытных) ничего не трогает и ставит ручную отметку шага.
      */
     private fun renderCar(s: StepInfo) {
@@ -167,37 +167,23 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         val aa = AaPrefs(c)
         if (carChoice == null) carChoice = aa.carPreset
 
-        val body = c.vbox(10).apply { pad(c, 0, 4, 0, 36) }
-        body.addView(c.text(c.getString(s.title), 28f, 600).apply { letterSpacing = -0.01f; lineHeight = c.dp(34) })
-        body.addView(c.text(s.bodyText(c), 17f, 400, c.clr(R.color.on2)).apply { lineHeight = c.dp(24) })
-        s.hint?.let {
-            body.addView(
-                c.text(c.getString(it), 14f, 400, c.clr(R.color.on2)).apply {
-                    lineHeight = c.dp(20)
-                    background = c.shape(c.clr(R.color.surf), 16)
-                    pad(c, 14, 12, 14, 12)
-                },
-                lp(MATCH, WRAP),
-            )
-        }
         val applyBtn = c.primaryButton(c.getString(s.primary))
         fun refresh() {
             applyBtn.isEnabled = carChoice != null
             applyBtn.alpha = if (carChoice != null) 1f else 0.45f
         }
-        // CarPicker сам строку не отмечает: отметка и кнопка обновляются здесь
-        lateinit var list: CarPicker
-        list = CarPicker(c, withOther = false) { p ->
+        val chooser = CarChooser(c, withOther = false) { p ->
             carChoice = p
-            list.setSelected(p)
             refresh()
         }
-        list.setSelected(carChoice)
-        body.addView(c.sectionTitle(c.getString(R.string.car_list)))
-        body.addView(list.view, lp(MATCH, WRAP))
+        carChoice?.let { chooser.show(it) }
+
+        val body = c.vbox(12).apply { pad(c, 0, 4, 0, 24) }
+        body.addView(c.text(c.getString(s.title), 28f, 600).apply { letterSpacing = -0.01f; lineHeight = c.dp(34) })
+        body.addView(c.text(s.bodyText(c), 17f, 400, c.clr(R.color.on2)).apply { lineHeight = c.dp(24) })
+        body.addView(chooser.view, lp(MATCH, WRAP).margins(c, 0, 8, 0, 0))
         root.addView(fadingScroll(body), lp(MATCH, 0, 1f))
 
-        val buttons = c.vbox(4)
         applyBtn.setOnClickListener {
             val p = carChoice ?: return@setOnClickListener
             aa.applyCar(p)
@@ -205,6 +191,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
             next()
         }
         refresh()
+        val buttons = c.vbox(4)
         buttons.addView(applyBtn)
         buttons.addView(c.linkButton(c.getString(s.skip), 48).apply {
             setOnClickListener {

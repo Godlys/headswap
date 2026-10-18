@@ -34,7 +34,6 @@ import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.aa.AaDensity
 import com.yegorkapomidorka.headswap.aa.AaPrefs
 import com.yegorkapomidorka.headswap.aa.CAR_MAKES
-import com.yegorkapomidorka.headswap.aa.CarPreset
 import com.yegorkapomidorka.headswap.aa.EQ_BAND_MAX
 import com.yegorkapomidorka.headswap.aa.EQ_BAND_MIN
 import com.yegorkapomidorka.headswap.aa.EQ_FREQS
@@ -360,7 +359,8 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     private val micRows = HashMap<MicMode, RadioRow>()
     private val rateRows = LinkedHashMap<MusicRate, RadioRow>()
     private val modeRows = LinkedHashMap<VideoMode, RadioRow>()
-    private var carPicker: CarPicker? = null
+    private var carChooser: CarChooser? = null
+    private var carApply: View? = null
     private var carStatus: TextView? = null
     private var makeValue: TextView? = null
     private var transcodeSeg: Segmented? = null
@@ -653,23 +653,24 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
 
     private fun buildCar() {
         val c = ctx
-        body.addView(c.card().apply {
-            pad(c, 16, 14, 16, 14)
-            addView(c.text(c.getString(R.string.car_intro_title), 16f, 600), lp(MATCH, WRAP))
-            addView(c.text(c.getString(R.string.car_intro), 14f, 400, c.clr(R.color.on2)), lp(MATCH, WRAP).margins(c, 0, 4, 0, 0))
-        }, lp(MATCH, WRAP).margins(c, 0, 8, 0, 0))
-        carStatus = note("")
-
-        body.addView(c.sectionTitle(c.getString(R.string.car_list)))
-        val picker = CarPicker(c, withOther = true) { pickCar(it) }
-        carPicker = picker
-        body.addView(picker.view, lp(MATCH, WRAP))
-        note(c.getString(R.string.car_missing_note))
+        note(c.getString(R.string.car_intro))
+        // выбор в выпадашке только показывает настройки машины, пишет их кнопка «Применить»
+        val chooser = CarChooser(c, withOther = true) { refreshCar() }
+        chooser.show(aa.carPreset)
+        carChooser = chooser
+        body.addView(chooser.view, lp(MATCH, WRAP).margins(c, 0, 8, 0, 0))
+        carApply = c.primaryButton(c.getString(R.string.car_apply)).apply { setOnClickListener { applyCar() } }
+            .also { body.addView(it, lp(MATCH, c.dp(64)).margins(c, 0, 12, 0, 0)) }
+        // под кнопкой, с запасом высоты: появление и смена текста ничего не сдвигают
+        carStatus = c.text("", 13f, 400, c.clr(R.color.on2)).apply { minHeight = c.dp(36) }
+            .also { body.addView(it, lp(MATCH, WRAP).margins(c, 8, 8, 8, 0)) }
         refreshCar()
     }
 
-    /** Машина из списка - сразу её настройки (повторное нажатие возвращает их после ручных правок); null - только снять выбор. */
-    private fun pickCar(p: CarPreset?) {
+    /** «Применить»: настройки выбранной машины; «Моей машины нет в списке» - только снять выбор. */
+    private fun applyCar() {
+        val chooser = carChooser ?: return
+        val p = chooser.choice
         if (p == null) {
             aa.carPreset = null
             AppLog.i("мой автомобиль: не выбран, настройки не тронуты")
@@ -677,27 +678,28 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
             aa.applyCar(p)
             AppLog.i("мой автомобиль: ${p.name}, применены ${p.settings}")
         }
-        refreshCar(justPicked = p != null)
+        refreshCar(justApplied = p != null)
     }
 
-    private fun refreshCar(justPicked: Boolean = false) {
+    /** Кнопка активна, если выбрана другая машина или настройки текущей поменяли вручную. */
+    private fun refreshCar(justApplied: Boolean = false) {
         val status = carStatus ?: return
+        val pick = carChooser?.choice
         val c = ctx
         val cur = aa.carPreset
-        carPicker?.setSelected(cur)
-        when {
-            cur == null -> status.visibility = View.GONE
-            aa.carSettings != cur.settings -> {
-                status.text = c.getString(R.string.car_status_modified)
-                status.setTextColor(c.clr(R.color.warn))
-                status.visibility = View.VISIBLE
-            }
-            else -> {
-                status.text = c.getString(if (justPicked) R.string.car_status_applied else R.string.car_status_current, c.getString(cur.titleRes))
-                status.setTextColor(c.clr(R.color.ok))
-                status.visibility = View.VISIBLE
-            }
+        val modified = cur != null && aa.carSettings != cur.settings
+        val can = pick != cur || (modified && pick != null)
+        carApply?.apply {
+            isEnabled = can
+            alpha = if (can) 1f else 0.45f
         }
+        val (text, color) = when {
+            modified && pick == cur -> c.getString(R.string.car_status_modified) to R.color.warn
+            !can && cur != null -> c.getString(if (justApplied) R.string.car_status_applied else R.string.car_status_current) to R.color.ok
+            else -> "" to R.color.on2
+        }
+        status.text = text
+        status.setTextColor(c.clr(color))
     }
 
     // --- язык и тема ---

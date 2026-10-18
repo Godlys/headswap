@@ -104,9 +104,9 @@ object Readiness {
         ),
         StepInfo(
             StepId.CAR, R.string.step_car_title,
-            R.string.car_intro,
-            R.string.step_car_hint,
-            R.string.step_car_primary, null, R.string.onb_skip, R.string.step_car_short,
+            R.string.step_car_body,
+            null,
+            R.string.car_apply, null, R.string.onb_skip, R.string.step_car_short,
         ),
     )
 
