@@ -34,6 +34,8 @@ import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.aa.AaDensity
 import com.yegorkapomidorka.headswap.aa.AaPrefs
 import com.yegorkapomidorka.headswap.aa.CAR_MAKES
+import com.yegorkapomidorka.headswap.aa.CarPreset
+import com.yegorkapomidorka.headswap.aa.CarSettings
 import com.yegorkapomidorka.headswap.aa.EQ_BAND_MAX
 import com.yegorkapomidorka.headswap.aa.EQ_BAND_MIN
 import com.yegorkapomidorka.headswap.aa.EQ_FREQS
@@ -85,7 +87,10 @@ enum class SettingsSection(val key: String, val titleRes: Int, val iconRes: Int)
 
     /** Беспровод: только в сборке с BuildConfig.WIRELESS_BETA. */
     WIRELESS("wireless", R.string.wl_title, R.drawable.ic_wifi),
-    UPDATES("updates", R.string.upd_title, R.drawable.ic_download);
+    UPDATES("updates", R.string.upd_title, R.drawable.ic_download),
+
+    /** Выбор машины: разом применяет проверенные сообществом настройки (CarPreset). Последний в меню. */
+    CAR("car", R.string.car_title, R.drawable.ic_car_preset);
 
     companion object {
         /** Разделы этой сборки: без беты беспровода его нет ни в меню, ни по ключу. */
@@ -258,6 +263,14 @@ class SettingsScreen(host: MainActivity) : Screen(host) {
         val (upd, color) = c.updateStatus()
         set(SettingsSection.UPDATES, upd, color)
 
+        val preset = aa.carPreset
+        if (preset == null) {
+            set(SettingsSection.CAR, c.getString(R.string.car_sum_none))
+        } else {
+            val name = c.getString(preset.titleRes)
+            set(SettingsSection.CAR, if (aa.carSettings == preset.settings) name else c.getString(R.string.car_sum_modified, name))
+        }
+
         if (BuildConfig.WIRELESS_BETA) {
             val car = CarProfile(c)
             val carText = if (car.isSet) c.getString(R.string.wl_car_line, car.btName ?: car.btMac ?: "") else null
@@ -348,6 +361,9 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     private val micRows = HashMap<MicMode, RadioRow>()
     private val rateRows = LinkedHashMap<MusicRate, RadioRow>()
     private val modeRows = LinkedHashMap<VideoMode, RadioRow>()
+    /** Ключ null - «Моей машины нет в списке». */
+    private val carRows = LinkedHashMap<CarPreset?, RadioRow>()
+    private var carStatus: TextView? = null
     private var makeValue: TextView? = null
     private var transcodeSeg: Segmented? = null
     private var transcodeNote: TextView? = null
@@ -402,6 +418,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
             SettingsSection.APPS -> buildApps()
             SettingsSection.UPDATES -> body.addView(updateCard(), lp(MATCH, WRAP).margins(ctx, 0, 8, 0, 0))
             SettingsSection.WIRELESS -> body.addView(wirelessCard(), lp(MATCH, WRAP).margins(ctx, 0, 8, 0, 0))
+            SettingsSection.CAR -> buildCar()
         }
         view = scaffold(ctx, ctx.getString(section.titleRes), { host.back() }, body)
     }
@@ -414,6 +431,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         refreshApps()
         refreshUpdate()
         refreshWireless()
+        refreshCar()
         if (section == SettingsSection.APPS) maybeShowAppsWarning()
     }
 
@@ -632,6 +650,73 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
 
     private fun note(text: String, color: Int = R.color.on2): TextView =
         ctx.text(text, 13f, 400, ctx.clr(color)).also { body.addView(it, lp(WRAP, WRAP).margins(ctx, 8, 2, 8, 0)) }
+
+    // --- мой автомобиль ---
+
+    private fun buildCar() {
+        val c = ctx
+        body.addView(c.card().apply {
+            pad(c, 16, 14, 16, 14)
+            addView(c.text(c.getString(R.string.car_intro_title), 16f, 600), lp(MATCH, WRAP))
+            addView(c.text(c.getString(R.string.car_intro), 14f, 400, c.clr(R.color.on2)), lp(MATCH, WRAP).margins(c, 0, 4, 0, 0))
+        }, lp(MATCH, WRAP).margins(c, 0, 8, 0, 0))
+        carStatus = note("")
+
+        body.addView(c.sectionTitle(c.getString(R.string.car_list)))
+        for (p in CarPreset.values()) {
+            val row = RadioRow(c, c.getString(p.titleRes), carSettingsText(p.settings)) { pickCar(p) }
+            carRows[p] = row
+            body.addView(row.view, lp(MATCH, WRAP))
+        }
+        val other = RadioRow(c, c.getString(R.string.car_other_title), c.getString(R.string.car_other_sub)) { pickCar(null) }
+        carRows[null] = other
+        body.addView(other.view, lp(MATCH, WRAP))
+        note(c.getString(R.string.car_missing_note))
+        refreshCar()
+    }
+
+    /** «1728×648 · кадры: Авто · музыка: Авто» (+ «прямой проброс», если без перекодирования). */
+    private fun carSettingsText(s: CarSettings): String {
+        val c = ctx
+        val parts = mutableListOf(s.videoMode.effective(s.transcode).outLabel)
+        if (!s.transcode) parts += c.getString(R.string.set_direct_title)
+        if (s.aaDensity != AaDensity.AUTO) parts += c.getString(R.string.set_sum_density, s.aaDensity)
+        parts += c.getString(R.string.car_sub_fps, c.getString(s.fps.titleRes))
+        parts += c.getString(R.string.car_sub_music, c.getString(s.musicRate.titleRes))
+        return parts.joinToString(" · ")
+    }
+
+    /** Машина из списка - сразу её настройки (повторное нажатие возвращает их после ручных правок); null - только снять выбор. */
+    private fun pickCar(p: CarPreset?) {
+        if (p == null) {
+            aa.carPreset = null
+            AppLog.i("мой автомобиль: не выбран, настройки не тронуты")
+        } else {
+            aa.applyCar(p)
+            AppLog.i("мой автомобиль: ${p.name}, применены ${p.settings}")
+        }
+        refreshCar(justPicked = p != null)
+    }
+
+    private fun refreshCar(justPicked: Boolean = false) {
+        val status = carStatus ?: return
+        val c = ctx
+        val cur = aa.carPreset
+        for ((p, row) in carRows) row.setSelected(p == cur)
+        when {
+            cur == null -> status.visibility = View.GONE
+            aa.carSettings != cur.settings -> {
+                status.text = c.getString(R.string.car_status_modified)
+                status.setTextColor(c.clr(R.color.warn))
+                status.visibility = View.VISIBLE
+            }
+            else -> {
+                status.text = c.getString(if (justPicked) R.string.car_status_applied else R.string.car_status_current, c.getString(cur.titleRes))
+                status.setTextColor(c.clr(R.color.ok))
+                status.visibility = View.VISIBLE
+            }
+        }
+    }
 
     // --- язык и тема ---
 

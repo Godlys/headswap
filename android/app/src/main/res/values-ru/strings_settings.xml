@@ -182,4 +182,45 @@
     <string name="wl_cw_checking">Подключаюсь к Wi-Fi машины… подтвердите системный запрос</string>
     <string name="wl_cw_ok">Подключилась к Wi-Fi машины</string>
     <string name="wl_cw_fail">Не подключилась: машина вне зоны, неверный пароль или отказ в запросе</string>
+
+    <!-- Мой автомобиль (CarPreset) -->
+    <string name="car_title">Мой автомобиль</string>
+    <string name="car_sum_none">Не выбран</string>
+    <string name="car_sum_modified">%1$s · изменено вручную</string>
+    <string name="car_intro_title">Выберите машину — и получите проверенные настройки</string>
+    <string name="car_intro">Для каждой машины есть настройки, рекомендованные сообществом и проверенные на ней: режим и разрешение видео, частота кадров, частота музыки. Они применяются сразу, а любую можно потом поменять в разделах «Видео» и «Звук».</string>
+    <string name="car_list">Поддерживаемые автомобили</string>
+    <string name="car_sub_fps">кадры: %1$s</string>
+    <string name="car_sub_music">музыка: %1$s</string>
+    <string name="car_other_title">Моей машины нет в списке</string>
+    <string name="car_other_sub">Настройки остаются как есть</string>
+    <string name="car_missing_note">Нет вашей машины? Попробуйте настройки по умолчанию и отправьте отчёт через «Помощь» — машину добавим.</string>
+    <string name="car_status_applied">Применены настройки для %1$s. Вступят в силу при следующем подключении.</string>
+    <string name="car_status_current">Используются рекомендованные настройки для %1$s.</string>
+    <string name="car_status_modified">Настройки изменены вручную. Нажмите на машину ещё раз, чтобы вернуть рекомендованные.</string>
+    <string name="car_peugeot_5008_2024">Dongfeng Peugeot 5008 2024</string>
+    <string name="car_honda_breeze_2">Honda Breeze, 2 поколение</string>
+    <string name="car_honda_crv_6">Honda CR-V, 6 поколение, дорестайл</string>
+    <string name="car_honda_crv_2026">Honda CR-V 2026 1.5T</string>
+    <string name="car_honda_crv_2026_hybrid">Honda CR-V 2026 гибрид</string>
+    <string name="car_honda_vezel_2022">Honda Vezel 2022–2024 (GAC Honda)</string>
+    <string name="car_hyundai_elantra_7">Hyundai Elantra, 7 поколение, дорестайл</string>
+    <string name="car_hyundai_ix35_2021">Hyundai ix35 2021</string>
+    <string name="car_jetta_vs">Jetta VS5/VS7 (только с Baidu CarLife, не J-Link)</string>
+    <string name="car_kia_k3_2023">Kia K3 2023</string>
+    <string name="car_kia_sportage_ace">Kia Sportage Ace</string>
+    <string name="car_mazda_cx5_2025">Mazda CX-5 2025–2026</string>
+    <string name="car_mazda_cx50">Mazda CX-50</string>
+    <string name="car_mitsubishi_outlander_4">Mitsubishi Outlander 4 2022</string>
+    <string name="car_skoda_kamiq_gt_2021">Skoda Kamiq GT 2021</string>
+    <string name="car_skoda_octavia_pro">Skoda Octavia Pro</string>
+    <string name="car_toyota_corolla_cross_2024">Toyota Corolla Cross 2024–2025</string>
+    <string name="car_toyota_levin">Toyota Levin</string>
+    <string name="car_vw_golf_8_pro">Volkswagen Golf 8 Pro 2021</string>
+    <string name="car_vw_id_unyx">Volkswagen ID.Unyx</string>
+    <string name="car_vw_lamando_l">Volkswagen Lamando L</string>
+    <string name="car_vw_sagitar_2021">Volkswagen Sagitar 2021–2022, дорестайл</string>
+    <string name="car_vw_troc_2026">Volkswagen T-Roc рестайлинг 2026</string>
+    <string name="car_vw_tharu_xr">Volkswagen Tharu XR 2025–2026</string>
+    <string name="car_vw_tiguan_l_pro">Volkswagen Tiguan L Pro / Teramont Pro</string>
 </resources>
