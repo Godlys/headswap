@@ -28,9 +28,10 @@ enum class CarPreset(val titleRes: Int, val settings: CarSettings = CarSettings(
     HONDA_CRV_2026_HYBRID(R.string.car_honda_crv_2026_hybrid, CarSettings(videoMode = VideoMode.WIDE_HD, fps = FpsSetting.FPS30)),
     /** Машина Егора: 1920×1080, 30 кадров. */
     HONDA_VEZEL_2022(R.string.car_honda_vezel_2022, CarSettings(videoMode = VideoMode.R1080, fps = FpsSetting.FPS30)),
-    HYUNDAI_ELANTRA_7(R.string.car_hyundai_elantra_7),
+    /** Hyundai: на высоком разрешении, 30 кадрах и 48 кГц рвёт USB; советуем 1280×720, 15 кадров, 32 кГц (h139, h218, h260). */
+    HYUNDAI_ELANTRA_7(R.string.car_hyundai_elantra_7, CarSettings(fps = FpsSetting.FPS15, musicRate = MusicRate.HZ32)),
     /** HSAE, вертикальный экран: 1280×480 работает шустро (h86). */
-    HYUNDAI_IX35_2021(R.string.car_hyundai_ix35_2021, CarSettings(videoMode = VideoMode.WIDE)),
+    HYUNDAI_IX35_2021(R.string.car_hyundai_ix35_2021, CarSettings(videoMode = VideoMode.WIDE, fps = FpsSetting.FPS15, musicRate = MusicRate.HZ32)),
     JETTA_VS(R.string.car_jetta_vs),
     KIA_K3_2023(R.string.car_kia_k3_2023),
     KIA_SPORTAGE_ACE(R.string.car_kia_sportage_ace),
