@@ -497,7 +497,7 @@ class AaBridgeCore(
     /** STATISTIC_INFO ГУ разобран: запасной признак Desay G6S и признак VW 20082120 - канал сборки прошивки. */
     fun onHuStatistic(channel: String?) {
         if (channel == DESAY_G6S_CHANNEL) huDesayG6S = true
-        if (channel == VW_20082120_CHANNEL || channel == VW_CNS3_20082122_CHANNEL) huVw20082120 = true
+        if (channel == VW_20082120_CHANNEL || channel == VW_CNS3_20082122_CHANNEL || channel == VW_CNS3_20082134_CHANNEL) huVw20082120 = true
         if (channel == VW_20082138_CHANNEL) huVw20082138 = true
     }
 
@@ -1413,6 +1413,7 @@ class AaBridgeCore(
         const val DESAY_G6S_CHANNEL = "20622116"          // STATISTIC_INFO.channel у Mazda CX-5; Vezel - 20832125, другая Mazda - 21520001
         const val VW_20082120_CHANNEL = "20082120"        // VW, protocol 1.0, versionName="RADIO" (h93)
         const val VW_CNS3_20082122_CHANNEL = "20082122"   // VW CNS3 (Tharu и др.): рвёт USB через ~5,6 с PAUSE без heartbeat (h222)
+        const val VW_CNS3_20082134_CHANNEL = "20082134"   // VW CNS3 Tiguan L Pro: рвёт CarLife по Wi-Fi через ~5,1-5,7 с PAUSE (h224)
         const val VW_20082138_CHANNEL = "20082138"        // VW ID (h196): HU_INFO manufacturer=model="VW BT 1538"
         const val VW_20082138_MANUFACTURER = "VW BT 1538"
         const val HYUNDAI_CN7_PRODUCT = "wp_cn7cpe_cn"    // HU_INFO.product Hyundai Elantra CN7 (h218): manufacturer QTI, model "sm6150_au for arm64"
@@ -1480,8 +1481,23 @@ class AaConnector(
         }, "aa-connector-stop").start()
     }
 
+    /** Подряд идущие подключения, закрытые AA до установления сессии (connect+EOF). */
+    @Volatile var bareEofs = 0
+        private set
+
+    /** После BARE_EOF_SUSPEND голых EOF подряд автозапуск не трогает сервер до удачной сессии. */
+    @Volatile var prepSuspended = false
+        private set
+
+    private fun bareEofBackoffMs(n: Int): Long =
+        if (n <= 0) retryMs else minOf(retryMs shl minOf(n - 1, 4), BARE_EOF_BACKOFF_MAX_MS).coerceAtLeast(retryMs)
+
     private fun prep(phase: ServerPhase) {
         val p = serverPrep ?: return
+        if (prepSuspended && phase != ServerPhase.FIRST) {
+            log("BRIDGE автозапуск сервера ($phase) пропущен: приостановлен после $bareEofs голых EOF подряд", true)
+            return
+        }
         try {
             p(phase)
         } catch (e: Throwable) {
@@ -1537,9 +1553,22 @@ class AaConnector(
                 log("BRIDGE AA-сессия завершена (established=${s.established}, video=${s.videoStarted})", true)
                 AaState.status = "мост: AA отключился"
                 core.onAaEnded(s.established)
-                if (!stopping) prep(ServerPhase.AFTER_SESSION)
+                if (s.established) {
+                    bareEofs = 0
+                    if (prepSuspended) log("BRIDGE автозапуск сервера ГУ снова включён: сессия AA установилась", true)
+                    prepSuspended = false
+                    if (!stopping) prep(ServerPhase.AFTER_SESSION)
+                } else {
+                    // сервер принял TCP и сразу закрыл: он жив, перезапуск его не лечит, а петля
+                    // Stop+Start выкидывает AA на экран снова и снова (h224). Ждём дольше, после N подряд - без автозапуска.
+                    bareEofs++
+                    if (bareEofs >= BARE_EOF_SUSPEND && !prepSuspended) {
+                        prepSuspended = true
+                        log("BRIDGE AA закрыл $bareEofs подключения подряд до установления сессии: автозапуск сервера ГУ приостановлен до первой удачной сессии", true)
+                    }
+                }
             }
-            var left = retryMs
+            var left = if (s.connected && !s.established) bareEofBackoffMs(bareEofs) else retryMs
             while (left > 0 && !stopping) {
                 Thread.sleep(minOf(left, 100))
                 left -= 100
@@ -1550,5 +1579,11 @@ class AaConnector(
     companion object {
         /** Не чаще раза в 5 с просить автозапуск повторить (он сам пропустит, если повторять нечего). */
         private const val RETRY_PREP_MS = 5_000L
+
+        /** Сколько голых EOF подряд (connect+EOF без сессии) до приостановки автозапуска. */
+        const val BARE_EOF_SUSPEND = 3
+
+        /** Потолок паузы между подключениями после голых EOF: 3, 6, 12, 24, 30 с. */
+        const val BARE_EOF_BACKOFF_MAX_MS = 30_000L
     }
 }
