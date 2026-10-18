@@ -47,6 +47,8 @@ class TranscodeLink : CarlifeLink {
     @Volatile var accept = true
     var transcoder: FakeTranscoder? = FakeTranscoder()
     var created = 0
+    var air = false
+    override val isAir: Boolean get() = air
     override fun sendVideo(payload: ByteArray): Boolean {
         if (!accept) return false
         sent.add(payload)
@@ -110,6 +112,63 @@ class AaTranscodeCoreTest {
         // повторный START: тот же транскодер
         core.onCarlifeStart()
         assertEquals(1, link.created)
+    }
+
+    /** Довести до AA-видео в CarLife, затем PAUSE: выход энкодера отбрасывается (как sendVideo=false на паузе). */
+    private fun playThenPause() {
+        core.onCarlifeStart()
+        core.onCodecConfig(aaCfg)
+        core.onEncoderConfig(encCfg)
+        core.onFrame(aaIdr, 1)
+        core.onEncoderFrame(encIdr, true)
+        assertEquals(AaBridgeCore.Source.AA, core.activeSource)
+        core.onCarlifePause()
+        link.accept = false
+        core.onFrame(aaP, 2)
+        core.onEncoderFrame(encP, false)
+        link.accept = true
+    }
+
+    @Test
+    fun airStartAfterPauseKeepsDecoderAndSendsEncoderIdrAtOnce() {
+        link.air = true
+        core.onHuInfo("VW BT 1420", "VW BT 1420")
+        playThenPause()
+        val fed = tr.frames.size
+        val syncs = tr.syncs.get()
+        val sent = link.sent.size
+        core.onCarlifeStart()
+        assertTrue(syncs < tr.syncs.get())                     // IDR у энкодера запрошен сразу
+        core.onFrame(aaP, 3)                                   // P-кадры AA идут в декодер, IDR от AA не ждём
+        assertEquals(fed + 1, tr.frames.size)
+        core.onEncoderFrame(encP, false)                       // P энкодера до его IDR не шлём
+        assertEquals(sent, link.sent.size)
+        core.onEncoderFrame(encIdr, true)
+        assertArrayEquals(encCfg + encIdr, link.sent.last())
+        assertTrue(logs.any { it.contains("AA не жду") })
+    }
+
+    @Test
+    fun airStartAfterPauseOnOtherHuStillWaitsForAaIdr() {
+        link.air = true                                        // Mazda G6S по воздуху и др.: как в main
+        core.onHuInfo("Desay SV", "G6S")
+        playThenPause()
+        val fed = tr.frames.size
+        core.onCarlifeStart()
+        core.onFrame(aaP, 3)
+        assertEquals(fed, tr.frames.size)
+        assertFalse(logs.any { it.contains("AA не жду") })
+    }
+
+    @Test
+    fun usbStartAfterPauseStillWaitsForAaIdr() {
+        core.onHuInfo("VW BT 1420", "VW BT 1420")              // даже у Павла по USB - как было
+        playThenPause()
+        val fed = tr.frames.size
+        core.onCarlifeStart()
+        core.onFrame(aaP, 3)                                   // USB: как было, декодер ждёт IDR от AA
+        assertEquals(fed, tr.frames.size)
+        assertFalse(logs.any { it.contains("AA не жду") })
     }
 
     @Test

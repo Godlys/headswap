@@ -109,6 +109,10 @@ class BridgeService : Service() {
         get() = carNetImpl?.state.let { it == CarNetState.REQUESTING || it == CarNetState.AVAILABLE }
     /** Начало ожидания по Wi-Fi (авто или ручного): от него считается [CAR_NET_DELAY_MS]. Только главная нить. */
     private var waitSince = 0L
+    /** Когда машина последний раз была на связи (сессия USB/воздух, сеть машины); 0 = не была. Только главная нить. */
+    private var carSeenAt = 0L
+    /** В этом ожидании выбранная машина оказалась подключена по Bluetooth. Только главная нить. */
+    private var carBtNear = false
     /** 6/6 получены, сессия вот-вот стартует: запрос сети машины уже не нужен. Только главная нить. */
     private var sixReady = false
     /** Ожидание сознательно прерывается ради нового маяка в сети машины: ветка отказа в startTcp6 это не сдача. Только главная нить. */
@@ -328,6 +332,7 @@ class BridgeService : Service() {
     /** Новое ожидание по Wi-Fi (авто или ручное): сброс счётчиков и таймер подсказки про Bluetooth. */
     private fun beginWait() {
         waitSince = SystemClock.elapsedRealtime()
+        carBtNear = false
         p2pThisWait = false
         carSkipLogged = false
         btAcceptsThisWait = 0
@@ -336,7 +341,16 @@ class BridgeService : Service() {
         main.postDelayed(btHintTick, BT_HINT_MS)
     }
 
-    /** Запрос сети машины: через [CAR_NET_DELAY_MS] от начала ожидания (если сеть задана). Wi-Fi Direct-машине не нужен. */
+    private fun markCarSeen() {
+        carSeenAt = SystemClock.elapsedRealtime()
+    }
+
+    private fun sinceCarMs(): Long? = if (carSeenAt == 0L) null else SystemClock.elapsedRealtime() - carSeenAt
+
+    /**
+     * Запрос сети машины: через [CAR_NET_DELAY_MS] от начала ожидания (если сеть задана), а если машина только что была
+     * на связи - сразу ([CarNetPolicy.delayMs]). Wi-Fi Direct-машине не нужен.
+     */
     private fun scheduleCarNet() {
         main.removeCallbacks(carNetTick)
         if (!CarWifi(this).isSet) return
@@ -344,7 +358,21 @@ class BridgeService : Service() {
             logCarSkip()
             return
         }
-        main.postDelayed(carNetTick, (CAR_NET_DELAY_MS - (SystemClock.elapsedRealtime() - waitSince)).coerceAtLeast(0))
+        val since = sinceCarMs()
+        val delay = CarNetPolicy.delayMs(since, carBtNear)
+        if (delay == 0L) WLog.ev(WLog.LINK, "car-net-now", "sinceCarMs" to since, "carBt" to carBtNear)
+        main.postDelayed(carNetTick, (delay - (SystemClock.elapsedRealtime() - waitSince)).coerceAtLeast(0))
+        if (delay > 0L) checkCarBtNear()
+    }
+
+    /** Выбранная машина подключена по Bluetooth: она рядом, сеть машины просим сразу. Без выбранной машины не смотрим (наушники). */
+    private fun checkCarBtNear() {
+        val mac = CarProfile(this).btMac ?: return
+        CarBtState.check(this, mac) { near ->
+            if (!near || carBtNear || !wifiBMode || stopRequested || !linkWaiting || session != null) return@check
+            carBtNear = true
+            scheduleCarNet()
+        }
     }
 
     private fun requestCarNet() {
@@ -359,6 +387,7 @@ class BridgeService : Service() {
             waitedMs = SystemClock.elapsedRealtime() - waitSince,
             sixOfSixReady = sixReady,
             wifiDirectCar = wifiDirectCar,
+            delayMs = CarNetPolicy.delayMs(sinceCarMs(), carBtNear),
         )
         if (!ok) return
         carNet.request(ssid, w.pass, CAR_NET_TIMEOUT_MS, ::onCarNetAvailable, ::onCarNetUnavailable, ::onCarNetLost)
@@ -402,7 +431,10 @@ class BridgeService : Service() {
         cancelBtHint()
     }
 
-    private fun onCarNetAvailable(@Suppress("UNUSED_PARAMETER") network: Network) = restartForCarNet()
+    private fun onCarNetAvailable(@Suppress("UNUSED_PARAMETER") network: Network) {
+        markCarSeen()
+        restartForCarNet()
+    }
 
     /** Сеть машины появилась или пропала, пока ждём: ожидание заново, чтобы маяк шёл (или перестал идти) через неё. Сессию не трогаем. */
     private fun restartForCarNet() {
@@ -423,6 +455,7 @@ class BridgeService : Service() {
     }
 
     private fun onCarNetLost() {
+        markCarSeen()
         if (!wifiBMode || stopRequested || session != null) return
         restartForCarNet()
         scheduleCarNet()
@@ -874,6 +907,7 @@ class BridgeService : Service() {
         AppLog.i("сервис: сессия завершена ($reason)")
         if (session !== s) return
         session = null
+        markCarSeen()
         CarLifeState.wirelessSession = false
         if (wifiBMode && autoStarted && !autoMode && !stopRequested) {
             // машина ушла по Bluetooth, пока шла беспроводная сессия (ГУ держала Wi-Fi): ожидание заново не начинаем
