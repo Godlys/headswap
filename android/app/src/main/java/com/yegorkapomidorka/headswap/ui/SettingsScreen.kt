@@ -35,7 +35,6 @@ import com.yegorkapomidorka.headswap.aa.AaDensity
 import com.yegorkapomidorka.headswap.aa.AaPrefs
 import com.yegorkapomidorka.headswap.aa.CAR_MAKES
 import com.yegorkapomidorka.headswap.aa.CarPreset
-import com.yegorkapomidorka.headswap.aa.CarSettings
 import com.yegorkapomidorka.headswap.aa.EQ_BAND_MAX
 import com.yegorkapomidorka.headswap.aa.EQ_BAND_MIN
 import com.yegorkapomidorka.headswap.aa.EQ_FREQS
@@ -361,8 +360,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     private val micRows = HashMap<MicMode, RadioRow>()
     private val rateRows = LinkedHashMap<MusicRate, RadioRow>()
     private val modeRows = LinkedHashMap<VideoMode, RadioRow>()
-    /** Ключ null - «Моей машины нет в списке». */
-    private val carRows = LinkedHashMap<CarPreset?, RadioRow>()
+    private var carPicker: CarPicker? = null
     private var carStatus: TextView? = null
     private var makeValue: TextView? = null
     private var transcodeSeg: Segmented? = null
@@ -663,27 +661,11 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         carStatus = note("")
 
         body.addView(c.sectionTitle(c.getString(R.string.car_list)))
-        for (p in CarPreset.values()) {
-            val row = RadioRow(c, c.getString(p.titleRes), carSettingsText(p.settings)) { pickCar(p) }
-            carRows[p] = row
-            body.addView(row.view, lp(MATCH, WRAP))
-        }
-        val other = RadioRow(c, c.getString(R.string.car_other_title), c.getString(R.string.car_other_sub)) { pickCar(null) }
-        carRows[null] = other
-        body.addView(other.view, lp(MATCH, WRAP))
+        val picker = CarPicker(c, withOther = true) { pickCar(it) }
+        carPicker = picker
+        body.addView(picker.view, lp(MATCH, WRAP))
         note(c.getString(R.string.car_missing_note))
         refreshCar()
-    }
-
-    /** «1728×648 · кадры: Авто · музыка: Авто» (+ «прямой проброс», если без перекодирования). */
-    private fun carSettingsText(s: CarSettings): String {
-        val c = ctx
-        val parts = mutableListOf(s.videoMode.effective(s.transcode).outLabel)
-        if (!s.transcode) parts += c.getString(R.string.set_direct_title)
-        if (s.aaDensity != AaDensity.AUTO) parts += c.getString(R.string.set_sum_density, s.aaDensity)
-        parts += c.getString(R.string.car_sub_fps, c.getString(s.fps.titleRes))
-        parts += c.getString(R.string.car_sub_music, c.getString(s.musicRate.titleRes))
-        return parts.joinToString(" · ")
     }
 
     /** Машина из списка - сразу её настройки (повторное нажатие возвращает их после ручных правок); null - только снять выбор. */
@@ -702,7 +684,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         val status = carStatus ?: return
         val c = ctx
         val cur = aa.carPreset
-        for ((p, row) in carRows) row.setSelected(p == cur)
+        carPicker?.setSelected(cur)
         when {
             cur == null -> status.visibility = View.GONE
             aa.carSettings != cur.settings -> {

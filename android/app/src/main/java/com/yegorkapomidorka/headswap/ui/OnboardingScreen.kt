@@ -13,6 +13,8 @@ import android.widget.ScrollView
 import com.yegorkapomidorka.headswap.MainActivity
 import com.yegorkapomidorka.headswap.AppLog
 import com.yegorkapomidorka.headswap.R
+import com.yegorkapomidorka.headswap.aa.AaPrefs
+import com.yegorkapomidorka.headswap.aa.CarPreset
 
 /**
  * Онбординг (Onboarding.dc.html) и чеклист готовности. Шаги из Readiness.STEPS; при первом запуске уже выполненные
@@ -30,6 +32,9 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
     /** Шаг открыт из чеклиста: после него возвращаемся в чеклист. */
     private var single: StepInfo? = null
     private var shownDone = false
+
+    /** Машина, отмеченная на шаге выбора, но ещё не применённая. */
+    private var carChoice: CarPreset? = null
 
     init {
         queue = if (showAll) Readiness.STEPS else Readiness.STEPS.filter { !Readiness.isDone(ctx, it.id) }
@@ -74,28 +79,39 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
 
     private fun render() {
         root.removeAllViews()
-        if (checklist) renderChecklist() else renderStep(current() ?: return)
+        val s = if (checklist) null else current()
+        when {
+            checklist -> renderChecklist()
+            s == null -> return
+            s.id == StepId.CAR -> renderCar(s)
+            else -> renderStep(s)
+        }
+    }
+
+    /** Полоса «Шаг n из N» с точками. */
+    private fun renderProgress(s: StepInfo) {
+        val c = ctx
+        val all = Readiness.STEPS
+        val idx = all.indexOf(s)
+        val total = if (single != null || showAll) all.size else queue.size
+        val n = if (single != null || showAll) idx + 1 else pos + 1
+        root.pad(c, 20, 20, 20, 24)
+        val top = c.hbox().apply {
+            addView(c.text(c.getString(R.string.onb_step_progress, n, total), 14f, 600, c.clr(R.color.on2)), lp(0, WRAP, 1f))
+            val dots = c.hbox(6)
+            for (i in 1..total) {
+                dots.addView(View(c).apply { background = c.shape(c.clr(if (i <= n) R.color.pri else R.color.line), 3) }, lp(c.dp(if (total > 8) 14 else if (total > 6) 18 else 28), c.dp(6)))
+            }
+            addView(dots)
+        }
+        root.addView(top, c.lpDp(MATCH, 48))
     }
 
     private fun renderStep(s: StepInfo) {
         val c = ctx
         val done = Readiness.isDone(c, s.id)
         shownDone = done
-        val all = Readiness.STEPS
-        val idx = all.indexOf(s)
-        val total = if (single != null || showAll) all.size else queue.size
-        val n = if (single != null || showAll) idx + 1 else pos + 1
-
-        root.pad(c, 20, 20, 20, 24)
-        val top = c.hbox().apply {
-            addView(c.text(c.getString(R.string.onb_step_progress, n, total), 14f, 600, c.clr(R.color.on2)), lp(0, WRAP, 1f))
-            val dots = c.hbox(6)
-            for (i in 1..total) {
-                dots.addView(View(c).apply { background = c.shape(c.clr(if (i <= n) R.color.pri else R.color.line), 3) }, lp(c.dp(if (total > 6) 18 else 28), c.dp(6)))
-            }
-            addView(dots)
-        }
-        root.addView(top, c.lpDp(MATCH, 48))
+        renderProgress(s)
 
         val body = c.vbox().apply {
             addView(
@@ -140,6 +156,66 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         root.addView(buttons, lp(MATCH, WRAP))
     }
 
+    /**
+     * Последний шаг: какая у вас машина. Выбор в списке только отмечается, «Применить» пишет настройки машины (AaPrefs.applyCar),
+     * «Пропустить» (для опытных) ничего не трогает и ставит ручную отметку шага.
+     */
+    private fun renderCar(s: StepInfo) {
+        val c = ctx
+        shownDone = Readiness.isDone(c, s.id)
+        renderProgress(s)
+        val aa = AaPrefs(c)
+        if (carChoice == null) carChoice = aa.carPreset
+
+        val body = c.vbox(10).apply { pad(c, 0, 4, 0, 36) }
+        body.addView(c.text(c.getString(s.title), 28f, 600).apply { letterSpacing = -0.01f; lineHeight = c.dp(34) })
+        body.addView(c.text(s.bodyText(c), 17f, 400, c.clr(R.color.on2)).apply { lineHeight = c.dp(24) })
+        s.hint?.let {
+            body.addView(
+                c.text(c.getString(it), 14f, 400, c.clr(R.color.on2)).apply {
+                    lineHeight = c.dp(20)
+                    background = c.shape(c.clr(R.color.surf), 16)
+                    pad(c, 14, 12, 14, 12)
+                },
+                lp(MATCH, WRAP),
+            )
+        }
+        val applyBtn = c.primaryButton(c.getString(s.primary))
+        fun refresh() {
+            applyBtn.isEnabled = carChoice != null
+            applyBtn.alpha = if (carChoice != null) 1f else 0.45f
+        }
+        // CarPicker сам строку не отмечает: отметка и кнопка обновляются здесь
+        lateinit var list: CarPicker
+        list = CarPicker(c, withOther = false) { p ->
+            carChoice = p
+            list.setSelected(p)
+            refresh()
+        }
+        list.setSelected(carChoice)
+        body.addView(c.sectionTitle(c.getString(R.string.car_list)))
+        body.addView(list.view, lp(MATCH, WRAP))
+        root.addView(fadingScroll(body), lp(MATCH, 0, 1f))
+
+        val buttons = c.vbox(4)
+        applyBtn.setOnClickListener {
+            val p = carChoice ?: return@setOnClickListener
+            aa.applyCar(p)
+            AppLog.i("онбординг, мой автомобиль: ${p.name}, применены ${p.settings}")
+            next()
+        }
+        refresh()
+        buttons.addView(applyBtn)
+        buttons.addView(c.linkButton(c.getString(s.skip), 48).apply {
+            setOnClickListener {
+                AppLog.i("онбординг, мой автомобиль: пропущен")
+                ui.setManualDone(s.id.key, true)
+                next()
+            }
+        })
+        root.addView(buttons, lp(MATCH, WRAP))
+    }
+
     /** Прокрутка с затемнением края: видно, что текст продолжается. */
     private fun fadingScroll(content: View) = ScrollView(ctx).apply {
         overScrollMode = View.OVER_SCROLL_NEVER
@@ -177,6 +253,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
             StepId.BLUETOOTH -> Readiness.openBluetoothSettings(c)
             StepId.LOCATION -> Readiness.openLocationSettings(c)
             StepId.FIRST -> { ui.setManualDone(s.id.key, true); next() }
+            StepId.CAR -> next()      // свои кнопки в renderCar
         }
     }
 

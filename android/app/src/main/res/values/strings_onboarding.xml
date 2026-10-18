@@ -63,4 +63,8 @@
     <string name="onb_status_ready">ready</string>
     <string name="onb_status_unmarked">not marked</string>
     <string name="onb_status_off">not turned on</string>
+    <string name="step_car_title">Which car do you have?</string>
+    <string name="step_car_hint">Experienced users can skip this step and set everything up by hand. You can change the car later in Settings → My car.</string>
+    <string name="step_car_primary">Apply</string>
+    <string name="step_car_short">Car</string>
 </resources>
