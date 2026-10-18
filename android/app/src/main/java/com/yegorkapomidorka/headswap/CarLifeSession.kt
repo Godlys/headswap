@@ -349,7 +349,7 @@ class CarLifeSession(
             Msg.VIDEO_ENCODER_START -> onVideoStart()
             Msg.VIDEO_ENCODER_PAUSE -> {
                 paused = true
-                if (bridge.huVw20082120) { // первый heartbeat сразу; Desay - как раньше, через 2 с
+                if (pauseUsesHeartbeat) { // первый heartbeat сразу; Desay по USB - как раньше, через 2 с
                     lastVideoTx = 0L
                     pauseHeartbeat()
                 }
@@ -938,10 +938,15 @@ class CarLifeSession(
     // - VW channel 20082120 рвёт канал через 3,6-4 с после PAUSE даже при 0x20001 раз в 1-2 с (h93, логи 2026-10-15 USB
     //   и 2026-10-16 Wi-Fi), реконнект с FOREGROUND выдёргивал юзера из меню ГУ в CarLife: VIDEO_HEARTBEAT 0x20002 сразу
     //   и раз в 100 мс, как Baidu Recorder.sendEmptyPacketBackground (~50 мс).
+    // - Desay G6S на воздухе (h211, задний ход): пустой VIDEO_DATA раз в 900 мс не держит, через 24-28 с ГУ снимает
+    //   Wi-Fi Direct; переживали только паузы до 25 с. Baidu на паузе шлёт именно VIDEO_HEARTBEAT (Recorder:906-926),
+    //   ставим его раз в 100 мс, по USB у Desay остаётся VIDEO_DATA.
+    private val pauseUsesHeartbeat get() = bridge.huVw20082120 || (air && bridge.huDesayG6S)
+
     private fun pauseHeartbeat() {
         if (closed.get() || !paused || !PAUSE_KEEPALIVE_ENABLED) return
         val (type, period) =
-            if (bridge.huVw20082120) Msg.VIDEO_HEARTBEAT to PAUSE_HEARTBEAT_MS else Msg.VIDEO_DATA to pauseKeepaliveMs
+            if (pauseUsesHeartbeat) Msg.VIDEO_HEARTBEAT to PAUSE_HEARTBEAT_MS else Msg.VIDEO_DATA to pauseKeepaliveMs
         val now = SystemClock.elapsedRealtime()
         if (now - lastVideoTx < period) return
         if (vBeats == 0L) AppLog.i("видео: PAUSE, шлю пустой ${Msg.name(type)} раз в $period мс, чтобы ГУ не рвало USB")
