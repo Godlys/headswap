@@ -51,6 +51,28 @@ class AaPrefs(ctx: Context) {
         get() = sp.getString("carMake", null)?.takeIf { it in CAR_MAKES }
         set(v) = sp.edit().apply { if (v == null) remove("carMake") else putString("carMake", v) }.apply()
 
+    /** Машина из раздела «Мой автомобиль» (имя CarPreset); null = не выбрана. Сам выбор только подпись, настройки пишет [applyCar]. */
+    var carPreset: CarPreset?
+        get() = CarPreset.parse(sp.getString("carPreset", null))
+        set(v) = sp.edit().apply { if (v == null) remove("carPreset") else putString("carPreset", v.name) }.apply()
+
+    /** Текущие значения настроек, которые выставляет выбор машины. */
+    val carSettings: CarSettings
+        get() = CarSettings(transcode, videoMode, aaDensity, fpsSetting, musicRate)
+
+    /** Выбрать машину и записать её рекомендованные настройки. */
+    fun applyCar(p: CarPreset) {
+        val s = p.settings
+        sp.edit()
+            .putString("carPreset", p.name)
+            .putBoolean("transcode", s.transcode)
+            .putString("videoMode", s.videoMode.name)
+            .putInt("aaDensity", s.aaDensity)
+            .putString("fpsSetting", s.fps.name)
+            .putString("musicRate", s.musicRate.name)
+            .apply()
+    }
+
     /** Автозапуск сервера ГУ (USB подключён / сессия AA закончилась); работает, только если включена служба спецвозможностей. */
     var autoServer: Boolean
         get() = sp.getBoolean("autoServer", true)

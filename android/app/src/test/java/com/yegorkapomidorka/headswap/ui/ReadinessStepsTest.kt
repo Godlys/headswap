@@ -3,7 +3,6 @@ package com.yegorkapomidorka.headswap.ui
 import com.yegorkapomidorka.headswap.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReadinessStepsTest {
@@ -30,6 +29,12 @@ class ReadinessStepsTest {
         assertNull(s.hint)
         assertNull(s.extra)
         assertEquals(R.string.step_aa_unknown_short, s.short)
-        assertTrue(ids.last() == StepId.FIRST)
+    }
+
+    @Test
+    fun carIsLastAndSkippable() {
+        assertEquals(StepId.CAR, ids.last())
+        assertEquals(StepId.FIRST, ids[ids.size - 2])
+        assertEquals(R.string.onb_skip, Readiness.info(StepId.CAR).skip)
     }
 }

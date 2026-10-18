@@ -111,6 +111,8 @@ object Mocks {
                 ),
             )
         }
+        /** Шаг выбора машины рисует свой список (OnboardingScreen.renderCar), схемы нет. */
+        StepId.CAR -> ctx.vbox()
         StepId.FIRST -> ctx.vbox(14).apply {
             background = ctx.shape(ctx.clr(R.color.surf), 24)
             pad(ctx, 20, 20, 20, 20)

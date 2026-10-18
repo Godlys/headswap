@@ -182,4 +182,41 @@
     <string name="wl_cw_checking">Connecting to the car Wi-Fi… confirm the system prompt</string>
     <string name="wl_cw_ok">Connected to the car Wi-Fi</string>
     <string name="wl_cw_fail">Could not connect: the car is out of range, the password is wrong or the prompt was declined</string>
+
+    <!-- My car (CarPreset) -->
+    <string name="car_title">My car</string>
+    <string name="car_other_title">My car is not on the list</string>
+    <string name="car_peugeot_5008_2024">Dongfeng Peugeot 5008 2024</string>
+    <string name="car_honda_breeze_2">Honda Breeze, 2nd generation</string>
+    <string name="car_honda_crv_6">Honda CR-V, 6th generation, pre-facelift</string>
+    <string name="car_honda_crv_2026">Honda CR-V 2026 1.5T</string>
+    <string name="car_honda_crv_2026_hybrid">Honda CR-V 2026 hybrid</string>
+    <string name="car_honda_vezel_2022">Honda Vezel 2022–2024 (GAC Honda)</string>
+    <string name="car_hyundai_elantra_7">Hyundai Elantra, 7th generation, pre-facelift</string>
+    <string name="car_hyundai_ix35_2021">Hyundai ix35 2021</string>
+    <string name="car_jetta_vs">Jetta VS5/VS7 (Baidu CarLife only, not J-Link)</string>
+    <string name="car_kia_k3_2023">Kia K3 2023</string>
+    <string name="car_kia_sportage_ace">Kia Sportage Ace</string>
+    <string name="car_mazda_cx5_2025">Mazda CX-5 2025–2026</string>
+    <string name="car_mazda_cx50">Mazda CX-50</string>
+    <string name="car_mitsubishi_outlander_4">Mitsubishi Outlander 4 2022</string>
+    <string name="car_skoda_kamiq_gt_2021">Skoda Kamiq GT 2021</string>
+    <string name="car_skoda_octavia_pro">Skoda Octavia Pro</string>
+    <string name="car_toyota_corolla_cross_2024">Toyota Corolla Cross 2024–2025</string>
+    <string name="car_toyota_levin">Toyota Levin</string>
+    <string name="car_vw_bora_2021">Volkswagen Bora 2021</string>
+    <string name="car_vw_golf_8_pro">Volkswagen Golf 8 Pro 2021</string>
+    <string name="car_vw_id_unyx">Volkswagen ID.Unyx</string>
+    <string name="car_vw_lamando_l">Volkswagen Lamando L</string>
+    <string name="car_vw_sagitar_2021">Volkswagen Sagitar 2021–2022, pre-facelift</string>
+    <string name="car_vw_troc_2026">Volkswagen T-Roc facelift 2026</string>
+    <string name="car_vw_tharu_xr">Volkswagen Tharu XR 2025–2026</string>
+    <string name="car_vw_tiguan_l_pro">Volkswagen Tiguan L Pro / Teramont Pro</string>
+    <string name="car_field">Car</string>
+    <string name="car_pick_hint">Choose your car</string>
+    <string name="car_will_apply">Will be applied</string>
+    <string name="car_label_mode">Video mode</string>
+    <string name="car_auto">Auto</string>
+    <string name="car_value_keep">Unchanged</string>
+    <string name="car_apply">Apply</string>
 </resources>
