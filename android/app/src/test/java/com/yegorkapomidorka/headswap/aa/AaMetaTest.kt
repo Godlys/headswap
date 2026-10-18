@@ -602,6 +602,12 @@ class AaMetaTest {
         r.core.onHuInfo("VW BT 1420", "VW BT 1420")             // Павел: тот же канал прошивки, другое BT-имя
         r.core.onHuStatistic("20082138")
         assertTrue(!r.core.huVw20082138)
+        assertTrue(r.core.huVwBt1420)
+        r.core.onCarlifeClosed()
+        r.core.attach(MetaLink())
+        assertTrue("новая сессия - флаг заново", !r.core.huVwBt1420)
+        r.core.onHuInfo("VW BT 1538", "VW BT 1538")
+        assertTrue(!r.core.huVwBt1420)
     }
 
     @Test

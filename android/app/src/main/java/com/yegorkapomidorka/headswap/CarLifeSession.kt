@@ -349,7 +349,7 @@ class CarLifeSession(
             Msg.VIDEO_ENCODER_START -> onVideoStart()
             Msg.VIDEO_ENCODER_PAUSE -> {
                 paused = true
-                if (bridge.huVw20082120) { // первый heartbeat сразу; Desay - как раньше, через 2 с
+                if (pauseHeartbeatHu) { // первый heartbeat сразу; Desay - как раньше, через 2 с
                     lastVideoTx = 0L
                     pauseHeartbeat()
                 }
@@ -940,12 +940,18 @@ class CarLifeSession(
     // - VW channel 20082120 рвёт канал через 3,6-4 с после PAUSE даже при 0x20001 раз в 1-2 с (h93, логи 2026-10-15 USB
     //   и 2026-10-16 Wi-Fi), реконнект с FOREGROUND выдёргивал юзера из меню ГУ в CarLife: VIDEO_HEARTBEAT 0x20002 сразу
     //   и раз в 100 мс, как Baidu Recorder.sendEmptyPacketBackground (~50 мс).
+    /**
+     * ГУ, которым на PAUSE нужен VIDEO_HEARTBEAT раз в 100 мс: VW 20082120/20082122 (h93, h222) и VW BT 1420 по воздуху
+     * (Павел 2026-10-18: без keepalive на PAUSE ГУ закрыла сокет через ~1 мин, с пустым VIDEO_DATA рвала на START).
+     */
+    private val pauseHeartbeatHu: Boolean get() = bridge.huVw20082120 || (air && bridge.huVwBt1420)
+
     private fun pauseHeartbeat() {
         if (closed.get() || !paused || !PAUSE_KEEPALIVE_ENABLED) return
         // На воздухе пустой VIDEO_DATA не шлём: VW BT 1420 после него рвал сессию на START (лог Павла 2026-10-16)
-        if (air && !bridge.huVw20082120 && !PAUSE_KEEPALIVE_AIR_ENABLED) return
+        if (air && !pauseHeartbeatHu && !PAUSE_KEEPALIVE_AIR_ENABLED) return
         val (type, period) =
-            if (bridge.huVw20082120) Msg.VIDEO_HEARTBEAT to PAUSE_HEARTBEAT_MS else Msg.VIDEO_DATA to pauseKeepaliveMs
+            if (pauseHeartbeatHu) Msg.VIDEO_HEARTBEAT to PAUSE_HEARTBEAT_MS else Msg.VIDEO_DATA to pauseKeepaliveMs
         val now = SystemClock.elapsedRealtime()
         if (now - lastVideoTx < period) return
         if (vBeats == 0L) AppLog.i("видео: PAUSE, шлю пустой ${Msg.name(type)} раз в $period мс, чтобы ГУ не рвало USB")

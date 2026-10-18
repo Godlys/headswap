@@ -154,6 +154,7 @@ class AaBridgeCore(
     @Volatile private var btAudio = false
     @Volatile var huDesayG6S = false           // ГУ Desay G6S (Mazda CX-5): NAVI=1 глушит штатное радио, маршрутный NAVI не шлём
         private set
+    @Volatile var huVwBt1420 = false           // VW BT 1420 (Павел, канал 20082138): по воздуху без heartbeat на PAUSE рвёт CarLife через ~1 мин
     @Volatile var huVw20082120 = false         // VW (STATISTIC_INFO channel 20082120, h93): без heartbeat рвёт USB через ~3,7 с PAUSE
         private set
     @Volatile var huVw20082138 = false         // VW ID (channel 20082138, "VW BT 1538", h196): IDR > ~600 КиБ рвёт USB EIO
@@ -323,6 +324,7 @@ class AaBridgeCore(
         gotIdr = false
         huDesayG6S = false                     // HU_INFO / STATISTIC_INFO придут заново в этой сессии
         huVw20082120 = false                   // HU_INFO / STATISTIC_INFO придут заново в этой сессии
+        huVwBt1420 = false                     // HU_INFO придёт заново в этой сессии
         huVw20082138 = false                   // HU_INFO / STATISTIC_INFO придут заново в этой сессии
         vwIdName = false
         vwIdChannel = false
@@ -510,6 +512,7 @@ class AaBridgeCore(
     fun onHuInfo(manufacturer: String?, model: String?, product: String? = null) {
         if (manufacturer == DESAY_MANUFACTURER && model == DESAY_G6S_MODEL) huDesayG6S = true
         vwIdName = manufacturer == VW_20082138_MANUFACTURER
+        if (manufacturer == VW_BT_1420_MANUFACTURER) huVwBt1420 = true
         updateVwId()
         if (product == HYUNDAI_CN7_PRODUCT) huHyundaiCn7 = true
     }
@@ -1450,6 +1453,7 @@ class AaBridgeCore(
         const val DESAY_G6S_CHANNEL = "20622116"          // STATISTIC_INFO.channel у Mazda CX-5; Vezel - 20832125, другая Mazda - 21520001
         const val VW_20082120_CHANNEL = "20082120"        // VW, protocol 1.0, versionName="RADIO" (h93); Tharu CNS3 - 20082122
         const val VW_20082138_CHANNEL = "20082138"        // VW ID (h196): HU_INFO manufacturer=model="VW BT 1538"
+        const val VW_BT_1420_MANUFACTURER = "VW BT 1420"  // VW (Павел): HU_INFO manufacturer=model, канал 20082138
         const val VW_20082138_MANUFACTURER = "VW BT 1538"
         const val HYUNDAI_CN7_PRODUCT = "wp_cn7cpe_cn"    // HU_INFO.product Hyundai Elantra CN7 (h218): manufacturer QTI, model "sm6150_au for arm64"
         const val MEDIA_RATE = 48000
