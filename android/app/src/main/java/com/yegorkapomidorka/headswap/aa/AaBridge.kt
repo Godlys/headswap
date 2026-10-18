@@ -324,6 +324,8 @@ class AaBridgeCore(
         huDesayG6S = false                     // HU_INFO / STATISTIC_INFO придут заново в этой сессии
         huVw20082120 = false                   // HU_INFO / STATISTIC_INFO придут заново в этой сессии
         huVw20082138 = false                   // HU_INFO / STATISTIC_INFO придут заново в этой сессии
+        vwIdName = false
+        vwIdChannel = false
         huHyundaiCn7 = false                   // HU_INFO придёт заново в этой сессии
         mediaRateLogged = MEDIA_RATE
         resampler?.reset()
@@ -507,15 +509,30 @@ class AaBridgeCore(
      */
     fun onHuInfo(manufacturer: String?, model: String?, product: String? = null) {
         if (manufacturer == DESAY_MANUFACTURER && model == DESAY_G6S_MODEL) huDesayG6S = true
-        if (manufacturer == VW_20082138_MANUFACTURER) huVw20082138 = true
+        vwIdName = manufacturer == VW_20082138_MANUFACTURER
+        updateVwId()
         if (product == HYUNDAI_CN7_PRODUCT) huHyundaiCn7 = true
+    }
+
+    private var vwIdName = false               // HU_INFO manufacturer = BT-имя ГУ "VW BT 1538"
+    private var vwIdChannel = false            // STATISTIC_INFO channel = прошивка 20082138
+
+    /**
+     * VW ID (h196) - только прошивка 20082138 И BT-имя "VW BT 1538": тот же канал у VW BT 1420 (Павел), которому
+     * потолок 2 Мбит/с не нужен (8 Мбит/с по воздуху и USB без обрывов, лог 2026-10-16).
+     */
+    private fun updateVwId() {
+        val was = huVw20082138
+        huVw20082138 = vwIdName && vwIdChannel
+        if (huVw20082138 && !was) log("BRIDGE ГУ VW ID (20082138, VW BT 1538): потолок битрейта по размеру IDR", true)
     }
 
     /** STATISTIC_INFO ГУ разобран: запасной признак Desay G6S и признак VW 20082120 - канал сборки прошивки. */
     fun onHuStatistic(channel: String?) {
         if (channel == DESAY_G6S_CHANNEL) huDesayG6S = true
         if (channel == VW_20082120_CHANNEL) huVw20082120 = true
-        if (channel == VW_20082138_CHANNEL) huVw20082138 = true
+        vwIdChannel = channel == VW_20082138_CHANNEL
+        updateVwId()
     }
 
     /** CarLife-сессия закрыта (USB EIO / detach / Стоп). AA не трогаем; from - закрываемая ссылка, чужую не отцепляем. */
