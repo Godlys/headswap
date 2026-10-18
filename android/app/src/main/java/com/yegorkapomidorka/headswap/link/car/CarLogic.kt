@@ -91,9 +91,13 @@ object CarNetPolicy {
     ): Boolean = carWifiSet && autoOrManualWaiting && !sessionActive && !usbActive && !alreadyRequesting &&
         !sixOfSixReady && !wifiDirectCar && waitedMs >= delayMs
 
-    /** Задержка запроса сети машины: 0, если машина была на связи меньше [CAR_RECENT_MS] назад ([sinceCarMs], null = не была). */
-    fun delayMs(sinceCarMs: Long?): Long =
-        if (sinceCarMs != null && sinceCarMs in 0 until CAR_RECENT_MS) 0L else CAR_NET_DELAY_MS
+    /**
+     * Задержка запроса сети машины: 0, если машина была на связи меньше [CAR_RECENT_MS] назад ([sinceCarMs], null = не
+     * была) или выбранная машина сейчас подключена по Bluetooth ([carBtNear]): она рядом и включена, ждать её в сети
+     * телефона незачем (Павел 2026-10-18: первое нажатие плитки CarLife на ГУ падало «не найдено», пока шли 15 с).
+     */
+    fun delayMs(sinceCarMs: Long?, carBtNear: Boolean = false): Long =
+        if (carBtNear || (sinceCarMs != null && sinceCarMs in 0 until CAR_RECENT_MS)) 0L else CAR_NET_DELAY_MS
 
     /**
      * Отпускать ли сеть. Остановка ожидания, кабель и смерть сервиса - да. Начало и конец беспроводной сессии - нет: сеть

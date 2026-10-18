@@ -108,6 +108,13 @@ class CarLogicTest {
     }
 
     @Test
+    fun carNetDelayZeroWhenCarConnectedByBluetooth() {
+        assertEquals(0L, CarNetPolicy.delayMs(null, carBtNear = true))         // холодный старт, машина по BT рядом
+        assertEquals(0L, CarNetPolicy.delayMs(CAR_RECENT_MS * 10, carBtNear = true))
+        assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(null, carBtNear = false))
+    }
+
+    @Test
     fun carNetRequestedAtOnceWithZeroDelay() {
         assertTrue(CarNetPolicy.shouldRequest(true, true, false, false, false, 0, false, false, delayMs = 0))
         assertFalse(CarNetPolicy.shouldRequest(true, true, true, false, false, 0, false, false, delayMs = 0))
