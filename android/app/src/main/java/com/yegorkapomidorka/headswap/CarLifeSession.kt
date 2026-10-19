@@ -18,7 +18,7 @@ import com.yegorkapomidorka.headswap.aa.ThermalLevel
 import com.yegorkapomidorka.headswap.aa.ThermalSource
 import com.yegorkapomidorka.headswap.aa.ThermalThrottle
 import com.yegorkapomidorka.headswap.aa.TranscodeOutput
-import com.yegorkapomidorka.headswap.aa.VideoMode
+import com.yegorkapomidorka.headswap.aa.VideoGeometry
 import com.yegorkapomidorka.headswap.aa.VideoQueueLimit
 import com.yegorkapomidorka.headswap.aa.VideoTranscoder
 import java.util.concurrent.Executors
@@ -56,11 +56,13 @@ class CarLifeSession(
     private val bridge: AaBridgeCore,
     /** Нагрев телефона: по нему перекодирование снижает fps и битрейт. */
     private val thermal: ThermalSource = ThermalSource.NONE,
+    /** Размер кадра из VIDEO_ENCODER_INIT ГУ (для подсказки «Как просит ГУ» в разделе для разработчиков). */
+    private val onHuSize: (Int, Int) -> Unit = { _, _ -> },
     private val onClosed: (String) -> Unit,
 ) : VideoSource.Listener, CarlifeLink {
 
     /** Видео-режим хоста, снятый при подключении: одинаков для INIT_DONE, энкодера и тача в течение всей сессии. */
-    private val mode: VideoMode = bridge.videoMode
+    private val mode: VideoGeometry = bridge.videoMode
 
     /** Транспорт сессии: usb-aoa, tcp-debug или tcp6. */
     val transportKind: String get() = transport.caps.kind
@@ -157,7 +159,7 @@ class CarLifeSession(
         WLog.ev(WLog.LINK, "session", "transport" to transport.caps.kind)
         if (air) {
             WLog.ev(WLog.VIDEO, "policy", "profile" to bitratePolicy.profile.name, "startKbps" to bitratePolicy.startBps / 1000,
-                "ceilingKbps" to bitratePolicy.ceilingBps / 1000, "mode" to mode.name, "transcode" to bridge.transcodeEnabled)
+                "ceilingKbps" to bitratePolicy.ceilingBps / 1000, "mode" to mode.label, "transcode" to bridge.transcodeEnabled)
         }
         CarLifeState.status = "соединено, жду HU_PROTOCOL_VERSION"
         transport.start(::dispatch, ::logTx, ::close)
@@ -439,6 +441,7 @@ class CarLifeSession(
         val rh = f?.let { PbReader.int(it, 2) } ?: 0
         val rf = f?.let { PbReader.int(it, 3) } ?: 0
         requested = "${rw}x$rh fps=$rf"
+        if (rw > 0 && rh > 0) onHuSize(rw, rh)
         AppLog.i("== ГУ ПРОСИТ РАЗРЕШЕНИЕ: ${rw}x$rh fps=$rf")
         WLog.ev(WLog.HS, "VIDEO_ENCODER_INIT", "size" to "${rw}x$rh", "fps" to rf)
         if (videoInited && pendingW > 0) {
@@ -448,7 +451,7 @@ class CarLifeSession(
             return
         }
         // размер задаёт видео-режим (по умолчанию 1280x720 fps 30: ГУ Honda принимает и показывает целиком, проверено в машине)
-        val (w, h, why) = Triple(mode.outW, mode.outH, "мост: режим ${mode.name}")
+        val (w, h, why) = Triple(mode.outW, mode.outH, "мост: режим ${mode.label}")
         val fps = Handshake.chooseFps(cfg.fpsSetting, rf, huMaxFps())
         pendingW = w
         pendingH = h
@@ -506,7 +509,7 @@ class CarLifeSession(
         if (pendingW <= 0) {
             pendingW = mode.outW
             pendingH = mode.outH
-            chosen = "${mode.outW}x${mode.outH} (START без INIT, мост, режим ${mode.name})"
+            chosen = "${mode.outW}x${mode.outH} (START без INIT, мост, режим ${mode.label})"
         }
         carlifeStarted = true
         synchronized(videoLock) {
