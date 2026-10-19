@@ -235,6 +235,7 @@ class AaBridgeCore(
     private var lastHfpConnectMs = NEVER       // ГУ прислало BT_HFP_CONNECTION=connected (дальше AA сам запускает автоплей по BT)
     private var lastPauseKeyMs = NEVER         // когда последний раз слали AA KEYCODE 127
     private var naviSent = false               // MODULE_STATUS NAVI=1 ушёл (держит TTS и/или маршрут)
+    private var naviEndPending = false           // маршрут кончился, пока NAVI=1 держал TTS: NAVI=0 уйдёт после TTS STOP
     private var ttsNaviHeld = false            // NAVI=1 нужен ради TTS (до stopAllAudio)
     private var routeNaviHeld = false          // NAVI=1 нужен ради маршрута (MetaRelay)
     private var mediaPaused = false            // MEDIA на ГУ стоит на PAUSE (STOP ещё не слали)
@@ -1055,6 +1056,7 @@ class AaBridgeCore(
             return
         }
         routeNaviHeld = on
+        if (on) naviEndPending = false
         if (on && !naviSent) {
             if (link.sendModuleStatus(CarlifeAudio.MODULE_NAVI, 1)) {
                 naviSent = true
@@ -1065,6 +1067,7 @@ class AaBridgeCore(
             link.sendModuleStatus(CarlifeAudio.MODULE_NAVI, 0)
             log("BRIDGE CarLife MODULE_STATUS NAVI=0 (маршрут закончен)", true)
         } else if (!on && naviSent) {
+            naviEndPending = true
             log("BRIDGE маршрут закончен, NAVI=1 держит TTS", false)
         }
     }
@@ -1081,6 +1084,21 @@ class AaBridgeCore(
             link.sendAudio(ch, CarlifeAudio.stopType(ch), ByteArray(0))
             log("BRIDGE CarLife ${chName(ch)} STOP (0x%08x)".format(CarlifeAudio.stopType(ch)), true)
         }
+        if (ch == CarlifeAudio.CH_TTS) releaseTtsNavi()
+    }
+
+    /**
+     * TTS закончился: NAVI больше не нужен ради него. Если маршрут уже кончился (последнее «Вы прибыли» играло
+     * после INACTIVE), NAVI=0 уходит здесь, иначе приборка остаётся в навигации до конца сессии.
+     */
+    private fun releaseTtsNavi() {
+        ttsNaviHeld = false
+        if (naviEndPending && naviSent && !routeNaviHeld) {
+            naviEndPending = false
+            naviSent = false
+            link.sendModuleStatus(CarlifeAudio.MODULE_NAVI, 0)
+            log("BRIDGE CarLife MODULE_STATUS NAVI=0 (TTS закончился, маршрута нет)", true)
+        }
     }
 
     /** Сброс звукового состояния CarLife-сессии (START / закрытие): ссылка уже новая или мёртвая, ничего не шлём. */
@@ -1089,6 +1107,7 @@ class AaBridgeCore(
         ttsStopTimer.cancel()
         mediaReleaseTimer.cancel()
         naviSent = false
+        naviEndPending = false
         ttsNaviHeld = false
         mediaPaused = false
         mediaGuard = false

@@ -508,6 +508,35 @@ class AaMetaTest {
     }
 
     @Test
+    fun naviReleasedWhenTtsEndsAfterRouteEnded() {
+        AaBridgeCore.TTS_DEBOUNCE_ENABLED = false
+        try {
+            val r = Rig()
+            r.core.onCarlifeSubscribe(listOf(0), true)
+            r.start()
+            r.core.onNavStatus(1)
+            r.core.onAudioData(M.CH_AUDIO_SPEECH, ByteArray(640), 0)
+            r.core.onNavStatus(2)                                   // «Вы прибыли» ещё играет
+            assertEquals(listOf(1), r.link.navi())
+            r.core.onAudioStop(M.CH_AUDIO_SPEECH)
+            assertEquals("TTS кончился после маршрута: NAVI=0, приборка гаснет", listOf(1, 0), r.link.navi())
+
+            // маршрут идёт: конец TTS NAVI не трогает
+            val q = Rig()
+            q.core.onCarlifeSubscribe(listOf(0), true)
+            q.start()
+            q.core.onNavStatus(1)
+            q.core.onAudioData(M.CH_AUDIO_SPEECH, ByteArray(640), 0)
+            q.core.onAudioStop(M.CH_AUDIO_SPEECH)
+            assertEquals(listOf(1), q.link.navi())
+            q.core.onNavStatus(2)                                   // крестик посреди маршрута, TTS уже молчит
+            assertEquals("отмена маршрута: NAVI=0", listOf(1, 0), q.link.navi())
+        } finally {
+            AaBridgeCore.TTS_DEBOUNCE_ENABLED = true
+        }
+    }
+
+    @Test
     fun replayAfterNewCarlifeSession() {
         val r = Rig()
         r.core.onCarlifeSubscribe(listOf(0), true)
