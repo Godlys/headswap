@@ -43,6 +43,19 @@ class MinInterval(private val intervalMs: Long, private val clock: () -> Long) {
     }
 }
 
+/** Какой защитой входить в сеть машины. Удачная защита запоминается ([CarWifi.sec]), дальше без перебора: одна сеть - один MAC. */
+object CarSecPolicy {
+    fun first(remembered: String?, hasPass: Boolean): String = when {
+        !hasPass -> "open"
+        remembered == "wpa3" -> "wpa3"
+        else -> "wpa2"
+    }
+
+    /** Повтор WPA3 после неудачи WPA2 - только пока удачная защита неизвестна (иначе машина просто не в эфире). */
+    fun retryWpa3(remembered: String?, tried: String, hasPass: Boolean): Boolean =
+        hasPass && tried == "wpa2" && remembered == null
+}
+
 /** Через сколько ожидания по Wi-Fi без 6/6 просим вход в сеть машины (до этого ГУ может успеть сама прийти в сеть телефона). */
 const val CAR_NET_DELAY_MS = 15_000L
 
