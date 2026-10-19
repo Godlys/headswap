@@ -14,6 +14,7 @@ class VideoModeTest {
         data class Row(val aa: String, val mw: Int, val mh: Int, val density: Int, val w: Int, val h: Int, val bitrate: Int)
         val expected = mapOf(
             VideoMode.R800 to Row("800x480", 0, 0, 120, 800, 480, 4_000_000),
+            VideoMode.R1024 to Row("1280x720", 256, 120, 160, 1024, 600, 2_000_000),
             VideoMode.R720 to Row("1280x720", 0, 0, 160, 1280, 720, 4_000_000),
             VideoMode.R1080 to Row("1920x1080", 0, 0, 240, 1920, 1080, 8_000_000),
             VideoMode.R1440 to Row("2560x1440", 0, 0, 320, 2560, 1440, 12_000_000),
@@ -40,6 +41,23 @@ class VideoModeTest {
             }
         }
         assertEquals(VideoMode.R720, VideoMode.DEFAULT)
+    }
+
+    @Test
+    fun r1024() {
+        val m = VideoMode.R1024
+        // из кадра AA 1280x720 вырезается центр 1024x600, масштаба нет: тач 1:1 с клампом в область
+        assertEquals(1023 to 599, m.mapTouch(1100, 700))
+        assertEquals(57 to 301, m.mapTouch(57, 301))
+        assertEquals(128f / 1280f, m.crop.u0, 1e-6f)
+        assertEquals(1152f / 1280f, m.crop.u1, 1e-6f)
+        assertEquals(60f / 720f, m.crop.v0, 1e-6f)
+        assertEquals(660f / 720f, m.crop.v1, 1e-6f)
+        assertTrue(m.needsTranscode)
+        assertEquals(VideoMode.R720, m.effective(transcode = false))
+        assertEquals(m, m.effective(transcode = true))
+        assertEquals("1024×600", m.outLabel)
+        assertEquals(VideoMode.R1024, VideoMode.parse("R1024"))
     }
 
     @Test

@@ -597,6 +597,23 @@ class AaMetaTest {
     }
 
     @Test
+    fun pioneerRm56FlagByManufacturerAndModelAndReset() {
+        val r = Rig()
+        assertTrue(!r.core.huPioneerRm56)
+        r.core.onHuInfo("Pioneer", "AVH-Z9200")                 // другая модель Pioneer под обход не попадает
+        assertTrue(!r.core.huPioneerRm56)
+        r.core.onHuInfo("Other", "RM56E8B")
+        assertTrue(!r.core.huPioneerRm56)
+        r.core.onHuInfo("Pioneer", "RM56E8B", null)
+        assertTrue(r.core.huPioneerRm56)
+        r.core.onCarlifeClosed()
+        r.core.attach(MetaLink())
+        assertTrue("новая сессия - флаг заново", !r.core.huPioneerRm56)
+        r.core.onHuInfo("Honda", "CR-V")
+        assertTrue(!r.core.huPioneerRm56)
+    }
+
+    @Test
     fun vwIdFlagNotSetForVwBt1420OnSameChannel() {
         val r = Rig()
         r.core.onHuInfo("VW BT 1420", "VW BT 1420")             // Павел: тот же канал прошивки, другое BT-имя
