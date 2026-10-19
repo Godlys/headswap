@@ -287,8 +287,9 @@ class AaMetaTest {
         r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(300, 30))!!)
         assertTrue(r.link.turns.isEmpty())
-        assertTrue(r.link.navi().isEmpty())
-        // подписка START moduleID=0 -> NAVI=1 и текущий манёвр сразу
+        // NAVI=1 уходит до подписки: VW BT 1538 (h244) подписывается только после него
+        assertEquals(listOf(1), r.link.navi())
+        // подписка START moduleID=0 -> текущий манёвр сразу, NAVI=1 не дублируется
         r.core.onCarlifeSubscribe(listOf(0), true)
         assertEquals(listOf(1), r.link.navi())
         assertEquals(1, r.link.turns.size)
