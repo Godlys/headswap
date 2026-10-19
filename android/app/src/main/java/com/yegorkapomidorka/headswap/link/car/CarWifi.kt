@@ -17,8 +17,17 @@ class CarWifi(ctx: Context) {
 
     val isSet: Boolean get() = !ssid.isNullOrEmpty()
 
+    /** 6/6 уже поднимались в этой сети: ГУ подключается через свой Wi-Fi, сеть машины просим без ожидания. Сбрасывается сменой SSID. */
+    val proven: Boolean get() = sp.getBoolean("proven", false)
+
+    fun markProven() {
+        sp.edit().putBoolean("proven", true).apply()
+    }
+
     fun save(ssid: String, pass: String) {
-        sp.edit().putString("ssid", ssid).putString("pass", pass).apply()
+        val ed = sp.edit().putString("ssid", ssid).putString("pass", pass)
+        if (ssid != this.ssid) ed.remove("proven")
+        ed.apply()
     }
 
     fun clear() {

@@ -363,8 +363,9 @@ class BridgeService : Service() {
             return
         }
         val since = sinceCarMs()
-        val delay = CarNetPolicy.delayMs(since, carBtNear)
-        if (delay == 0L) WLog.ev(WLog.LINK, "car-net-now", "sinceCarMs" to since, "carBt" to carBtNear)
+        val proven = CarWifi(this).proven
+        val delay = CarNetPolicy.delayMs(since, carBtNear, proven)
+        if (delay == 0L) WLog.ev(WLog.LINK, "car-net-now", "sinceCarMs" to since, "carBt" to carBtNear, "proven" to proven)
         main.postDelayed(carNetTick, (delay - (SystemClock.elapsedRealtime() - waitSince)).coerceAtLeast(0))
         if (delay > 0L) checkCarBtNear()
     }
@@ -391,7 +392,7 @@ class BridgeService : Service() {
             waitedMs = SystemClock.elapsedRealtime() - waitSince,
             sixOfSixReady = sixReady,
             wifiDirectCar = wifiDirectCar,
-            delayMs = CarNetPolicy.delayMs(sinceCarMs(), carBtNear),
+            delayMs = CarNetPolicy.delayMs(sinceCarMs(), carBtNear, w.proven),
         )
         if (!ok) return
         carNet.request(ssid, w.pass, CAR_NET_TIMEOUT_MS, ::onCarNetAvailable, ::onCarNetUnavailable, ::onCarNetLost)
@@ -715,6 +716,13 @@ class BridgeService : Service() {
                         sixReady = true
                         // подключение без Wi-Fi Direct: этой машине P2P не нужен (если в этом ожидании TARGET_INFO был, режим не трогаем)
                         if (hotspotPeer && !p2pThisWait) CarProfile(this).connMode = CarConnMode.HOTSPOT
+                        // 6/6 пришли из сети машины (маяк ходил только в ней): дальше просим её сразу, без CAR_NET_DELAY_MS
+                        if (hotspotPeer && carNetImpl?.current != null) CarWifi(this).let { w ->
+                            if (w.isSet && !w.proven) {
+                                w.markProven()
+                                WLog.ev(WLog.LINK, "car-net-proven")
+                            }
+                        }
                         if (beacon != null) {
                             cancelHint()      // 6/6: подсказка про Wi-Fi больше не нужна
                             CarLifeState.wireless = getString(R.string.wl_state_connected)

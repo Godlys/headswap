@@ -112,6 +112,8 @@ class CarLogicTest {
         assertEquals(0L, CarNetPolicy.delayMs(null, carBtNear = true))         // холодный старт, машина по BT рядом
         assertEquals(0L, CarNetPolicy.delayMs(CAR_RECENT_MS * 10, carBtNear = true))
         assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(null, carBtNear = false))
+        assertEquals(0L, CarNetPolicy.delayMs(null, carNetProven = true))      // ГУ уже приходила через свою сеть
+        assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(CAR_RECENT_MS, carNetProven = false))
     }
 
     @Test
