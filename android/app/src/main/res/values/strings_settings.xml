@@ -193,6 +193,8 @@
     <!-- My car (CarPreset) -->
     <string name="car_title">My car</string>
     <string name="car_other_title">My car is not on the list</string>
+    <string name="car_citroen_c5_x">Citroen C5 X</string>
+    <string name="car_dongfeng_df6_2023">Dongfeng DF6 2023</string>
     <string name="car_peugeot_5008_2024">Dongfeng Peugeot 5008 2024</string>
     <string name="car_honda_breeze_2">Honda Breeze, 2nd generation</string>
     <string name="car_honda_crv_6">Honda CR-V, 6th generation, pre-facelift</string>
