@@ -1,7 +1,7 @@
 package com.yegorkapomidorka.headswap
 
 /**
- * Подгонка roadName (NAVI_NEXT_TURN_INFO, поле 3) под приборку Honda (ГУ CarLife 1.1.0, STATISTIC_INFO channel 20832125,
+ * Подгонка roadName (NAVI_NEXT_TURN_INFO, поле 3) под приборку Honda (ГУ CarLife 1.1.0, STATISTIC_INFO channel 2077xxxx/2083xxxx,
  * HU_INFO пустой). Формулы найдены тестами на машине:
  * - S = длина строки в байтах UTF-8 до первого NUL; ГУ считает эти байты за UTF-16, поэтому видны только
  *   первые floor(S/2)-1 символов. При S >= 32 текст пустой или мусор, при S <= 31 работает.

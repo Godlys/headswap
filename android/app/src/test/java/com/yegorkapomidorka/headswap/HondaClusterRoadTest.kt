@@ -1,5 +1,6 @@
 package com.yegorkapomidorka.headswap
 
+import com.yegorkapomidorka.headswap.aa.AaBridgeCore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -7,6 +8,16 @@ import org.junit.Test
 class HondaClusterRoadTest {
 
     private fun bytes(s: String) = s.toByteArray(Charsets.UTF_8).size
+
+    @Test
+    fun hondaChannelsByPrefix() {
+        for (ch in listOf("20772115", "20772121", "20772124", "20772126", "20832109", "20832120", "20832125")) {
+            assertTrue(ch, AaBridgeCore.isHondaChannel(ch))
+        }
+        for (ch in listOf("20622116", "20082122", "21520001", "2077", "207721150", "", null)) {
+            assertTrue("$ch", !AaBridgeCore.isHondaChannel(ch))
+        }
+    }
 
     @Test
     fun longCyrillicCutByCells() {

@@ -756,9 +756,9 @@ class CarLifeSession(
 
     private var hondaRoadLogged = false
 
-    /** Honda (channel 20832125): roadName под ≤24 клетки / ≤31 Б, иначе приборка отбрасывает строку. Остальные ГУ - без изменений. */
+    /** Honda (channel 2077xxxx/2083xxxx): roadName под ≤24 клетки / ≤31 Б, иначе приборка отбрасывает строку. Остальные ГУ - без изменений. */
     private fun fitRoad(info: NaviTurnInfo): NaviTurnInfo {
-        if (!bridge.huHonda20832125) return info
+        if (!bridge.huHonda) return info
         if (!hondaRoadLogged) {
             hondaRoadLogged = true
             AppLog.i("== Honda приборка: roadName подгоняю под ≤24 клетки / ≤31 Б")
