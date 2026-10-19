@@ -125,7 +125,7 @@ class AaBridgeCore(
      * Разрешение видео, снятое один раз при создании хоста (уже с учётом passthrough): им построена AA (SDR),
      * его же берут CarLife-сессия (INIT_DONE, энкодер) и маппинг тача. Prefs отсюда не читаются.
      */
-    @Volatile var videoMode: VideoMode = VideoMode.DEFAULT
+    @Volatile var videoMode: VideoGeometry = VideoMode.DEFAULT
 
     /** Ручной DPI интерфейса AA, снятый вместе с videoMode (AaDensity.AUTO = density режима). Только SDR, на кроп и тач не влияет. */
     @Volatile var densityOverride: Int = AaDensity.AUTO
@@ -661,11 +661,11 @@ class AaBridgeCore(
             val f = fingers[0]
             val a = points[0]
             if (a.x == f.x && a.y == f.y) log("BRIDGE тач $name ${f.x},${f.y} -> AA", ui)
-            else log("BRIDGE тач $name ГУ ${f.x},${f.y} -> AA ${a.x},${a.y} (${mode.name})", ui)
+            else log("BRIDGE тач $name ГУ ${f.x},${f.y} -> AA ${a.x},${a.y} (${mode.label})", ui)
         } else {
             val gu = fingers.joinToString(" ") { "#${it.id} ${it.x},${it.y}" }
             val aa = points.joinToString(" ") { "#${it.id} ${it.x},${it.y}" }
-            log("BRIDGE тач $name[$index] пальцев ${points.size}: ГУ $gu -> AA $aa (${mode.name})", ui)
+            log("BRIDGE тач $name[$index] пальцев ${points.size}: ГУ $gu -> AA $aa (${mode.label})", ui)
         }
         p.sendTouch(act, index, points)
     }
@@ -1156,6 +1156,12 @@ class AaBridgeCore(
             transcoder = t
             if (t == null) {
                 log("BRIDGE !!!!!! транскодер не поднялся (MediaCodec), откат на passthrough", true)
+                val g = videoMode
+                if (g is CustomVideoMode) {
+                    // TODO: откат на R720 пересозданием хоста; пока ГУ ждёт кадр out, а получит кадр подложки AA с полями
+                    log("BRIDGE !!!!!! своё разрешение ${g.outW}x${g.outH} без транскодера не получится: ГУ ждёт ${g.outW}x${g.outH}, " +
+                        "а уйдёт кадр AA ${g.aaResolution} с полями ${g.marginW}x${g.marginH}. Выключите «Своё разрешение» или задайте другой размер", true)
+                }
                 return
             }
         }
