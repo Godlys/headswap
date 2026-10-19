@@ -694,14 +694,14 @@ class ProtocolTest {
 
     @Test
     fun chooseFpsHuCapForPioneer() {
-        // Pioneer RM56E8B (h277): потолок 15 и в Авто, и при фиксированных настройках; без потолка поведение прежнее
+        // Pioneer RM56E8B (h277): потолок 10 и в Авто, и при фиксированных настройках; без потолка поведение прежнее
         val cap = AaBridgeCore.PIONEER_RM56_MAX_FPS
-        assertEquals(15, cap)
-        assertEquals(15, Handshake.chooseFps(FpsSetting.AUTO, 30, cap))
-        assertEquals(15, Handshake.chooseFps(FpsSetting.AUTO, 0, cap))
-        assertEquals(15, Handshake.chooseFps(FpsSetting.FPS30, 30, cap))
-        assertEquals(15, Handshake.chooseFps(FpsSetting.FPS15, 30, cap))
-        assertEquals(10, Handshake.chooseFps(FpsSetting.AUTO, 10, cap))
+        assertEquals(10, cap)
+        assertEquals(10, Handshake.chooseFps(FpsSetting.AUTO, 30, cap))
+        assertEquals(10, Handshake.chooseFps(FpsSetting.AUTO, 0, cap))
+        assertEquals(10, Handshake.chooseFps(FpsSetting.FPS30, 30, cap))
+        assertEquals(10, Handshake.chooseFps(FpsSetting.FPS15, 30, cap))
+        assertEquals(8, Handshake.chooseFps(FpsSetting.AUTO, 8, cap))
         assertEquals(30, Handshake.chooseFps(FpsSetting.AUTO, 30, null))
         assertEquals(30, Handshake.chooseFps(FpsSetting.AUTO, 30))
     }
@@ -711,9 +711,9 @@ class ProtocolTest {
         // FRAME_RATE_CHANGE: max(fps, MIN_APPLIED_FPS), затем потолок ГУ
         val cap = AaBridgeCore.PIONEER_RM56_MAX_FPS
         fun applied(fps: Int, huMax: Int?) = Handshake.capFps(maxOf(fps, Handshake.MIN_APPLIED_FPS), huMax)
-        assertEquals(15, applied(30, cap))
-        assertEquals(15, applied(15, cap))
-        assertEquals(12, applied(12, cap))
+        assertEquals(10, applied(30, cap))
+        assertEquals(10, applied(15, cap))
+        assertEquals(10, applied(12, cap))
         assertEquals(10, applied(3, cap))
         assertEquals(30, applied(30, null))
         assertEquals(10, applied(3, null))

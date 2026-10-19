@@ -95,7 +95,7 @@ class ThermalThrottleTest {
 
     @Test
     fun pioneerCeilingHoldsWithThermalCap() {
-        // Pioneer RM56E8B (h277): потолок 1 Мбит/с под флагом ГУ, режим просит 4 Мбит/с; нагрев берётся от уже сниженного потолка
+        // Pioneer RM56E8B (h277): потолок 800 кбит/с (= пол) под флагом ГУ, режим просит 4 Мбит/с; нагрев берётся от уже сниженного потолка
         val ceiling = AaBridgeCore.PIONEER_RM56_CEILING_BPS
         val p = BitratePolicy(4_000_000)
         val t = ThermalThrottle()
@@ -111,7 +111,7 @@ class ThermalThrottleTest {
         assertEquals(ceiling, p.current)
         // нагрев HOT (×0.5 от потолка ГУ, не ниже пола) режет сильнее, остывание возвращает к потолку ГУ, но не выше
         t.update(0, ThermalThrottle.STATUS_SEVERE, nan)
-        assertTrue(p.setThermalCap(t.capBitrate(p.ceilingBps)))
+        p.setThermalCap(t.capBitrate(p.ceilingBps))      // потолок ГУ уже равен полу: резать некуда, current не меняется
         assertEquals(BitratePolicy.FLOOR_BPS, p.current)
         p.setThermalCap(Int.MAX_VALUE)
         repeat(300) {
@@ -136,12 +136,12 @@ class ThermalThrottleTest {
     fun pioneerFpsCapCombinesWithThermalViaMin() {
         val cap = AaBridgeCore.PIONEER_RM56_MAX_FPS
         val t = ThermalThrottle()
-        assertEquals(15, t.capFps(Handshake.capFps(30, cap)))
-        t.update(0, ThermalThrottle.STATUS_MODERATE, nan)      // WARM: 20, потолок ГУ 15 остаётся
-        assertEquals(15, t.capFps(Handshake.capFps(30, cap)))
-        assertEquals(12, t.capFps(Handshake.capFps(12, cap)))
-        t.update(1_000, ThermalThrottle.STATUS_SEVERE, nan)    // HOT: 15
-        assertEquals(15, t.capFps(Handshake.capFps(30, cap)))
+        assertEquals(10, t.capFps(Handshake.capFps(30, cap)))
+        t.update(0, ThermalThrottle.STATUS_MODERATE, nan)      // WARM: 20, потолок ГУ 10 остаётся
+        assertEquals(10, t.capFps(Handshake.capFps(30, cap)))
+        assertEquals(8, t.capFps(Handshake.capFps(8, cap)))
+        t.update(1_000, ThermalThrottle.STATUS_SEVERE, nan)    // HOT: 15, потолок ГУ 10
+        assertEquals(10, t.capFps(Handshake.capFps(30, cap)))
         assertEquals(15, t.capFps(30))
     }
 
