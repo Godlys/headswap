@@ -21,6 +21,7 @@ class VideoModeTest {
             VideoMode.WIDE_MID to Row("1920x1080", 192, 432, 160, 1728, 648, 5_000_000),
             VideoMode.WIDE_HD to Row("1920x1080", 0, 360, 160, 1920, 720, 6_000_000),
             VideoMode.WIDE_640 to Row("1920x1080", 0, 440, 160, 1920, 640, 6_000_000),
+            VideoMode.WIDE_2_1 to Row("1280x720", 0, 80, 160, 1280, 640, 4_000_000),
             VideoMode.WIDE_976 to Row("1920x1080", 0, 244, 160, 2240, 976, 8_000_000),
         )
         assertEquals(expected.keys, VideoMode.values().toSet())
@@ -117,7 +118,22 @@ class VideoModeTest {
         assertTrue(c640.needsTranscode)
         assertEquals("1920×640", c640.outLabel)
         assertEquals(VideoMode.WIDE_640, VideoMode.parse("WIDE_640"))
-        assertEquals(listOf(VideoMode.WIDE, VideoMode.WIDE_MID, VideoMode.WIDE_HD, VideoMode.WIDE_640, VideoMode.WIDE_976),VideoMode.values().takeLast(5))
+        assertEquals(listOf(VideoMode.WIDE, VideoMode.WIDE_MID, VideoMode.WIDE_HD, VideoMode.WIDE_640, VideoMode.WIDE_2_1, VideoMode.WIDE_976), VideoMode.values().takeLast(6))
+    }
+
+    @Test
+    fun wide21() {
+        val k = VideoMode.WIDE_2_1
+        assertEquals(1279 to 639, k.mapTouch(2000, 900))
+        assertEquals(57 to 601, k.mapTouch(57, 601))
+        assertEquals(0f, k.crop.u0, 1e-6f)
+        assertEquals(1f, k.crop.u1, 1e-6f)
+        assertEquals(40f / 720f, k.crop.v0, 1e-6f)
+        assertEquals(680f / 720f, k.crop.v1, 1e-6f)
+        assertTrue(k.needsTranscode)
+        assertEquals(VideoMode.R720, k.effective(transcode = false))
+        assertEquals("1280×640", k.outLabel)
+        assertEquals(VideoMode.WIDE_2_1, VideoMode.parse("WIDE_2_1"))
     }
 
     @Test
