@@ -857,6 +857,43 @@ class AaBridgeAudioTest {
     }
 
     @Test
+    fun vwCns3TtsGetsSilencePrerollAfterInitOnlyOnRealInit() {
+        core.onHuInfo("Volkswagen", "CNS3")
+        core.onHuStatistic("20082122")                                   // h222: шипение в начале подсказки
+        core.onCarlifeStart()
+        val speech = pcm(2048, 7)
+        core.onAudioStart(SPEECH)
+        core.onAudioData(SPEECH, speech, 1)
+        val tts = link.audio.filter { it.chan == 4 }
+        assertEquals(0x40001, tts[0].type)
+        val pre = tts.drop(1).dropLast(1)
+        assertEquals(listOf(4096, 4096, 4096, 512), pre.map { it.payload.size })  // 400 мс 16 кГц моно = 12800 Б кусками Baidu
+        assertTrue(pre.all { p -> p.type == 0x40003 && p.payload.all { it == 0.toByte() } })
+        assertArrayEquals(speech, tts.last().payload)                    // речь после тишины, без изменений
+        // STOP отменён новым START: INIT не повторяется, пре-ролла тоже нет
+        core.onAudioStop(SPEECH)
+        timers.advance(1000)
+        core.onAudioStart(SPEECH)
+        core.onAudioData(SPEECH, speech, 2)
+        assertEquals(tts.size + 1, link.audio.count { it.chan == 4 })
+        // после настоящего TTS_STOP следующий INIT снова с пре-роллом
+        core.onAudioStop(SPEECH)
+        timers.advance(1500)
+        val before = link.audio.size
+        core.onAudioData(SPEECH, speech, 3)
+        assertEquals(listOf(0x40001) + List(5) { 0x40003 }, link.audio.drop(before).map { it.type })
+    }
+
+    @Test
+    fun ttsWithoutVwFlagHasNoPreroll() {
+        core.onHuInfo("", "")
+        core.onHuStatistic("20622116")                                   // Desay: другая ГУ
+        core.onCarlifeStart()
+        core.onAudioData(SPEECH, pcm(640), 1)
+        assertEquals(listOf(0x40001, 0x40003), link.audio.map { it.type })
+    }
+
+    @Test
     fun ttsStartStopStartWithinOneSecondGivesOneInitAndNoStopBetween() {
         core.onCarlifeStart()
         core.onAudioStart(SPEECH)

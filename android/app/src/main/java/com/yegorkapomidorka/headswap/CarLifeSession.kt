@@ -136,6 +136,7 @@ class CarLifeSession(
     private var vBeats = 0L
     private var vDropped = 0L
     private var audioTx = 0L
+    private var ttsTxSinceInit = 0       // TTS_DATA после последнего TTS_INIT: первые TTS_TX_LOGGED с временем отправки
     @Volatile private var micRxPackets = 0L
     @Volatile private var micRxBytes = 0L
     /** Когда сами слали MODULE_STATUS VR=1: ответный MODULE_CONTROL VR=1 сразу после него считаем эхом. */
@@ -918,7 +919,9 @@ class CarLifeSession(
             val m = Wire.parseData(inner) ?: return
             if (chan != Ch.VIDEO) { // аудио моста: INIT/STOP всегда, DATA - первые и каждый 200-й
                 audioTx++
-                if (m.data.size <= 16 || audioTx <= 3 || audioTx % 200 == 0L) {
+                if (m.type == CarlifeAudio.TTS_INIT) ttsTxSinceInit = 0
+                val ttsHead = m.type == CarlifeAudio.TTS_DATA && ++ttsTxSinceInit <= TTS_TX_LOGGED
+                if (m.data.size <= 16 || audioTx <= 3 || audioTx % 200 == 0L || ttsHead) {
                     AppLog.i(
                         "TX ${Ch.name(chan)} ${Msg.hex(m.type)} ${Msg.name(m.type)} len=${m.data.size} time=${m.time} #$audioTx" +
                             (if (m.data.size <= 16) " ${Hex.compact(m.data, 16)}" else ""), ui = false
@@ -1138,6 +1141,7 @@ class CarLifeSession(
 
         /** action&255 тача, которые мост переводит в AA: DOWN, UP, MOVE, POINTER_DOWN, POINTER_UP. */
         private val TOUCH_TO_AA = setOf(0, 1, 2, 5, 6)
+        private const val TTS_TX_LOGGED = 8           // TTS_DATA после INIT с временем записи в транспорт (h222)
         private const val MAX_AUDIO_QUEUE = 180       // звук не принимается, если в общей очереди больше пакетов
         private const val BITRATE_POLL_MS = 100L
         private const val VW_20082138_CEILING_BPS = 2_000_000
