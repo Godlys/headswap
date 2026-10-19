@@ -135,6 +135,8 @@
     <string name="video_wide_mid_sub">1728×648: native resolution of the Mazda screen</string>
     <string name="video_wide_hd_title">Wide 8:3 HD (crop)</string>
     <string name="video_wide_hd_sub">1920×720: sharper and smaller, more fits on the screen</string>
+    <string name="video_wide_2_1_title">Wide 2:1 (Skoda Octavia Pro)</string>
+    <string name="video_wide_2_1_sub">1280×640: native resolution of the Octavia screen, no stretching</string>
     <string name="video_wide_976_title">Wide 2240×976 (VW Tiguan L Pro)</string>
     <string name="video_wide_976_sub">Wide crop scaled to the CarLife window of the VW CNS3 head unit</string>
 
