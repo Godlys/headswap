@@ -20,6 +20,7 @@ class VideoModeTest {
             VideoMode.WIDE to Row("1280x720", 0, 240, 160, 1280, 480, 4_000_000),
             VideoMode.WIDE_MID to Row("1920x1080", 192, 432, 160, 1728, 648, 5_000_000),
             VideoMode.WIDE_HD to Row("1920x1080", 0, 360, 160, 1920, 720, 6_000_000),
+            VideoMode.WIDE_640 to Row("1920x1080", 0, 440, 160, 1920, 640, 6_000_000),
             VideoMode.WIDE_2_1 to Row("1280x720", 0, 80, 160, 1280, 640, 4_000_000),
             VideoMode.WIDE_976 to Row("1920x1080", 0, 244, 160, 2240, 976, 8_000_000),
         )
@@ -107,7 +108,17 @@ class VideoModeTest {
         assertEquals(216f / 1080f, mid.crop.v0, 1e-6f)
         assertEquals(864f / 1080f, mid.crop.v1, 1e-6f)
         assertTrue(mid.needsTranscode)
-        assertEquals(listOf(VideoMode.WIDE, VideoMode.WIDE_MID, VideoMode.WIDE_HD, VideoMode.WIDE_2_1, VideoMode.WIDE_976), VideoMode.values().takeLast(5))
+        val c640 = VideoMode.WIDE_640
+        assertEquals(1919 to 639, c640.mapTouch(2000, 900))
+        assertEquals(57 to 601, c640.mapTouch(57, 601))
+        assertEquals(220f / 1080f, c640.crop.v0, 1e-6f)
+        assertEquals(860f / 1080f, c640.crop.v1, 1e-6f)
+        assertEquals(0f, c640.crop.u0, 1e-6f)
+        assertEquals(1f, c640.crop.u1, 1e-6f)
+        assertTrue(c640.needsTranscode)
+        assertEquals("1920×640", c640.outLabel)
+        assertEquals(VideoMode.WIDE_640, VideoMode.parse("WIDE_640"))
+        assertEquals(listOf(VideoMode.WIDE, VideoMode.WIDE_MID, VideoMode.WIDE_HD, VideoMode.WIDE_640, VideoMode.WIDE_2_1, VideoMode.WIDE_976), VideoMode.values().takeLast(6))
     }
 
     @Test

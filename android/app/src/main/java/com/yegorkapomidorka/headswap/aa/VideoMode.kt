@@ -38,6 +38,8 @@ enum class VideoMode(
     /** 1728×648 - нативный экран Desay SV G6S (Мазда): из кадра AA 1920×1080 вырезается центр, поля по обеим осям. */
     WIDE_MID(R.string.video_wide_mid_title, R.string.video_wide_mid_sub, "1920x1080", 192, 432, 160, 1728, 648, 5_000_000),
     WIDE_HD(R.string.video_wide_hd_title, R.string.video_wide_hd_sub, "1920x1080", 0, 360, 160, 1920, 720, 6_000_000),
+    /** 1920×640 - экран Citroen C5 X (ГУ просит 1920×640, h269): из кадра AA 1920×1080 вырезается центральная полоса 1920×640. */
+    WIDE_640(R.string.video_wide_640_title, R.string.video_wide_640_sub, "1920x1080", 0, 440, 160, 1920, 640, 6_000_000),
     /** 1280×640 - экран Skoda Octavia A8 Pro (ГУ SKODA CNS3 просит 1280×640, h292): из кадра AA 1280×720 вырезается центральная полоса 1280×640, 1:1. */
     WIDE_2_1(R.string.video_wide_2_1_title, R.string.video_wide_2_1_sub, "1280x720", 0, 80, 160, 1280, 640, 4_000_000),
     /** 2240×976 - окно CarLife на VW CNS3 (Tiguan L Pro, экран 2240×1260 с полосами штатного ГУ): из кадра AA 1920×1080 вырезается центральная полоса 1920×836 и масштабируется ×1,167. */
