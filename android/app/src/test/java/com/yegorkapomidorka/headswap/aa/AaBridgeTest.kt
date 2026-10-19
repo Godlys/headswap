@@ -96,6 +96,11 @@ class FakePeer : AaPeer {
     override fun sendVideoFocusNative() {
         natives++
     }
+
+    val nights = CopyOnWriteArrayList<Boolean>()
+    override fun sendNightMode(night: Boolean) {
+        nights.add(night)
+    }
 }
 
 class AaBridgeCoreTest {
@@ -110,6 +115,22 @@ class AaBridgeCoreTest {
     private val core = AaBridgeCore({ l, _ -> logs.add(l) }, { now }).also { it.attach(link) }
 
     private fun types(b: ByteArray) = AnnexB.nalTypes(b)
+
+    @Test
+    fun huThemeDrivesAaNightModeAndSurvivesPeerReconnect() {
+        val p = FakePeer()
+        core.peer = p
+        assertEquals(listOf(false), p.nights.toList())        // до CHANGE_MD_THEME - день
+        core.onCarlifeTheme(AaBridgeCore.THEME_DARK)
+        core.onCarlifeTheme(AaBridgeCore.THEME_AUTO)
+        core.onCarlifeTheme(null)                              // без поля - тему не трогаем
+        core.onCarlifeTheme(AaBridgeCore.THEME_DARK)
+        assertEquals(listOf(false, true, false, true), p.nights.toList())
+        assertEquals(AaBridgeCore.THEME_DARK, core.huTheme)
+        val p2 = FakePeer()
+        core.peer = p2                                         // новая AA-сессия получает текущую тему сразу
+        assertEquals(listOf(true), p2.nights.toList())
+    }
 
     @Test
     fun startsWithPlaceholderAndHidesItOnFirstIdrGluedWithConfig() {
