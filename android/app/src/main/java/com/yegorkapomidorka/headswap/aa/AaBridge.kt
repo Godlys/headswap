@@ -167,6 +167,8 @@ class AaBridgeCore(
         private set
     @Volatile var huHyundaiCn7 = false         // ГУ Hyundai CN7 (product wp_cn7cpe_cn, h218): в режиме «Авто» музыка 32 кГц с ресэмплом 48→32
         private set
+    @Volatile var huPioneerRm56 = false        // ГУ Pioneer RM56E8B (Dongfeng DF6, h277): 4-5 Мбит/с рвут USB EIO за 25-30 с, живёт на ~1 Мбит/с и fps ≤ 15
+        private set
     @Volatile var huHonda20772121 = false      // Honda Civic 11 (channel 20772121, h295): после камеры/меню ГУ молча сбрасывает декодер, passthrough ждёт IDR
         private set
     @Volatile var musicRateProvider: () -> MusicRate = { MusicRate.DEFAULT }
@@ -338,6 +340,7 @@ class AaBridgeCore(
         vwIdName = false
         vwIdChannel = false
         huHyundaiCn7 = false                   // HU_INFO придёт заново в этой сессии
+        huPioneerRm56 = false                  // HU_INFO придёт заново в этой сессии
         huHonda20772121 = false                // HU_INFO / STATISTIC_INFO придут заново в этой сессии
         h295TouchAt = NEVER
         h295LastTrigger = NEVER
@@ -530,6 +533,15 @@ class AaBridgeCore(
         if (manufacturer == VW_BT_1420_MANUFACTURER) huVwBt1420 = true
         updateVwId()
         if (product == HYUNDAI_CN7_PRODUCT) huHyundaiCn7 = true
+        if (manufacturer == PIONEER_MANUFACTURER && model == PIONEER_RM56_MODEL) {
+            if (!huPioneerRm56) log("BRIDGE ГУ Pioneer RM56E8B: потолок ${PIONEER_RM56_CEILING_BPS / 1000} кбит/с, fps ≤ $PIONEER_RM56_MAX_FPS", true)
+            huPioneerRm56 = true
+            // в passthrough потолок и fps не работают (h277 test1); BridgeService вернёт поле к настройке на следующей сессии
+            if (!transcodeEnabled) {
+                transcodeEnabled = true
+                log("BRIDGE ГУ Pioneer RM56E8B: passthrough отключаю, перекодирование принудительно", true)
+            }
+        }
     }
 
     private var vwIdName = false               // HU_INFO manufacturer = BT-имя ГУ "VW BT 1538"
@@ -835,7 +847,11 @@ class AaBridgeCore(
         }
         if (audioInited[ch] != true) {
             val setting = if (ch == CarlifeAudio.CH_MEDIA) musicRateProvider() else MusicRate.AUTO
-            val rate = if (ch != CarlifeAudio.CH_MEDIA) 16000 else setting.hz ?: if (huHyundaiCn7) MEDIA_RATE_CN7 else MEDIA_RATE
+            val rate = when {
+                ch != CarlifeAudio.CH_MEDIA -> 16000
+                huPioneerRm56 -> MEDIA_RATE_PIONEER_RM56    // независимо от настройки: USB ГУ не тянет видео + музыку
+                else -> setting.hz ?: if (huHyundaiCn7) MEDIA_RATE_CN7 else MEDIA_RATE
+            }
             val channels = if (ch == CarlifeAudio.CH_MEDIA) 2 else 1
             if (ch == CarlifeAudio.CH_TTS && NAVI_STATUS_ENABLED) {
                 ttsNaviHeld = true
@@ -861,7 +877,11 @@ class AaBridgeCore(
                 // частота фиксируется на MEDIA INIT; каждый новый INIT - поток с чистого листа
                 resampler = if (rate == MEDIA_RATE) null else resampler?.takeIf { it.outRate == rate }?.also { it.reset() } ?: MusicResampler(rate)
                 if (rate != MEDIA_RATE && rate != mediaRateLogged) {
-                    val why = if (setting.hz != null) "настройка" else "авто: Hyundai CN7"
+                    val why = when {
+                        huPioneerRm56 -> "авто: Pioneer RM56E8B"
+                        setting.hz != null -> "настройка"
+                        else -> "авто: Hyundai CN7"
+                    }
                     log("BRIDGE музыка $rate Гц, ресэмпл $MEDIA_RATE→$rate ($why)", true)
                 }
                 mediaRateLogged = rate
@@ -1538,8 +1558,13 @@ class AaBridgeCore(
         const val VW_BT_1420_MANUFACTURER = "VW BT 1420"  // VW (Павел): HU_INFO manufacturer=model, канал 20082138
         const val VW_20082138_MANUFACTURER = "VW BT 1538"
         const val HYUNDAI_CN7_PRODUCT = "wp_cn7cpe_cn"    // HU_INFO.product Hyundai Elantra CN7 (h218): manufacturer QTI, model "sm6150_au for arm64"
+        const val PIONEER_MANUFACTURER = "Pioneer"        // HU_INFO Pioneer RM56E8B (Dongfeng DF6, h277): manufacturer="Pioneer" model="RM56E8B"
+        const val PIONEER_RM56_MODEL = "RM56E8B"
+        const val PIONEER_RM56_CEILING_BPS = 800_000      // 4-5 Мбит/с рвут USB за 25-30 с, 2 Мбит/с - 195 с, 800 кбит/с - 1301 с; test1: 1 Мбит/с + музыка 32 кГц (~1 Мбит/с PCM) рвёт за 23-140 с
+        const val PIONEER_RM56_MAX_FPS = 10
         const val MEDIA_RATE = 48000
         const val MEDIA_RATE_CN7 = 32000
+        const val MEDIA_RATE_PIONEER_RM56 = 22050         // h277: музыка 32 кГц добавляла на USB ~1 Мбит/с, 22,05 кГц - вдвое меньше
         const val KEYFRAME_WAIT_MS = 1500L
         const val KEYFRAME_RETRY_MS = 4000L
 

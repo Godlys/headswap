@@ -123,6 +123,8 @@
     <!-- Video modes (VideoMode) -->
     <string name="video_r800_title">800×480</string>
     <string name="video_r800_sub">Для небольших экранов</string>
+    <string name="video_r1024_title">1024×600</string>
+    <string name="video_r1024_sub">Для ГУ с экраном 1024×600, без растяжения</string>
     <string name="video_r720_title">1280×720 (стандарт)</string>
     <string name="video_r720_sub">Подходит большинству ГУ</string>
     <string name="video_r1080_title">1920×1080</string>

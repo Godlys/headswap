@@ -123,6 +123,8 @@
     <!-- Video modes (VideoMode) -->
     <string name="video_r800_title">800×480</string>
     <string name="video_r800_sub">For small screens</string>
+    <string name="video_r1024_title">1024×600</string>
+    <string name="video_r1024_sub">For 1024×600 head unit screens, no stretching</string>
     <string name="video_r720_title">1280×720 (standard)</string>
     <string name="video_r720_sub">Fits most head units</string>
     <string name="video_r1080_title">1920×1080</string>
