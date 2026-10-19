@@ -346,8 +346,16 @@ class CarLifeSession(
                 AppLog.i("== ГУ просит JPEG-режим видео: отвечаю ACK, но шлю только H.264")
                 sendCmd(Msg.VIDEO_ENCODER_JPEG_ACK, null)
             }
-            Msg.REQUEST_MD_THEME_STATE -> sendCmd(Msg.RESPONSE_MD_THEME_STATE, Msgs.themeState(THEME_LIGHT))
-            Msg.CHANGE_MD_THEME -> AppLog.i("== CHANGE_MD_THEME ${PbText.render(m.body, Schemas.themeState)}")
+            Msg.REQUEST_MD_THEME_STATE -> {
+                // наша тема = последняя, что прислало ГУ (её же показывает AA), до CHANGE_MD_THEME - светлая
+                val mode = bridge.huTheme
+                AppLog.i("== REQUEST_MD_THEME_STATE: отвечаю themeModes=$mode (${AaBridgeCore.themeName(mode)})")
+                sendCmd(Msg.RESPONSE_MD_THEME_STATE, Msgs.themeState(mode))
+            }
+            Msg.CHANGE_MD_THEME -> {
+                AppLog.i("== CHANGE_MD_THEME ${PbText.render(m.body, Schemas.themeState)}")
+                bridge.onCarlifeTheme(PbReader.parse(m.body)?.let { PbReader.int(it, 1) })
+            }
             Msg.HU_AUTHEN_RESULT -> {
                 val f = PbReader.parse(m.body)
                 val ok = f?.let { PbReader.int(it, 1) }
@@ -1117,9 +1125,6 @@ class CarLifeSession(
         /** moduleID голосового помощника в MODULE_STATUS (ModuleStatusManage: 4 = VR). */
         private const val MODULE_VR = 4
         private const val VR_ECHO_MS = 1500L
-
-        /** SkinDisplayModeManager.getDisplayModeInt: 0 светлая, 1 тёмная, 2 авто. */
-        private const val THEME_LIGHT = 0
 
         /** Поле time видеопакета: unix-секунды (Recorder.sendVideoData :930-962). */
         private fun unixSeconds() = (System.currentTimeMillis() / 1000).toInt()

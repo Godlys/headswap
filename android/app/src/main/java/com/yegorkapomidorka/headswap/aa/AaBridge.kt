@@ -94,8 +94,13 @@ class AaBridgeCore(
                 field = v
                 fingers.clear()
             }
+            v?.sendNightMode(huTheme == THEME_DARK)
         }
     @Volatile private var link: CarlifeLink = NoLink
+
+    /** Последний CHANGE_MD_THEME от ГУ (0 светлая, 1 тёмная, 2 авто); до него - светлая. */
+    @Volatile var huTheme: Int = THEME_LIGHT
+        private set
 
     @Volatile private var carlifeStarted = false
     private var aaConfig: ByteArray? = null
@@ -464,6 +469,16 @@ class AaBridgeCore(
     @Synchronized
     fun onCarlifeSubscribe(moduleIds: List<Int>, on: Boolean) {
         for (id in moduleIds) meta.onSubscribe(id, on)
+    }
+
+    /** CHANGE_MD_THEME от ГУ (h294): тёмная -> ночной режим AA, светлая -> день; авто (2) и прочее - день. */
+    fun onCarlifeTheme(mode: Int?) {
+        val m = mode ?: return log("BRIDGE CHANGE_MD_THEME без themeModes, тему не меняю", true)
+        val prev = huTheme
+        huTheme = m
+        val night = m == THEME_DARK
+        log("BRIDGE тема ГУ $prev -> $m (${themeName(m)}): AA night=$night${if (peer == null) ", AA не подключён, отдам при подключении" else ""}", true)
+        peer?.sendNightMode(night)
     }
 
     /** VIDEO_ENCODER_PAUSE от ГУ: следующий START - полный, со сбросом звука. */
@@ -1352,6 +1367,15 @@ class AaBridgeCore(
     }
 
     companion object {
+        /** CarlifeThemeState.themeModes (SkinDisplayModeManager в CarLife 8.6.7). */
+        const val THEME_LIGHT = 0
+        const val THEME_DARK = 1
+        const val THEME_AUTO = 2
+
+        fun themeName(mode: Int) = when (mode) {
+            THEME_LIGHT -> "светлая"; THEME_DARK -> "тёмная"; THEME_AUTO -> "авто"; else -> "?"
+        }
+
         /** action&255 TOUCH_ACTION, которые уходят в AA (у AA те же коды PointerAction). */
         private val TOUCH_NAMES = mapOf(
             AapMessages.TOUCH_DOWN to "DOWN", AapMessages.TOUCH_UP to "UP", AapMessages.TOUCH_MOVE to "MOVE",
