@@ -779,8 +779,24 @@ class CarLifeSession(
         return metaSubmit("MEDIA_PROGRESS_BAR") { sendCmd(Msg.MEDIA_PROGRESS_BAR, Msgs.mediaProgress(progressBar)) }
     }
 
+    private var hondaRoadLogged = false
+
+    /** Honda (channel 2077xxxx/2083xxxx): roadName под ≤24 клетки / ≤31 Б, иначе приборка отбрасывает строку. Остальные ГУ - без изменений. */
+    private fun fitRoad(info: NaviTurnInfo): NaviTurnInfo {
+        if (!bridge.huHonda) return info
+        if (!hondaRoadLogged) {
+            hondaRoadLogged = true
+            AppLog.i("== Honda приборка: roadName подгоняю под ≤24 клетки / ≤31 Б")
+        }
+        val road = HondaClusterRoad.fit(info.roadName)
+        if (road == info.roadName) return info
+        AppLog.i("метаданные: road→\"$road\" (${road.toByteArray(Charsets.UTF_8).size} Б)", ui = false)
+        return NaviTurnInfo(info.action, info.nextTurn, road, info.totalDistance, info.remainDistance, info.timeSeconds)
+    }
+
     override fun sendNaviTurn(info: NaviTurnInfo): Boolean {
         if (!cfg.metaNavi) return false
+        val sent = fitRoad(info)
         return metaSubmit("NAVI_NEXT_TURN_INFO") {
             // конец маршрута (action 3) - иконка пустая, как Baidu onNaviStateChange(false)
             val icon = if (!cfg.naviField6.icon || info.action == 3) ByteArray(0) else turnIcons.getOrPut(info.nextTurn) {
@@ -788,7 +804,7 @@ class CarLifeSession(
                     AppLog.i("метаданные: стрелка nextTurn=${info.nextTurn} ${PbText.blob(it)}", ui = false)
                 }
             }
-            sendCmd(Msg.NAVI_NEXT_TURN_INFO, Msgs.naviNextTurn(info, cfg.naviField6, icon))
+            sendCmd(Msg.NAVI_NEXT_TURN_INFO, Msgs.naviNextTurn(sent, cfg.naviField6, icon))
         }
     }
 
