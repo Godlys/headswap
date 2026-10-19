@@ -529,6 +529,8 @@ class AaMetaTest {
             q.core.onAudioData(M.CH_AUDIO_SPEECH, ByteArray(640), 0)
             q.core.onAudioStop(M.CH_AUDIO_SPEECH)
             assertEquals(listOf(1), q.link.navi())
+            q.core.onNavStatus(2)                                   // крестик посреди маршрута, TTS уже молчит
+            assertEquals("отмена маршрута: NAVI=0", listOf(1, 0), q.link.navi())
         } finally {
             AaBridgeCore.TTS_DEBOUNCE_ENABLED = true
         }
