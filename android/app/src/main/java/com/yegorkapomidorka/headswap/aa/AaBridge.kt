@@ -165,6 +165,8 @@ class AaBridgeCore(
         private set
     @Volatile var huHonda = false              // Honda (STATISTIC_INFO channel 2077xxxx/2083xxxx, HU_INFO пустой): roadName на приборке режется по байтам и клеткам
         private set
+    private var naviRaisedAt = NEVER          // Honda: когда последний раз ушёл MODULE_STATUS NAVI=1
+    private var naviShownSinceRaise = false   // Honda: после последнего NAVI=1 уже был SHOW (переход 0->1 приборкой «израсходован»)
     @Volatile var huVwBt1420 = false           // VW BT 1420 (Павел, канал 20082138): по воздуху без heartbeat на PAUSE рвёт CarLife через ~1 мин
     @Volatile var huVw20082120 = false         // VW (STATISTIC_INFO channel 20082120 h93, 20082122 h222): без heartbeat рвёт USB через 3,7-5,6 с PAUSE
         private set
@@ -266,6 +268,7 @@ class AaBridgeCore(
         ready = { carlifeStarted && link !== NoLink },
         navHold = { on -> routeNavi(on) },
         musicState = { on -> musicByState(on) },
+        navRearm = { rearmNavi() },
     )
 
     val metaRelay: MetaRelay get() = meta
@@ -585,9 +588,39 @@ class AaBridgeCore(
             log("BRIDGE ГУ Mazda 20622111: VIDEO_DATA режу на куски ≤ $MAZDA_20622111_MAX_VIDEO_PACKET Б, потолок ${MAZDA_20622111_CEILING_BPS / 1000} кбит/с", true)
         }
         if (channel == VW_20082120_CHANNEL || channel == VW_CNS3_20082122_CHANNEL || channel == VW_CNS3_20082134_CHANNEL) huVw20082120 = true
-        if (isHondaChannel(channel)) huHonda = true
+        if (isHondaChannel(channel) && !huHonda) {
+            huHonda = true
+            log("BRIDGE ГУ Honda (channel $channel): roadName под приборку, стрелки после SUBSCRIBE_START, перевзвод NAVI 0->1", true)
+        }
         vwIdChannel = channel == VW_20082138_CHANNEL
         updateVwId()
+    }
+
+    /** Ушёл MODULE_STATUS NAVI=1 (маршрут / TTS / перевзвод). Honda: ГУ ответит SUBSCRIBE_START - стрелки ждут его. */
+    private fun naviRaised() {
+        naviRaisedAt = clockMs()
+        naviShownSinceRaise = false
+        if (huHonda) meta.awaitSubscribe()
+    }
+
+    /**
+     * Honda: перед первым SHOW (новый маршрут, перестроение) и повторным после тишины приборке нужен переход MODULE_STATUS
+     * NAVI 0->1 (h137, 2026-10-16 20:43:45: NAVI=1 держал TTS, SHOW нового маршрута ушёл без перехода - стрелок не было до
+     * конца поездки). Свежий NAVI=1 (моложе NAVI_REARM_FRESH_MS, стрелок после него не было) не трогаем: переход уже был.
+     */
+    @Synchronized
+    private fun rearmNavi() {
+        if (!huHonda || huDesayG6S || !ROUTE_NAVI_STATUS_ENABLED) return
+        if (naviSent && !naviShownSinceRaise && clockMs() - naviRaisedAt < NAVI_REARM_FRESH_MS) {
+            naviShownSinceRaise = true
+            return
+        }
+        if (naviSent) link.sendModuleStatus(CarlifeAudio.MODULE_NAVI, 0)
+        if (link.sendModuleStatus(CarlifeAudio.MODULE_NAVI, 1)) {
+            naviSent = true
+            naviRaised()
+            log("BRIDGE CarLife MODULE_STATUS NAVI 0->1 (Honda: перевзвод приборки перед SHOW)", true)
+        }
     }
 
     /** CarLife-сессия закрыта (USB EIO / detach / Стоп). AA не трогаем; from - закрываемая ссылка, чужую не отцепляем. */
@@ -881,6 +914,7 @@ class AaBridgeCore(
                 // как MD: перед TTS шлёт MODULE_STATUS NAVI=1 и держит его
                 if (!naviSent && link.sendModuleStatus(CarlifeAudio.MODULE_NAVI, 1)) {
                     naviSent = true
+                    naviRaised()
                     log("BRIDGE CarLife MODULE_STATUS NAVI=1 (перед TTS INIT)", true)
                 }
             }
@@ -1103,6 +1137,7 @@ class AaBridgeCore(
         if (on && !naviSent) {
             if (link.sendModuleStatus(CarlifeAudio.MODULE_NAVI, 1)) {
                 naviSent = true
+                naviRaised()
                 log("BRIDGE CarLife MODULE_STATUS NAVI=1 (маршрут)", true)
             }
         } else if (!on && naviSent && !ttsNaviHeld) {
@@ -1629,6 +1664,8 @@ class AaBridgeCore(
         const val DESAY_G6S_CHANNEL = "20622116"          // STATISTIC_INFO.channel у Mazda CX-5; Vezel - 20832125, другая Mazda - 21520001
         /** Префиксы STATISTIC_INFO.channel у Honda (CarLife 1.1.0, HU_INFO пустой, BT «Honda HFT»): 2077xxxx (Civic 11, UR-V), 2083xxxx (Vezel и др.). */
         val HONDA_CHANNEL_PREFIXES = listOf("2077", "2083")
+        /** Honda: NAVI=1 моложе этого и без стрелок после него - переход 0->1 ещё свежий, перед первым SHOW не перевзводим. */
+        const val NAVI_REARM_FRESH_MS = 5000L    // первый TURN_EVENT от AA после старта маршрута приходит через ~2 с
 
         fun isHondaChannel(channel: String?) =
             channel != null && channel.length == 8 && HONDA_CHANNEL_PREFIXES.any { channel.startsWith(it) }
