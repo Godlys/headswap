@@ -161,6 +161,8 @@ class AaBridgeCore(
         private set
     @Volatile var huHyundaiCn7 = false         // ГУ Hyundai CN7 (product wp_cn7cpe_cn, h218): в режиме «Авто» музыка 32 кГц с ресэмплом 48→32
         private set
+    @Volatile var huPioneerRm56 = false        // ГУ Pioneer RM56E8B (Dongfeng DF6, h277): 4-5 Мбит/с рвут USB EIO за 25-30 с, живёт на ~1 Мбит/с и fps ≤ 15
+        private set
     @Volatile var musicRateProvider: () -> MusicRate = { MusicRate.DEFAULT }
     private var resampler: MusicResampler? = null    // null при 48000: PCM идёт как есть
     private var mediaRateLogged = MEDIA_RATE
@@ -329,6 +331,7 @@ class AaBridgeCore(
         vwIdName = false
         vwIdChannel = false
         huHyundaiCn7 = false                   // HU_INFO придёт заново в этой сессии
+        huPioneerRm56 = false                  // HU_INFO придёт заново в этой сессии
         mediaRateLogged = MEDIA_RATE
         resampler?.reset()
         if (aaVideoSeen) placeholderText = TEXT_WAIT_FRAME
@@ -516,6 +519,10 @@ class AaBridgeCore(
         if (manufacturer == VW_BT_1420_MANUFACTURER) huVwBt1420 = true
         updateVwId()
         if (product == HYUNDAI_CN7_PRODUCT) huHyundaiCn7 = true
+        if (manufacturer == PIONEER_MANUFACTURER && model == PIONEER_RM56_MODEL) {
+            if (!huPioneerRm56) log("BRIDGE ГУ Pioneer RM56E8B: потолок ${PIONEER_RM56_CEILING_BPS / 1000} кбит/с, fps ≤ $PIONEER_RM56_MAX_FPS", true)
+            huPioneerRm56 = true
+        }
     }
 
     private var vwIdName = false               // HU_INFO manufacturer = BT-имя ГУ "VW BT 1538"
@@ -1459,6 +1466,10 @@ class AaBridgeCore(
         const val VW_BT_1420_MANUFACTURER = "VW BT 1420"  // VW (Павел): HU_INFO manufacturer=model, канал 20082138
         const val VW_20082138_MANUFACTURER = "VW BT 1538"
         const val HYUNDAI_CN7_PRODUCT = "wp_cn7cpe_cn"    // HU_INFO.product Hyundai Elantra CN7 (h218): manufacturer QTI, model "sm6150_au for arm64"
+        const val PIONEER_MANUFACTURER = "Pioneer"        // HU_INFO Pioneer RM56E8B (Dongfeng DF6, h277): manufacturer="Pioneer" model="RM56E8B"
+        const val PIONEER_RM56_MODEL = "RM56E8B"
+        const val PIONEER_RM56_CEILING_BPS = 1_000_000    // 4-5 Мбит/с рвут USB за 25-30 с, 2 Мбит/с - 195 с, 800 кбит/с - 1301 с
+        const val PIONEER_RM56_MAX_FPS = 15
         const val MEDIA_RATE = 48000
         const val MEDIA_RATE_CN7 = 32000
         const val KEYFRAME_WAIT_MS = 1500L

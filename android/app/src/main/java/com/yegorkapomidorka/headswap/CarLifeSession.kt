@@ -422,13 +422,15 @@ class CarLifeSession(
             AppLog.i("видео: FRAME_RATE_CHANGE fps=$fps, настройка фиксирована на $fixed: отвечаю DONE, частоту не меняю")
             return
         }
-        val applied = maxOf(fps, Handshake.MIN_APPLIED_FPS)
+        val wanted = maxOf(fps, Handshake.MIN_APPLIED_FPS)
+        val applied = Handshake.capFps(wanted, huMaxFps())
         val old = targetFps
         targetFps = applied
         val capped = thermalThrottle.capFps(applied)
         val live = bridge.setTargetFps(capped)
+        val hu = if (applied != wanted) ", потолок ГУ $applied" else ""
         val heat = if (capped != applied) ", из-за нагрева $capped" else ""
-        AppLog.i("видео: FRAME_RATE_CHANGE fps=$fps, целевой fps $old -> $applied$heat${if (live) "" else " (транскодер ещё не создан, применится при старте)"}")
+        AppLog.i("видео: FRAME_RATE_CHANGE fps=$fps, целевой fps $old -> $applied$hu$heat${if (live) "" else " (транскодер ещё не создан, применится при старте)"}")
     }
 
     private fun onVideoInit(m: CmdMsg) {
@@ -447,7 +449,7 @@ class CarLifeSession(
         }
         // размер задаёт видео-режим (по умолчанию 1280x720 fps 30: ГУ Honda принимает и показывает целиком, проверено в машине)
         val (w, h, why) = Triple(mode.outW, mode.outH, "мост: режим ${mode.name}")
-        val fps = Handshake.chooseFps(cfg.fpsSetting, rf)
+        val fps = Handshake.chooseFps(cfg.fpsSetting, rf, huMaxFps())
         pendingW = w
         pendingH = h
         pendingFps = fps
@@ -525,7 +527,9 @@ class CarLifeSession(
                 cur.requestKeyFrame()
                 return
             }
-            val s = VideoSource(pendingW, pendingH, pendingFps, if (air) bitratePolicy.current else mode.bitrate, this)
+            // Pioneer RM56E8B (h277): и заглушка на USB не выше потолка ГУ (без setEncoderBitrate: тут держим srcLock)
+            val stubBps = if (bridge.huPioneerRm56) minOf(mode.bitrate, AaBridgeCore.PIONEER_RM56_CEILING_BPS) else mode.bitrate
+            val s = VideoSource(pendingW, pendingH, pendingFps, if (air) bitratePolicy.current else stubBps, this)
             s.banner = text
             try {
                 s.start()
@@ -618,7 +622,7 @@ class CarLifeSession(
             if (qf > maxQueueFrames) maxQueueFrames = qf
             val real = VideoQueueLimit.backlogMs(transport.queuedVideoBytes, rate)
             val sinceOverflow = lastOverflowMs.let { if (it == NEVER_MS) -1L else now - it }
-            applyVwCeiling()
+            applyHuCeilings()
             val old = bitratePolicy.current
             val bps = bitratePolicy.update(now, VideoQueueLimit.policyBacklogMs(real, sinceOverflow), rate) ?: return
             if (placeholder?.setBitrate(bps) ?: bridge.setEncoderBitrate(bps)) {
@@ -644,6 +648,27 @@ class CarLifeSession(
         AppLog.i("VW 20082138: потолок битрейта ${bitratePolicy.ceilingBps / 1000} кбит/с (лимит размера IDR)")
         if (bitratePolicy.current != old) bridge.setEncoderBitrate(bitratePolicy.current)
     }
+
+    /**
+     * Pioneer RM56E8B (h277): ГУ рвёт USB EIO за 25-30 с на 4-5 Мбит/с, на ~2 Мбит/с прожила 195 с, стабильно только на 800 кбит/с.
+     * Потолок 1 Мбит/с под флагом ГУ (HU_INFO приходит до INIT, но потолок применяется и на лету). Тепловой потолок
+     * ([BitratePolicy.thermalCapBps]) живёт отдельно и берётся через min в update(), поэтому с ним не конфликтует.
+     */
+    private fun applyPioneerCeiling() {
+        if (!bridge.huPioneerRm56) return
+        val old = bitratePolicy.current
+        if (!bitratePolicy.lowerCeiling(AaBridgeCore.PIONEER_RM56_CEILING_BPS)) return
+        AppLog.i("Pioneer RM56E8B: потолок битрейта ${bitratePolicy.ceilingBps / 1000} кбит/с")
+        if (bitratePolicy.current != old) bridge.setEncoderBitrate(bitratePolicy.current)
+    }
+
+    private fun applyHuCeilings() {
+        applyVwCeiling()
+        applyPioneerCeiling()
+    }
+
+    /** Потолок fps под ГУ (Pioneer RM56E8B: 15), null = без ограничения. */
+    private fun huMaxFps(): Int? = if (bridge.huPioneerRm56) AaBridgeCore.PIONEER_RM56_MAX_FPS else null
 
     /** Страховка VW ID: IDR > 450 КБ - потолок ×0,75 (не ниже 1,5 Мбит/с), не чаще раза в секунду; кадр уже ушёл. */
     override fun onEncodedKeyFrame(size: Int) {
@@ -769,7 +794,7 @@ class CarLifeSession(
 
     /** Транскодер моста: декодер AA (кадр режима) -> кроп -> Surface энкодера (выход режима). null, если MediaCodec не поднялся. */
     override fun createTranscoder(out: TranscodeOutput): VideoTranscoder? = try {
-        applyVwCeiling()
+        applyHuCeilings()
         AaTranscoder(
             mode.outW, mode.outH, thermalThrottle.capFps(targetFps), bitratePolicy.current, out, { AppLog.i(it, false) },
             srcWidth = mode.aaW, srcHeight = mode.aaH, crop = mode.crop,
