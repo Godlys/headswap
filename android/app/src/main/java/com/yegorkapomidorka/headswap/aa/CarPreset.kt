@@ -42,6 +42,8 @@ enum class CarPreset(val titleRes: Int, val settings: CarSettings = CarSettings(
     KIA_K3_2023(R.string.car_kia_k3_2023, KOREAN),
     KIA_SPORTAGE_ACE(R.string.car_kia_sportage_ace, KOREAN),
 
+    /** Mazda Connect 2 из Китая (channel 20622111, h238/h359): ГУ просит 1280×480. */
+    MAZDA_3_CN_2025(R.string.car_mazda_3_cn_2025, CarSettings(videoMode = VideoMode.WIDE)),
     /** Desay SV G6S: нативный экран 1728×648. */
     MAZDA_CX5_2025(R.string.car_mazda_cx5_2025, CarSettings(videoMode = VideoMode.WIDE_MID)),
     /** alps, CarLife 4.1: 1920×720 (h166). */
