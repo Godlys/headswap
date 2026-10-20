@@ -17,6 +17,7 @@ class CarPresetTest {
     @Test
     fun verifiedValues() {
         assertEquals(VideoMode.WIDE_MID, CarPreset.MAZDA_CX5_2025.settings.videoMode)
+        assertEquals(VideoMode.WIDE, CarPreset.MAZDA_3_CN_2025.settings.videoMode)
         assertEquals(VideoMode.WIDE_976, CarPreset.VW_TIGUAN_L_PRO.settings.videoMode)
         assertEquals(CarSettings(videoMode = VideoMode.WIDE_HD, fps = FpsSetting.FPS30), CarPreset.HONDA_CRV_2026.settings)
         assertEquals(CarSettings(videoMode = VideoMode.R1080, fps = FpsSetting.FPS30), CarPreset.HONDA_VEZEL_2022.settings)
