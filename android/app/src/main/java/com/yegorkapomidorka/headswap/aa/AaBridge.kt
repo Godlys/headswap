@@ -176,6 +176,8 @@ class AaBridgeCore(
         private set
     @Volatile var huHonda20772121 = false      // Honda Civic 11 (channel 20772121, h295): после камеры/меню ГУ молча сбрасывает декодер, passthrough ждёт IDR
         private set
+    @Volatile var huMazda20622111 = false      // Mazda Connect 2 из Китая (channel 20622111, h238/h359): VIDEO_DATA > ~16 КиБ вешает чтение USB
+        private set
     @Volatile var musicRateProvider: () -> MusicRate = { MusicRate.DEFAULT }
     private var resampler: MusicResampler? = null    // null при 48000: PCM идёт как есть
     private var mediaRateLogged = MEDIA_RATE
@@ -348,6 +350,7 @@ class AaBridgeCore(
         huHyundaiCn7 = false                   // HU_INFO придёт заново в этой сессии
         huPioneerRm56 = false                  // HU_INFO придёт заново в этой сессии
         huHonda20772121 = false                // HU_INFO / STATISTIC_INFO придут заново в этой сессии
+        huMazda20622111 = false                // STATISTIC_INFO придёт заново в этой сессии
         h295TouchAt = NEVER
         h295LastTrigger = NEVER
         h295LastTouchAt = NEVER
@@ -577,6 +580,10 @@ class AaBridgeCore(
     fun onHuStatistic(channel: String?) {
         if (channel == DESAY_G6S_CHANNEL) huDesayG6S = true
         if (channel == HONDA_20772121_CHANNEL) huHonda20772121 = true
+        if (channel == MAZDA_20622111_CHANNEL && !huMazda20622111) {
+            huMazda20622111 = true
+            log("BRIDGE ГУ Mazda 20622111: VIDEO_DATA режу на куски ≤ $MAZDA_20622111_MAX_VIDEO_PACKET Б, потолок ${MAZDA_20622111_CEILING_BPS / 1000} кбит/с", true)
+        }
         if (channel == VW_20082120_CHANNEL || channel == VW_CNS3_20082122_CHANNEL || channel == VW_CNS3_20082134_CHANNEL) huVw20082120 = true
         if (isHondaChannel(channel)) huHonda = true
         vwIdChannel = channel == VW_20082138_CHANNEL
@@ -1626,6 +1633,11 @@ class AaBridgeCore(
         fun isHondaChannel(channel: String?) =
             channel != null && channel.length == 8 && HONDA_CHANNEL_PREFIXES.any { channel.startsWith(it) }
         const val HONDA_20772121_CHANNEL = "20772121"     // Honda Civic 11 2023 (Китай, h295): после камеры/меню ГУ не просит IDR
+        /** Mazda Connect 2 (Китай, CarLife 1.0, HU_INFO из заглушек, h238/h359): VIDEO_DATA 16163 Б прошёл, 16518 и 19104 Б - ГУ перестала читать USB. */
+        const val MAZDA_20622111_CHANNEL = "20622111"
+        const val MAZDA_20622111_MAX_VIDEO_PACKET = 15_000
+        const val MAZDA_20622111_ART_BYTES = 12_000          // обложка в MEDIA_INFO: весь пакет должен остаться < 15000 Б
+        const val MAZDA_20622111_CEILING_BPS = 1_500_000  // IDR поменьше на случай, если ГУ не склеивает куски
         const val VW_20082120_CHANNEL = "20082120"        // VW, protocol 1.0, versionName="RADIO" (h93)
         const val VW_CNS3_20082122_CHANNEL = "20082122"   // VW CNS3 (Tharu и др.): рвёт USB через ~5,6 с PAUSE без heartbeat (h222)
         const val VW_CNS3_20082134_CHANNEL = "20082134"   // VW CNS3 Tiguan L Pro: рвёт CarLife по Wi-Fi через ~5,1-5,7 с PAUSE (h224)
