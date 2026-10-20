@@ -269,6 +269,7 @@ class AaBridgeCore(
         navHold = { on -> routeNavi(on) },
         musicState = { on -> musicByState(on) },
         navRearm = { rearmNavi() },
+        emptyRoadText = { huHonda },
     )
 
     val metaRelay: MetaRelay get() = meta

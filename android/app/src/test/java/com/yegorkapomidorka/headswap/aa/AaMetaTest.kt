@@ -1338,6 +1338,31 @@ class AaMetaTest {
 
 
     @Test
+    fun hondaEmptyRoadGetsManeuverText() {
+        // Google Maps на выездах со двора шлёт legacy 0x8004 с road="": Honda - подпись манёвра, остальное как прислал AA
+        for (honda in listOf(true, false)) for (road in listOf("", "  ", "ул. Мадояна")) {
+            val r = Rig()
+            r.link.huResubscribes = honda
+            r.core.onCarlifeSubscribe(listOf(0), true)
+            r.start()
+            if (honda) r.core.onHuStatistic("20832117")
+            r.core.onNavStatus(1)
+            r.pumpSubscribe()
+            r.core.onNavTurn(AaMeta.parseLegacyTurn(legacyTurn(4, 2, road))!!)
+            r.core.onNavDistance(AaMeta.parseLegacyDistance(legacyDistance(50, 10))!!)
+            r.pumpSubscribe()
+            with(r.link.turns.last()) {
+                if (honda && road.isBlank()) assertEquals("Honda, пустая улица «$road»", AaMeta.noRoadName(nextTurn), roadName)
+                else assertEquals("honda=$honda: улица как прислал AA", road, roadName)
+            }
+        }
+        assertEquals("Направо", AaMeta.noRoadName(AaMeta.T_RIGHT))
+        assertEquals("Налево", AaMeta.noRoadName(AaMeta.T_LEFT_FRONT))
+        assertEquals("Правее", AaMeta.noRoadName(AaMeta.T_BRANCH_RIGHT))
+        for (code in 0..40) assertTrue("код $code: не длиннее 16 Б", AaMeta.noRoadName(code).toByteArray().size <= 16)
+    }
+
+    @Test
     fun hondaShowWaitsForSubscribe() {
         // 17.10 16:18:02: NAVI=1 и манёвр одной пачкой - SHOW уходил раньше SUBSCRIBE_START
         val r = Rig()

@@ -169,6 +169,23 @@ object AaMeta {
     /** Конец маршрута, как Baidu onNaviStateChange(false): nextTurn 24, roadName «目的地». */
     const val END_ROAD = "目的地"
 
+    /**
+     * Honda: подпись манёвра, когда AA прислал пустую улицу (Google Maps на выездах со двора, legacy 0x8004 road="").
+     * Baidu в этом случае шлёт «无名路», Яндекс сам подставляет «Поверните налево». Тексты не длиннее 16 Б UTF-8,
+     * их без обрезки пропускает HondaClusterRoad.
+     */
+    fun noRoadName(nextTurn: Int): String = when (nextTurn) {
+        T_FRONT, T_BRANCH_CENTER -> "Прямо"
+        T_RIGHT_FRONT, T_RIGHT, T_RIGHT_BACK -> "Направо"
+        T_BACK -> "Разворот"
+        T_LEFT_FRONT, T_LEFT, T_LEFT_BACK -> "Налево"
+        T_RING, T_RING_OUT -> "Круг"
+        T_LEFT_SIDE, T_LEFT_SIDE_MAIN, T_BRANCH_LEFT_STRAIGHT, T_LEFT_SIDE_IC, T_BRANCH_LEFT -> "Левее"
+        T_RIGHT_SIDE, T_RIGHT_SIDE_MAIN, T_BRANCH_RIGHT_STRAIGHT, T_RIGHT_SIDE_IC, T_BRANCH_RIGHT -> "Правее"
+        T_DEST -> "Финиш"
+        else -> "Вперёд"
+    }
+
     fun stateName(s: Int?) = when (s) {
         1 -> "STOPPED"
         2 -> "PLAYING"
@@ -416,6 +433,8 @@ class MetaRelay(
     private val musicState: (Boolean) -> Unit,
     /** Перед первым SHOW и повторным после тишины: перевзвести MODULE_STATUS NAVI 0->1, если ГУ этого требует (Honda). */
     private val navRearm: () -> Unit = {},
+    /** Пустую улицу заменять подписью манёвра (AaMeta.noRoadName) - Honda. */
+    private val emptyRoadText: () -> Boolean = { false },
 ) {
     // подписки ГУ (CARLIFE_DATA_SUBSCRIBE_START/STOP): музыка по умолчанию включена, навигация - только по START moduleID=0
     var musicSubscribed = true
@@ -709,9 +728,10 @@ class MetaRelay(
         // h243: служебное сообщение машины или смена режима табло гасят подсказку, ГУ об этом не сообщает -
         // периодический SHOW возвращает её в пределах NAVI_SHOW_EVERY_MS
         val periodic = shown && now - lastShowAt >= NAVI_SHOW_EVERY_MS
+        val road = if (t.road.isBlank() && emptyRoadText()) AaMeta.noRoadName(t.nextTurn) else t.road
         val info = NaviTurnInfo(
             // h137: погасшая подсказка возвращается только по SHOW, поэтому первый пакет каждого манёвра - SHOW
-            if (shown && !reshow && !turnDirty && !periodic) ACTION_UPDATE else ACTION_SHOW, t.nextTurn, t.road, maxOf(total, d.meters), d.meters, d.timeSeconds ?: 0
+            if (shown && !reshow && !turnDirty && !periodic) ACTION_UPDATE else ACTION_SHOW, t.nextTurn, road, maxOf(total, d.meters), d.meters, d.timeSeconds ?: 0
         )
         val sig = "${info.action}|${info.nextTurn}|${info.roadName}|${info.totalDistance}|${info.remainDistance}|${info.timeSeconds}"
         // на стоянке AA шлёт одно и то же: повторяем раз в NAVI_KEEPALIVE_MS, чтобы ГУ не решила, что маршрута нет
