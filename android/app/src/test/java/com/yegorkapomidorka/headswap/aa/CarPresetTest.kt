@@ -19,12 +19,20 @@ class CarPresetTest {
         assertEquals(VideoMode.WIDE_MID, CarPreset.MAZDA_CX5_2025.settings.videoMode)
         assertEquals(VideoMode.WIDE, CarPreset.MAZDA_3_CN_2025.settings.videoMode)
         assertEquals(VideoMode.WIDE_976, CarPreset.VW_TIGUAN_L_PRO.settings.videoMode)
-        assertEquals(CarSettings(videoMode = VideoMode.WIDE_HD, fps = FpsSetting.FPS30), CarPreset.HONDA_CRV_2026.settings)
-        assertEquals(CarSettings(videoMode = VideoMode.R1080, fps = FpsSetting.FPS30), CarPreset.HONDA_VEZEL_2022.settings)
+        assertEquals(CarSettings(videoMode = VideoMode.WIDE_HD), CarPreset.HONDA_CRV_2026.settings)
+        assertEquals(CarSettings(videoMode = VideoMode.R1080), CarPreset.HONDA_VEZEL_2022.settings)
         assertEquals(CarSettings(), CarPreset.VW_THARU_XR.settings)
-        assertEquals(CarSettings(fps = FpsSetting.FPS15, musicRate = MusicRate.HZ32), CarPreset.KIA_K3_2023.settings)
+        assertEquals(CarSettings(musicRate = MusicRate.HZ32), CarPreset.KIA_K3_2023.settings)
         assertEquals(VideoMode.WIDE, CarPreset.HYUNDAI_IX35_2021.settings.videoMode)
         assertEquals(MusicRate.HZ32, CarPreset.HYUNDAI_IX35_2021.settings.musicRate)
+    }
+
+    @Test
+    fun allPresetsTranscodeAt15Fps() {
+        for (p in CarPreset.values()) {
+            assertEquals(p.name, true, p.settings.transcode)
+            assertEquals(p.name, FpsSetting.FPS15, p.settings.fps)
+        }
     }
 
     @Test
