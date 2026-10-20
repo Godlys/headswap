@@ -44,6 +44,13 @@ class BitratePolicy(ceilingBps: Int, floorBps: Int = FLOOR_BPS, val profile: Bit
     @Volatile var ceilingBps = ceilingBps
         private set
 
+    /**
+     * Потолок по нагреву телефона, бит/с (Int.MAX_VALUE = нет). В отличие от [ceilingBps] возвращается обратно, когда
+     * телефон остыл: подъём дальше идёт обычными ступенями.
+     */
+    @Volatile var thermalCapBps = Int.MAX_VALUE
+        private set
+
     /** Битрейт старта сессии: потолок (USB) или его доля (воздух). */
     val startBps = max(this.floorBps, (ceilingBps * profile.startFraction).toInt())
 
@@ -111,8 +118,9 @@ class BitratePolicy(ceilingBps: Int, floorBps: Int = FLOOR_BPS, val profile: Bit
             }
         }
 
-        if (calmSinceMs != NEVER && nowMs - calmSinceMs >= profile.upWaitMs && nowMs >= upNotBeforeMs && current < ceilingBps) {
-            val cap = if (nowMs - cleanSinceMs >= profile.aboveStartAfterMs) ceilingBps else min(startBps, ceilingBps)
+        val limit = min(ceilingBps, thermalCapBps)
+        if (calmSinceMs != NEVER && nowMs - calmSinceMs >= profile.upWaitMs && nowMs >= upNotBeforeMs && current < limit) {
+            val cap = if (nowMs - cleanSinceMs >= profile.aboveStartAfterMs) limit else min(startBps, limit)
             if (current >= cap) return null
             val target = min(cap, max(current + 1, (current * profile.upFactor).toInt()))
             lastReason = "бэклог < %d мс уже %d с".format(UP_BACKLOG_MS, (nowMs - calmSinceMs) / 1000)
@@ -138,6 +146,20 @@ class BitratePolicy(ceilingBps: Int, floorBps: Int = FLOOR_BPS, val profile: Bit
             lastReason = "потолок снижен до %d кбит/с".format(c / 1000)
             if (c < minBps) minBps = c
         }
+        return true
+    }
+
+    /**
+     * Потолок по нагреву (не ниже [floorBps]; Int.MAX_VALUE снимает его). [current] выше потолка срезается сразу.
+     * true = [current] изменился (вызывающий применяет его к энкодеру).
+     */
+    @Synchronized
+    fun setThermalCap(capBps: Int): Boolean {
+        thermalCapBps = if (capBps == Int.MAX_VALUE) capBps else max(floorBps, capBps)
+        if (current <= thermalCapBps) return false
+        current = thermalCapBps
+        lastReason = "нагрев, потолок %d кбит/с".format(thermalCapBps / 1000)
+        if (current < minBps) minBps = current
         return true
     }
 

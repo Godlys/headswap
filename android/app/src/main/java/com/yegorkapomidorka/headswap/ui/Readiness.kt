@@ -13,6 +13,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import com.yegorkapomidorka.headswap.AppLog
 import com.yegorkapomidorka.headswap.R
+import com.yegorkapomidorka.headswap.aa.AaPrefs
 import com.yegorkapomidorka.headswap.autosrv.AutoServer
 
 /** Всё, что надо включить перед поездкой: порядок, тексты, автоопределение «уже сделано». Общее для онбординга и чеклиста. */
@@ -26,6 +27,9 @@ enum class StepId(val key: String) {
     BLUETOOTH("bluetooth"),
     LOCATION("location"),
     FIRST("first"),
+
+    /** Выбор машины: проверенные сообществом настройки (CarPreset). Последний шаг; опытные пропускают. */
+    CAR("car"),
 }
 
 /** Тексты шага - id строковых ресурсов (hint/extra могут отсутствовать); в строку превращает UI через ctx.getString, тело - через [bodyText]. */
@@ -98,6 +102,12 @@ object Readiness {
             R.string.step_first_hint,
             R.string.step_first_primary, null, R.string.onb_back, R.string.step_first_title,
         ),
+        StepInfo(
+            StepId.CAR, R.string.step_car_title,
+            R.string.step_car_body,
+            null,
+            R.string.car_apply, null, R.string.onb_skip, R.string.step_car_short,
+        ),
     )
 
     fun info(id: StepId): StepInfo = STEPS.first { it.id == id }
@@ -114,6 +124,7 @@ object Readiness {
             (Build.VERSION.SDK_INT < 33 || ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
         StepId.MIC -> ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         StepId.BACKGROUND -> batteryOk(ctx)
+        StepId.CAR -> if (AaPrefs(ctx).carPreset != null) true else null      // пропуск - ручная отметка
         StepId.LOCATION -> try {
             ctx.getSystemService(LocationManager::class.java).isLocationEnabled
         } catch (_: Exception) {
