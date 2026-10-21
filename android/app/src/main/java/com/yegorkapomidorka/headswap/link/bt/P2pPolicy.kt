@@ -8,10 +8,12 @@ object P2pPolicy {
     /**
      * Новый TARGET_INFO (ГУ шлёт его на каждое подключение Bluetooth): в группе уже - пропускаем, IP переотдаётся по
      * IP_REQUEST; попытка идёт, но не вошли (BUSY, пир не нашёлся, Wi-Fi включили позже, ГУ сменила имя) - начинаем
-     * заново с новыми реквизитами (h126).
+     * заново с новыми реквизитами (h126). Те же реквизиты, а попытке меньше [freshMs] - не трогаем: rejoin спрашивает
+     * TARGET_INFO раз в 5-10 с, и рестарт на каждый ответ рвал поиск и висящее приглашение (h211, Равиль 21.10).
      */
-    fun onTarget(active: Boolean, joined: Boolean): P2pOnTarget = when {
+    fun onTarget(active: Boolean, joined: Boolean, same: Boolean = false, ageMs: Long = Long.MAX_VALUE, freshMs: Long = 30_000L): P2pOnTarget = when {
         joined -> P2pOnTarget.SKIP
+        active && same && ageMs < freshMs -> P2pOnTarget.SKIP
         active -> P2pOnTarget.RESTART
         else -> P2pOnTarget.START
     }
