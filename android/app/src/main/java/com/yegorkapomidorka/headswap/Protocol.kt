@@ -342,6 +342,10 @@ class DataReassembler(private val maxLen: Int = 64 * 1024) {
     var assembled = 0
         private set
 
+    /** Размер первого куска последнего собранного сообщения (для лога). */
+    var firstFragment = 0
+        private set
+
     fun feed(inner: ByteArray): ByteArray? {
         val b = buf
         if (b != null) {
@@ -360,6 +364,7 @@ class DataReassembler(private val maxLen: Int = 64 * 1024) {
         System.arraycopy(inner, 0, nb, 0, inner.size)
         buf = nb
         have = inner.size
+        firstFragment = inner.size
         return null
     }
 }

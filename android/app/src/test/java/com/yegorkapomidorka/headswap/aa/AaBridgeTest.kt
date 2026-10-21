@@ -976,6 +976,57 @@ class AaBridgeAudioTest {
     }
 
     @Test
+    fun vwCns2DelphiRoutesAssistantSpeechToVrDuringVoiceSession() {
+        core.onHuStatistic("20082114")                                   // h425: ответ ассистента в TTS не слышно
+        core.micModeProvider = { MicMode.CAR }
+        core.onCarlifeStart()
+        core.onVoiceSession(1)
+        val s = pcm(2048, 3)
+        core.onAudioStart(SPEECH)
+        core.onAudioData(SPEECH, s, 1)
+        core.onAudioData(SPEECH, s, 2)
+        core.onAudioStop(SPEECH)
+        val vr = link.audio.filter { it.chan == 5 }
+        assertEquals(listOf(0x50002, 0x50003, 0x50003, 0x50004), vr.map { it.type })
+        assertEquals("08807d10011810", hexs(vr[0].payload))             // {16000, 1, 16}
+        assertArrayEquals(s, vr[1].payload)
+        assertTrue(link.audio.none { it.chan == 4 })
+    }
+
+    @Test
+    fun speechInVoiceSessionStaysOnTtsWithoutDelphiOrWithPhoneMic() {
+        core.onCarlifeStart()
+        core.onVoiceSession(1)
+        core.onAudioData(SPEECH, pcm(2048), 1)
+        assertTrue(link.audio.none { it.chan == 5 })
+        assertEquals(0x40001, link.audio.first { it.chan == 4 }.type)
+
+        val l2 = FakeLink()
+        val c2 = AaBridgeCore({ l, _ -> logs.add(l) }, audioSchedule = timers::schedule).also { it.attach(l2) }
+        c2.onHuStatistic("20082114")
+        c2.micModeProvider = { MicMode.PHONE }
+        c2.onCarlifeStart()
+        c2.onVoiceSession(1)
+        c2.onAudioData(SPEECH, pcm(2048), 1)
+        assertTrue(l2.audio.none { it.chan == 5 })
+    }
+
+    @Test
+    fun voiceKeyDoubleFromHuIsDebounced() {
+        var now = 1_000L
+        val c = AaBridgeCore({ l, _ -> logs.add(l) }, clockMs = { now })
+        val peer = FakePeer()
+        c.peer = peer
+        c.onCarlifeHardKey(0x21)                                         // h425: Delphi шлёт VR_START дважды за 1-2 мс
+        now += 2
+        c.onCarlifeHardKey(0x21)
+        assertEquals(listOf(AaBridgeCore.KEYCODE_SEARCH), peer.keys.toList())
+        now += 600
+        c.onCarlifeHardKey(0x21)
+        assertEquals(listOf(AaBridgeCore.KEYCODE_SEARCH, AaBridgeCore.KEYCODE_SEARCH), peer.keys.toList())
+    }
+
+    @Test
     fun voiceStartPausesMediaStopsForwardingAndBurstExitsOnce() {
         core.onCarlifeStart()
         core.onAudioData(MEDIA, pcm(100), 1)

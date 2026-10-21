@@ -38,6 +38,12 @@ object CarlifeAudio {
     const val TTS_STOP = 0x00040002
     const val TTS_DATA = 0x00040003
 
+    /** Канал VR MD->HU: звук ответа голосового помощника (docs/carlife-protocol.md §7.2), INIT как у MEDIA. */
+    const val CH_VR = 5
+    const val VR_INIT = 0x00050002
+    const val VR_DATA = 0x00050003
+    const val VR_STOP = 0x00050004
+
     /** moduleID в MODULE_STATUS (ModuleStatusManage): 2 NAVI (перед TTS), 3 MUSIC (MEDIA играет). */
     const val MODULE_NAVI = 2
     const val MODULE_MUSIC = 3
