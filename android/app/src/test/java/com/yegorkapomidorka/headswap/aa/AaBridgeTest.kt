@@ -984,12 +984,17 @@ class AaBridgeAudioTest {
         val s = pcm(2048, 3)
         core.onAudioStart(SPEECH)
         core.onAudioData(SPEECH, s, 1)
+        core.onAudioStop(SPEECH)
+        timers.advance(300)                                              // пауза между фразами: VR не переоткрываем
+        core.onAudioStart(SPEECH)
         core.onAudioData(SPEECH, s, 2)
         core.onAudioStop(SPEECH)
+        timers.advance(1500)
         val vr = link.audio.filter { it.chan == 5 }
-        assertEquals(listOf(0x50002, 0x50003, 0x50003, 0x50004), vr.map { it.type })
         assertEquals("08807d10011810", hexs(vr[0].payload))             // {16000, 1, 16}
-        assertArrayEquals(s, vr[1].payload)
+        assertEquals(listOf(0x50002) + List(6) { 0x50003 } + 0x50004, vr.map { it.type })
+        assertEquals(listOf(7, 4096, 4096, 4096, 512, 2048, 2048, 0), vr.map { it.payload.size })  // 400 мс тишины после INIT
+        assertArrayEquals(s, vr[5].payload)
         assertTrue(link.audio.none { it.chan == 4 })
     }
 
