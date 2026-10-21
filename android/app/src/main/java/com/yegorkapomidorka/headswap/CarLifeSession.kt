@@ -83,6 +83,7 @@ class CarLifeSession(
     @Volatile private var lastOverflowMs = NEVER_MS
     private var passthroughBitrateLogged = false
     private var spsFixLogged = false
+    private var splitLogged = false
     private val closed = AtomicBoolean(false)
     private val sched: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "cl-sched") }
     private val metaExec = Executors.newSingleThreadExecutor { r -> Thread(r, "cl-meta").also { it.isDaemon = true } }
@@ -539,8 +540,12 @@ class CarLifeSession(
                 cur.requestKeyFrame()
                 return
             }
-            // Pioneer RM56E8B (h277): и заглушка на USB не выше потолка ГУ (без setEncoderBitrate: тут держим srcLock)
-            val stubBps = if (bridge.huPioneerRm56) minOf(mode.bitrate, AaBridgeCore.PIONEER_RM56_CEILING_BPS) else mode.bitrate
+            // Pioneer RM56E8B (h277), Mazda 20622111 (h359): и заглушка на USB не выше потолка ГУ (без setEncoderBitrate: тут держим srcLock)
+            val stubBps = when {
+                bridge.huPioneerRm56 -> minOf(mode.bitrate, AaBridgeCore.PIONEER_RM56_CEILING_BPS)
+                bridge.huMazda20622111 -> minOf(mode.bitrate, AaBridgeCore.MAZDA_20622111_CEILING_BPS)
+                else -> mode.bitrate
+            }
             val s = VideoSource(pendingW, pendingH, pendingFps, if (air) bitratePolicy.current else stubBps, this)
             s.banner = text
             try {
@@ -559,7 +564,7 @@ class CarLifeSession(
         synchronized(videoLock) {
             if (videoOverflow()) return false
             lastVideoTx = SystemClock.elapsedRealtime()
-            send(Ch.VIDEO, Wire.dataInner(Msg.VIDEO_DATA, unixSeconds(), withFixedSps(payload)))
+            sendVideoData(withFixedSps(payload))
             return true
         }
     }
@@ -573,8 +578,32 @@ class CarLifeSession(
             // под тем же замком, что и onFrame заглушки: после AA-IDR ни один её кадр уже не уйдёт
             acceptEncoder = false
             lastVideoTx = SystemClock.elapsedRealtime()
-            send(Ch.VIDEO, Wire.dataInner(Msg.VIDEO_DATA, unixSeconds(), withFixedSps(payload)))
+            sendVideoData(withFixedSps(payload))
             return true
+        }
+    }
+
+    /**
+     * Mazda 20622111 (h238/h359): на VIDEO_DATA больше ~16 КиБ ГУ перестаёт читать USB целиком. Кадр режется на куски
+     * по [AaBridgeCore.MAZDA_20622111_MAX_VIDEO_PACKET] байт, каждый отдельным VIDEO_DATA подряд (расчёт на то, что ГУ
+     * склеивает поток перед декодером). Остальные ГУ получают кадр одним пакетом, как раньше.
+     */
+    private fun sendVideoData(data: ByteArray) {
+        val max = AaBridgeCore.MAZDA_20622111_MAX_VIDEO_PACKET
+        if (!bridge.huMazda20622111 || data.size <= max) {
+            send(Ch.VIDEO, Wire.dataInner(Msg.VIDEO_DATA, unixSeconds(), data))
+            return
+        }
+        if (!splitLogged) {
+            splitLogged = true
+            AppLog.i("видео: Mazda 20622111, кадр ${data.size} Б режу на ${(data.size + max - 1) / max} VIDEO_DATA по ≤ $max Б")
+        }
+        val ts = unixSeconds()
+        var off = 0
+        while (off < data.size) {
+            val end = minOf(off + max, data.size)
+            send(Ch.VIDEO, Wire.dataInner(Msg.VIDEO_DATA, ts, data.copyOfRange(off, end)))
+            off = end
         }
     }
 
@@ -674,9 +703,19 @@ class CarLifeSession(
         if (bitratePolicy.current != old) bridge.setEncoderBitrate(bitratePolicy.current)
     }
 
+    /** Mazda 20622111 (h238/h359): потолок 1,5 Мбит/с, чтобы IDR реже вылезали за лимит пакета ГУ. */
+    private fun applyMazda20622111Ceiling() {
+        if (!bridge.huMazda20622111) return
+        val old = bitratePolicy.current
+        if (!bitratePolicy.lowerCeiling(AaBridgeCore.MAZDA_20622111_CEILING_BPS)) return
+        AppLog.i("Mazda 20622111: потолок битрейта ${bitratePolicy.ceilingBps / 1000} кбит/с")
+        if (bitratePolicy.current != old) bridge.setEncoderBitrate(bitratePolicy.current)
+    }
+
     private fun applyHuCeilings() {
         applyVwCeiling()
         applyPioneerCeiling()
+        applyMazda20622111Ceiling()
     }
 
     /** Потолок fps под ГУ (Pioneer RM56E8B: 15), null = без ограничения. */
@@ -775,7 +814,9 @@ class CarLifeSession(
                 art.contentEquals(lastArtSrc) -> lastArtJpeg
                 else -> {
                     val t = SystemClock.elapsedRealtime()
-                    val j = MetaImages.albumJpeg(art) ?: ByteArray(0)
+                    // Mazda 20622111 (h359): пакет > ~16 КиБ вешает USB, обложка 24 КБ убила сессию через 3 с после картинки
+                    val limit = if (bridge.huMazda20622111) AaBridgeCore.MAZDA_20622111_ART_BYTES else MetaImages.MAX_BYTES
+                    val j = MetaImages.albumJpeg(art, limit) ?: ByteArray(0)
                     AppLog.i("метаданные: обложка ${PbText.blob(art)} -> ${PbText.blob(j)} за ${SystemClock.elapsedRealtime() - t} мс", ui = false)
                     lastArtSrc = art
                     lastArtJpeg = j
@@ -903,6 +944,11 @@ class CarLifeSession(
 
     private fun send(chan: Int, inner: ByteArray) {
         if (closed.get()) return
+        if (bridge.huMazda20622111 && inner.size > AaBridgeCore.MAZDA_20622111_MAX_VIDEO_PACKET + 12) {
+            // страховка h359: VIDEO_DATA уже нарезан, всё прочее больше лимита ГУ не шлём - иначе ГУ перестаёт читать USB
+            AppLog.i("Mazda 20622111: пакет ch$chan ${inner.size} Б больше лимита ГУ, не отправляю")
+            return
+        }
         transport.send(chan, inner)
     }
 
@@ -987,7 +1033,7 @@ class CarLifeSession(
             csdPending = false
         }
         lastVideoTx = SystemClock.elapsedRealtime()
-        send(Ch.VIDEO, Wire.dataInner(Msg.VIDEO_DATA, unixSeconds(), withFixedSps(payload)))
+        sendVideoData(withFixedSps(payload))
     }
 
     override fun onError(msg: String, t: Throwable?) {

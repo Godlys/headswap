@@ -169,6 +169,23 @@ object AaMeta {
     /** Конец маршрута, как Baidu onNaviStateChange(false): nextTurn 24, roadName «目的地». */
     const val END_ROAD = "目的地"
 
+    /**
+     * Honda: подпись манёвра, когда AA прислал пустую улицу (Google Maps на выездах со двора, legacy 0x8004 road="").
+     * Baidu в этом случае шлёт «无名路», Яндекс сам подставляет «Поверните налево». Тексты не длиннее 16 Б UTF-8,
+     * их без обрезки пропускает HondaClusterRoad.
+     */
+    fun noRoadName(nextTurn: Int): String = when (nextTurn) {
+        T_FRONT, T_BRANCH_CENTER -> "Прямо"
+        T_RIGHT_FRONT, T_RIGHT, T_RIGHT_BACK -> "Направо"
+        T_BACK -> "Разворот"
+        T_LEFT_FRONT, T_LEFT, T_LEFT_BACK -> "Налево"
+        T_RING, T_RING_OUT -> "Круг"
+        T_LEFT_SIDE, T_LEFT_SIDE_MAIN, T_BRANCH_LEFT_STRAIGHT, T_LEFT_SIDE_IC, T_BRANCH_LEFT -> "Левее"
+        T_RIGHT_SIDE, T_RIGHT_SIDE_MAIN, T_BRANCH_RIGHT_STRAIGHT, T_RIGHT_SIDE_IC, T_BRANCH_RIGHT -> "Правее"
+        T_DEST -> "Финиш"
+        else -> "Вперёд"
+    }
+
     fun stateName(s: Int?) = when (s) {
         1 -> "STOPPED"
         2 -> "PLAYING"
@@ -414,6 +431,10 @@ class MetaRelay(
     private val ready: () -> Boolean,
     private val navHold: (Boolean) -> Unit,
     private val musicState: (Boolean) -> Unit,
+    /** Перед первым SHOW и повторным после тишины: перевзвести MODULE_STATUS NAVI 0->1, если ГУ этого требует (Honda). */
+    private val navRearm: () -> Unit = {},
+    /** Пустую улицу заменять подписью манёвра (AaMeta.noRoadName) - Honda. */
+    private val emptyRoadText: () -> Boolean = { false },
 ) {
     // подписки ГУ (CARLIFE_DATA_SUBSCRIBE_START/STOP): музыка по умолчанию включена, навигация - только по START moduleID=0
     var musicSubscribed = true
@@ -443,11 +464,14 @@ class MetaRelay(
     private var shown = false
     private var turnDirty = false
     private var lastTurnAt = NEVER
+    private var lastShowAt = NEVER
     private var lastSent: String? = null
     private var routeEndedAt = NEVER
     private var navNewSeen = false             // в этой AA-сессии были 0x8006/0x8007
     private var legacySeen = false
     private var legacyIgnoredLogged = false
+    private var awaitSubAt = NEVER             // Honda: после нашего NAVI 0->1 стрелки копим до SUBSCRIBE_START от ГУ
+    private var heldTurns = 0
 
     /** Новая CarLife-сессия: подписки по умолчанию, на ГУ ещё ничего не показано. */
     fun onAttach() {
@@ -455,6 +479,7 @@ class MetaRelay(
         navSubscribed = false
         shown = false
         lastSent = null
+        awaitSubAt = NEVER
         lastProgressMs = null
         lastProgressAt = NEVER
     }
@@ -463,6 +488,7 @@ class MetaRelay(
     fun onCarlifeStart() {
         shown = false
         lastSent = null
+        awaitSubAt = NEVER
         replayMusic("CarLife START")
         if (routeActive) {
             navHold(true)
@@ -476,10 +502,19 @@ class MetaRelay(
             SUB_NAVI -> {
                 navSubscribed = on
                 log("META подписка навигации: ${if (on) "START, шлю NAVI_NEXT_TURN_INFO" else "STOP"}", true)
+                if (on && awaitSubAt != NEVER) {
+                    log("META ГУ подписалась через ${clockMs() - awaitSubAt} мс после NAVI=1, придержано стрелок: $heldTurns", true)
+                    awaitSubAt = NEVER
+                }
                 // до CarLife START не шлём: на START всё переотправится (onCarlifeStart)
                 if (on && routeActive && ready()) {
+                    // ГУ (Honda) подписывается заново после каждого NAVI=1 и стрелку берёт только из SHOW после подписки.
+                    // Honda Breeze 2026-10-17 16:15/16:18: SHOW ушёл до SUBSCRIBE_START, дальше только UPDATE -
+                    // на HUD одна дистанция без стрелки, приборка пустая до конца маршрута.
+                    shown = false
+                    lastSent = null
                     navHold(true)
-                    emitTurn(force = true, why = "SUBSCRIBE_START")
+                    emitTurn(force = true, why = "SUBSCRIBE_START", rearm = false)
                 }
             }
             SUB_MUSIC -> {
@@ -571,6 +606,15 @@ class MetaRelay(
     fun onNavCluster(start: Boolean) {
         log("META навигация: instrument cluster ${if (start) "START" else "STOP"}", true)
         if (!start) endRoute("cluster STOP")
+    }
+
+    /**
+     * Honda: ядро только что подняло MODULE_STATUS NAVI=1 - ГУ ответит SUBSCRIBE_START и стрелку возьмёт только из SHOW
+     * после него. До подписки (или SUB_WAIT_MS) стрелки не шлём, копим: turn/remain держат последнее, уйдёт оно.
+     */
+    fun awaitSubscribe() {
+        awaitSubAt = clockMs()
+        heldTurns = 0
     }
 
     fun onNavStatus(status: Int) {
@@ -671,7 +715,8 @@ class MetaRelay(
         navHold(false)
     }
 
-    private fun emitTurn(force: Boolean, why: String) {
+    /** rearm=false: SHOW в ответ на SUBSCRIBE_START - подписка и есть ответ ГУ на 0->1, иначе перевзвод зациклится. */
+    private fun emitTurn(force: Boolean, why: String, rearm: Boolean = true) {
         val t = turn ?: return
         val d = remain ?: return                    // без дистанции не шлём: на ГУ было бы «0 м»
         if (!ready() || !navSubscribed) return
@@ -680,16 +725,35 @@ class MetaRelay(
         if (!force && !turnDirty && idle < TURN_MIN_MS) return
         // h137 (Honda Civic, пустой HU_INFO): после ~40 с без пакетов приборка гасит подсказку и на UPDATE не оживает
         val reshow = shown && idle >= NAVI_RESHOW_MS
+        // h243: служебное сообщение машины или смена режима табло гасят подсказку, ГУ об этом не сообщает -
+        // периодический SHOW возвращает её в пределах NAVI_SHOW_EVERY_MS
+        val periodic = shown && now - lastShowAt >= NAVI_SHOW_EVERY_MS
+        val road = if (t.road.isBlank() && emptyRoadText()) AaMeta.noRoadName(t.nextTurn) else t.road
         val info = NaviTurnInfo(
-            if (shown && !reshow) ACTION_UPDATE else ACTION_SHOW, t.nextTurn, t.road, maxOf(total, d.meters), d.meters, d.timeSeconds ?: 0
+            // h137: погасшая подсказка возвращается только по SHOW, поэтому первый пакет каждого манёвра - SHOW
+            if (shown && !reshow && !turnDirty && !periodic) ACTION_UPDATE else ACTION_SHOW, t.nextTurn, road, maxOf(total, d.meters), d.meters, d.timeSeconds ?: 0
         )
         val sig = "${info.action}|${info.nextTurn}|${info.roadName}|${info.totalDistance}|${info.remainDistance}|${info.timeSeconds}"
         // на стоянке AA шлёт одно и то же: повторяем раз в NAVI_KEEPALIVE_MS, чтобы ГУ не решила, что маршрута нет
         val keepalive = sig == lastSent
         if (keepalive && idle < NAVI_KEEPALIVE_MS) return
+        if (awaitSubAt != NEVER && now - awaitSubAt >= SUB_WAIT_MS) {
+            log("META SUBSCRIBE_START от ГУ не пришёл за ${now - awaitSubAt} мс, шлю без него (придержано $heldTurns)", true)
+            awaitSubAt = NEVER
+        }
+        // Honda: перевзвод NAVI 0->1 только перед первым SHOW и повторным после тишины (не на SHOW манёвра и периодический)
+        if (awaitSubAt == NEVER && info.action == ACTION_SHOW && rearm && (!shown || reshow)) navRearm()   // может поставить ожидание
+        if (awaitSubAt != NEVER) {
+            if (heldTurns++ == 0) log("META стрелку придерживаю: жду SUBSCRIBE_START от ГУ ($why)", true)
+            return
+        }
         if (link().sendNaviTurn(info)) {
             val loud = !shown || turnDirty || reshow
-            val tag = if (reshow) "$why, повторный показ после ${idle / 1000} с" else if (keepalive) "$why, keepalive" else why
+            val tag = if (reshow) "$why, повторный показ после ${idle / 1000} с"
+                else if (keepalive) "$why, keepalive"
+                else if (periodic && !turnDirty) "$why, периодический SHOW"
+                else why
+            if (info.action == ACTION_SHOW) lastShowAt = now
             shown = true
             turnDirty = false
             lastTurnAt = now
@@ -736,8 +800,12 @@ class MetaRelay(
         const val NAVI_KEEPALIVE_MS = 5000L
         /** Пауза дольше этой: следующий пакет снова SHOW, ГУ могла уже убрать подсказку. */
         const val NAVI_RESHOW_MS = 10_000L
+        /** Honda: сколько ждём SUBSCRIBE_START после NAVI=1 (в логах 14-670 мс). Проверяется на следующем событии AA (~1 с). */
+        const val SUB_WAIT_MS = 1500L
         /** Рост дистанции при том же ключе манёвра: это уже следующий такой же поворот (шаг AA - 10 м). */
         const val NEW_TURN_JUMP_M = 40
+        /** SHOW не реже этого, пока маршрут активен: приборка могла погасить подсказку сама (h243, h137). */
+        const val NAVI_SHOW_EVERY_MS = 10_000L
 
         /** Запоздалые манёвр/дистанция после конца маршрута не стартуют его заново в этом окне. */
         const val TAIL_MS = 5000L

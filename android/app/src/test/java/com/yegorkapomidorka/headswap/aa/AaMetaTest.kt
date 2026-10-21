@@ -31,8 +31,13 @@ class MetaLink : CarlifeLink {
         return true
     }
 
+    /** Как настоящая ГУ Honda: на каждый MODULE_STATUS NAVI=1 отвечает SUBSCRIBE_START (доставляет тест через pumpSubscribe). */
+    var huResubscribes = false
+    var pendingSubscribe = 0
+
     override fun sendModuleStatus(module: Int, status: Int): Boolean {
         modules.add(module to status)
+        if (huResubscribes && module == CarlifeAudio.MODULE_NAVI && status == 1) pendingSubscribe++
         return true
     }
 
@@ -227,6 +232,17 @@ class AaMetaTest {
         }
 
         fun start() = core.onCarlifeStart()
+
+        /** Доставить ответные SUBSCRIBE_START; число раундов ограничено, чтобы цикл перевзвода был виден, а не вис. */
+        fun pumpSubscribe(maxRounds: Int = 10): Int {
+            var rounds = 0
+            while (link.pendingSubscribe > 0 && rounds < maxRounds) {
+                link.pendingSubscribe--
+                rounds++
+                core.onCarlifeSubscribe(listOf(0), true)
+            }
+            return rounds
+        }
     }
 
     @Test
@@ -336,7 +352,7 @@ class AaMetaTest {
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(900, 60))!!)
         assertEquals(3, r.link.turns.size)
         with(r.link.turns[2]) {
-            assertEquals(2, action)
+            assertEquals("новый манёвр - SHOW", 1, action)
             assertEquals(7, nextTurn)
             assertEquals(900, totalDistance)
         }
@@ -380,6 +396,26 @@ class AaMetaTest {
     }
 
     @Test
+    fun periodicShowWhileDriving() {
+        val r = Rig()
+        r.core.onCarlifeSubscribe(listOf(0), true)
+        r.start()
+        r.core.onNavStatus(1)
+        r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
+        var m = 2000
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(m, 200))!!)
+        // едем: дистанция меняется каждую секунду, SHOW не реже раза в 10 с, остальное UPDATE
+        repeat(25) {
+            r.now += 1000
+            m -= 10
+            r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(m, 200))!!)
+        }
+        assertEquals(26, r.link.turns.size)
+        val shows = r.link.turns.withIndex().filter { it.value.action == 1 }.map { it.index }
+        assertEquals(listOf(0, 10, 20), shows)
+    }
+
+    @Test
     fun sameKeyTurnDetectedByDistanceJump() {
         val r = Rig()
         r.core.onCarlifeSubscribe(listOf(0), true)
@@ -394,6 +430,7 @@ class AaMetaTest {
         r.now += 100
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(50, 12))!!)
         with(r.link.turns.last()) {
+            assertEquals("новый поворот - SHOW", 1, action)
             assertEquals(50, remainDistance)
             assertEquals("total с нового поворота", 50, totalDistance)
         }
@@ -1260,5 +1297,198 @@ class AaMetaTest {
         assertTrue(text, text.contains("time|turnIconData=25") && text.contains("time|turnIconData=<4 Б PNG>"))
         assertEquals("MEDIA_INFO", Msg.name(Msg.MEDIA_INFO))
         assertEquals("NAVI_NEXT_TURN_INFO", Msg.name(Msg.NAVI_NEXT_TURN_INFO))
+    }
+
+    // --- Honda: стрелки после SUBSCRIBE_START, перевзвод NAVI 0->1 ---
+
+
+    // --- Honda (приборка/HUD): перевзвод NAVI 0->1 перед SHOW, NAVI отпускается после TTS ---
+    private fun hondaRoute(honda: Boolean = true): Rig {
+        val r = Rig()
+        r.core.onCarlifeSubscribe(listOf(0), true)
+        r.start()
+        if (honda) r.core.onHuStatistic("20832117")
+        r.link.huResubscribes = honda                // ГУ Honda отвечает SUBSCRIBE_START на каждый NAVI=1
+        r.core.onNavStatus(1)
+        r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(30, 18))!!)
+        r.pumpSubscribe()
+        return r
+    }
+
+
+    @Test
+    fun hondaPeriodicAndManeuverShowDoNotRearm() {
+        val r = hondaRoute()
+        assertEquals(listOf(1), r.link.navi())
+        var m = 2000
+        repeat(25) {                                     // едем: SHOW каждые 10 с
+            r.now += 1000
+            m -= 10
+            r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(m, 200))!!)
+        }
+        r.now += 1000
+        r.core.onNavTurn(AaMeta.parseNavState(navState(7, "Second Ave"))!!)   // новый манёвр - SHOW
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(300, 40))!!)
+        assertTrue("периодические SHOW были", r.link.turns.count { it.action == 1 } >= 4)
+        assertEquals(1, r.link.turns.last().action)
+        assertEquals("ни периодический SHOW, ни SHOW манёвра не перевзводят NAVI", listOf(1), r.link.navi())
+        assertEquals(0, r.link.pendingSubscribe)
+    }
+
+
+    @Test
+    fun hondaEmptyRoadGetsManeuverText() {
+        // Google Maps на выездах со двора шлёт legacy 0x8004 с road="": Honda - подпись манёвра, остальное как прислал AA
+        for (honda in listOf(true, false)) for (road in listOf("", "  ", "ул. Мадояна")) {
+            val r = Rig()
+            r.link.huResubscribes = honda
+            r.core.onCarlifeSubscribe(listOf(0), true)
+            r.start()
+            if (honda) r.core.onHuStatistic("20832117")
+            r.core.onNavStatus(1)
+            r.pumpSubscribe()
+            r.core.onNavTurn(AaMeta.parseLegacyTurn(legacyTurn(4, 2, road))!!)
+            r.core.onNavDistance(AaMeta.parseLegacyDistance(legacyDistance(50, 10))!!)
+            r.pumpSubscribe()
+            with(r.link.turns.last()) {
+                if (honda && road.isBlank()) assertEquals("Honda, пустая улица «$road»", AaMeta.noRoadName(nextTurn), roadName)
+                else assertEquals("honda=$honda: улица как прислал AA", road, roadName)
+            }
+        }
+        assertEquals("Направо", AaMeta.noRoadName(AaMeta.T_RIGHT))
+        assertEquals("Налево", AaMeta.noRoadName(AaMeta.T_LEFT_FRONT))
+        assertEquals("Правее", AaMeta.noRoadName(AaMeta.T_BRANCH_RIGHT))
+        for (code in 0..40) assertTrue("код $code: не длиннее 16 Б", AaMeta.noRoadName(code).toByteArray().size <= 16)
+    }
+
+    @Test
+    fun hondaShowWaitsForSubscribe() {
+        // 17.10 16:18:02: NAVI=1 и манёвр одной пачкой - SHOW уходил раньше SUBSCRIBE_START
+        val r = Rig()
+        r.link.huResubscribes = true
+        r.core.onCarlifeSubscribe(listOf(0), true)
+        r.start()
+        r.core.onHuStatistic("20832117")
+        r.core.onNavStatus(1)
+        r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(540, 123))!!)
+        r.now += 500
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(530, 120))!!)
+        assertTrue("до подписки ГУ стрелки копятся", r.link.turns.isEmpty())
+        assertEquals(1, r.pumpSubscribe())
+        assertEquals("после подписки - один SHOW с последней дистанцией", listOf(1), r.link.turns.map { it.action })
+        assertEquals(530, r.link.turns.last().remainDistance)
+        assertEquals("без перевзвода", listOf(1), r.link.navi())
+        assertEquals(0, r.link.pendingSubscribe)
+    }
+
+
+    @Test
+    fun hondaNoSubscribeSendsAfterTimeout() {
+        val r = Rig()
+        r.core.onCarlifeSubscribe(listOf(0), true)
+        r.start()
+        r.core.onHuStatistic("20832117")
+        r.core.onNavStatus(1)                                   // ГУ не отвечает подпиской
+        r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(540, 123))!!)
+        assertTrue(r.link.turns.isEmpty())
+        r.now += MetaRelay.SUB_WAIT_MS
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(530, 120))!!)
+        assertEquals("по таймауту SHOW всё равно уходит", listOf(1), r.link.turns.map { it.action })
+        assertEquals("и без перевзвода", listOf(1), r.link.navi())
+    }
+
+
+    @Test
+    fun otherHuDoesNotWaitForSubscribe() {
+        val r = Rig()
+        r.core.onCarlifeSubscribe(listOf(0), true)
+        r.start()
+        r.core.onNavStatus(1)
+        r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(540, 123))!!)
+        assertEquals("не Honda: SHOW сразу", listOf(1), r.link.turns.map { it.action })
+    }
+
+
+    @Test
+    fun hondaReshowRearmThenSubscribeShowsOnceNoLoop() {
+        val r = hondaRoute()
+        val before = r.link.turns.size
+        r.now += MetaRelay.NAVI_RESHOW_MS + 1000
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(30, 17))!!)
+        assertEquals("перевзвод перед повторным показом", listOf(1, 0, 1), r.link.navi())
+        assertEquals("SHOW придержан до подписки", before, r.link.turns.size)
+        assertEquals("ГУ переподписалась один раз", 1, r.pumpSubscribe())
+        assertEquals("на подписку SHOW без нового перевзвода", listOf(1, 0, 1), r.link.navi())
+        assertEquals(1, r.link.turns.last().action)
+        assertEquals(0, r.link.pendingSubscribe)
+    }
+
+
+    @Test
+    fun hondaSlowFirstTurnAfterRouteStartNoRearm() {
+        // 16:15:33 NAVI=1 (маршрут), подписка ГУ через 0,7 с, первый TURN_EVENT от AA через 2,1 с
+        val r = Rig()
+        r.link.huResubscribes = true
+        r.core.onCarlifeSubscribe(listOf(0), true)
+        r.start()
+        r.core.onHuStatistic("20832117")
+        r.core.onNavStatus(1)
+        assertEquals(listOf(1), r.link.navi())
+        r.now += 700
+        assertEquals(1, r.pumpSubscribe())
+        r.now += 1800
+        r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(30, 18))!!)
+        assertEquals(1, r.link.turns.last().action)
+        assertEquals("NAVI=1 свежий, стрелок ещё не было: не перевзводим", listOf(1), r.link.navi())
+    }
+
+
+    @Test
+    fun hondaReshowAfterSilenceRearmsNavi() {
+        val r = hondaRoute()
+        assertEquals(1, r.link.turns.last().action)
+        assertEquals("NAVI=1 только что поднят маршрутом: перед первым SHOW не перевзводим", listOf(1), r.link.navi())
+        r.now += MetaRelay.NAVI_RESHOW_MS + 1000          // AA молчал
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(30, 17))!!)
+        r.pumpSubscribe()
+        assertEquals(1, r.link.turns.last().action)
+        assertEquals("перед SHOW после тишины - NAVI 0->1", listOf(1, 0, 1), r.link.navi())
+    }
+
+
+    @Test
+    fun otherHuReshowWithoutNaviRearm() {
+        val r = hondaRoute(honda = false)
+        r.now += MetaRelay.NAVI_RESHOW_MS + 1000
+        r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(30, 17))!!)
+        assertEquals(1, r.link.turns.last().action)
+        assertEquals("не Honda: MODULE_STATUS как раньше", listOf(1), r.link.navi())
+    }
+
+
+    @Test
+    fun hondaRerouteWhileTtsHeldRearmsNavi() {
+        val was = AaBridgeCore.TTS_DEBOUNCE_ENABLED
+        AaBridgeCore.TTS_DEBOUNCE_ENABLED = false
+        try {
+            val r = hondaRoute()
+            r.core.onAudioData(M.CH_AUDIO_SPEECH, ByteArray(640), 0)   // TTS идёт в момент перестроения
+            r.core.onNavStatus(2)
+            assertEquals("NAVI держит TTS", listOf(1), r.link.navi())
+            r.now += 6000
+            r.core.onNavStatus(1)
+            r.core.onNavTurn(AaMeta.parseNavState(navState(7, "Second Ave"))!!)
+            r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(190, 37))!!)
+            r.pumpSubscribe()
+            assertEquals(1, r.link.turns.last().action)
+            assertEquals("перестроение: перед SHOW переход NAVI 0->1", listOf(1, 0, 1), r.link.navi())
+        } finally {
+            AaBridgeCore.TTS_DEBOUNCE_ENABLED = was
+        }
     }
 }

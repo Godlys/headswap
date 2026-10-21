@@ -23,8 +23,8 @@ object MetaImages {
     private const val ART_SMALL = 160
     private const val ICON = 128
 
-    /** Обложка -> JPEG; null, если картинка не декодируется или не влезает в лимит даже 160x160 q10. */
-    fun albumJpeg(src: ByteArray): ByteArray? {
+    /** Обложка -> JPEG; null, если картинка не декодируется или не влезает в лимит [maxBytes] даже 160x160 q10. */
+    fun albumJpeg(src: ByteArray, maxBytes: Int = MAX_BYTES): ByteArray? {
         val bmp = BitmapFactory.decodeByteArray(src, 0, src.size) ?: return null
         try {
             for (side in intArrayOf(ART_SIDE, ART_SMALL)) {
@@ -39,7 +39,7 @@ object MetaImages {
                     var q = 90
                     while (q >= 10) {
                         val out = compress(opaque, Bitmap.CompressFormat.JPEG, q)
-                        if (out.size < MAX_BYTES) {
+                        if (out.size < maxBytes) {
                             opaque.recycle()
                             return out
                         }
