@@ -185,6 +185,8 @@ class AaBridgeCore(
     @Volatile var musicRateProvider: () -> MusicRate = { MusicRate.DEFAULT }
     private var resampler: MusicResampler? = null    // null при 48000: PCM идёт как есть
     private var mediaRateLogged = MEDIA_RATE
+    @Volatile var mediaChunkProvider: () -> MediaChunk = { MediaChunk.DEFAULT }
+    private var mediaChunkLogged = CarlifeAudio.MAX_CHUNK
     private val audioInited = HashMap<Int, Boolean>()
     private val audioLogged = HashMap<Int, Long>()
 
@@ -239,6 +241,8 @@ class AaBridgeCore(
     /** h425: VW CNS2 Delphi копит MOVE ~190 мс и шлёт пачкой; раздаём пачку равномерно. Только при [huVwCns2Delphi]. */
     private val touchPacer = TouchBurstPacer(clockMs, audioSched) { a, x, y, px, py -> dispatchTouch(a, x, y, px, py) }
     @Volatile private var touchPacerLogged = false
+    /** Настройка «Сглаживать пачки тача на всех ГУ» (эксперимент, по умолчанию выкл): то же сглаживание, что на VW CNS2 Delphi. */
+    @Volatile var touchSmoothAllProvider: () -> Boolean = { false }
     private val mediaReleaseTimer = AudioTimer()
     private val voiceExitTimer = AudioTimer()
     private var carlifePaused = false          // VIDEO_ENCODER_PAUSE после последнего START
@@ -370,6 +374,7 @@ class AaBridgeCore(
         h295LastTrigger = NEVER
         h295LastTouchAt = NEVER
         mediaRateLogged = MEDIA_RATE
+        mediaChunkLogged = CarlifeAudio.MAX_CHUNK
         resampler?.reset()
         if (aaVideoSeen) placeholderText = TEXT_WAIT_FRAME
         meta.onAttach()
@@ -683,13 +688,14 @@ class AaBridgeCore(
      * [VideoMode.mapTouch] (без margin-ов 1:1). Один палец уходит в AA так же, как до мультитача (id 0, action_index 0).
      */
     fun onCarlifeTouch(action: Int, x: Int, y: Int, px: Int = 0, py: Int = 0) {
-        if (huVwCns2Delphi) {
+        if (huVwCns2Delphi || touchSmoothAllProvider()) {
             touchPacer.onTouch(action, x, y, px, py)
             if (touchPacer.bursts == 1 && !touchPacerLogged) {
                 touchPacerLogged = true
                 log("BRIDGE тач: ГУ шлёт MOVE пачками, раздаю равномерно между пачками (h425)", true)
             }
         } else {
+            touchPacer.flushPending()                                         // сглаживание выключили посреди жеста: досылаем очередь
             dispatchTouch(action, x, y, px, py)
         }
         onHuTouch(action and 0xFF)                                            // вне touchLock: вложенных блокировок нет
@@ -1004,9 +1010,14 @@ class AaBridgeCore(
                 if (out.isEmpty()) return
             }
         }
+        val chunkMax = if (ch == CarlifeAudio.CH_MEDIA) mediaChunkProvider().bytes ?: CarlifeAudio.MAX_CHUNK else CarlifeAudio.MAX_CHUNK
+        if (ch == CarlifeAudio.CH_MEDIA && chunkMax != mediaChunkLogged) {
+            mediaChunkLogged = chunkMax
+            log("BRIDGE музыка: пакеты по $chunkMax Б (настройка)", true)
+        }
         var off = 0
         while (off < out.size) {
-            val n = minOf(CarlifeAudio.MAX_CHUNK, out.size - off)
+            val n = minOf(chunkMax, out.size - off)
             val chunk = if (off == 0 && n == out.size) out else out.copyOfRange(off, off + n)
             if (!link.sendAudio(ch, CarlifeAudio.dataType(ch), chunk)) {
                 audioDropped++

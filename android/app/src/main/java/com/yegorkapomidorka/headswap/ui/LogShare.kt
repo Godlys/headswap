@@ -235,6 +235,8 @@ object LogShare {
             appendLine("  частота кадров: ${aa.fpsSetting.name}")
             appendLine("  звук по USB: ${aa.usbAudio}")
             appendLine("  частота музыки: ${aa.musicRate.name}")
+            appendLine("  размер пакета музыки: ${aa.mediaChunk.name}")
+            appendLine("  сглаживание тача на всех ГУ: ${if (aa.touchSmoothAll) "да" else "нет"}")
             appendLine("  мой автомобиль: ${aa.carPreset?.let { "${it.name}${if (aa.carSettings == it.settings) "" else ", настройки изменены вручную"}" } ?: "не выбрана"}")
             appendLine("  сертификат: ${aa.certSet}")
             appendLine("  автозапуск сервера ГУ: ${aa.autoServer}")

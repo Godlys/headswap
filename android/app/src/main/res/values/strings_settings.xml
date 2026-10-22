@@ -153,6 +153,13 @@
     <string name="mrate_24">24 kHz</string>
     <string name="mrate_22">22 kHz</string>
 
+    <!-- Music packet size (MediaChunk) -->
+    <string name="mchunk_auto">As Android Auto sends it</string>
+    <string name="mchunk_4096">4096 B</string>
+    <string name="mchunk_2560">2560 B (like Baidu)</string>
+    <string name="mchunk_2048">2048 B</string>
+    <string name="mchunk_1024">1024 B</string>
+
     <!-- Frame rate (FpsSetting) -->
     <string name="fps_auto_title">Auto</string>
     <string name="fps_auto_sub">As the head unit asks</string>
