@@ -846,7 +846,6 @@ class BridgeService : Service() {
             core.micModeProvider = { aaPrefs.micMode }
             core.musicRateProvider = { aaPrefs.musicRate }
             core.mediaChunkProvider = { aaPrefs.mediaChunk }
-            core.touchSmoothAllProvider = { aaPrefs.touchSmoothAll }
             core.phoneMic = PhoneMicCapture(applicationContext)
             core.usbAudioEnabled = aaPrefs.usbAudio
             EqLive.settings = aaPrefs.eq
