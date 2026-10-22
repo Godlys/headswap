@@ -31,11 +31,6 @@ class AaPrefs(ctx: Context) {
         get() = MediaChunk.parse(sp.getString("mediaChunk", MediaChunk.DEFAULT.name))
         set(v) = sp.edit().putString("mediaChunk", v.name).apply()
 
-    /** Сглаживать пачки тача на всех ГУ (эксперимент, по умолчанию выкл; на VW CNS2 Delphi сглаживание включено всегда). Мост читает на каждое событие. */
-    var touchSmoothAll: Boolean
-        get() = sp.getBoolean("touchSmoothAll", false)
-        set(v) = sp.edit().putBoolean("touchSmoothAll", v).apply()
-
     /** Видео моста:перекодирование (по умолчанию) или passthrough H.264 AA как есть. */
     var transcode: Boolean
         get() = sp.getBoolean("transcode", true)

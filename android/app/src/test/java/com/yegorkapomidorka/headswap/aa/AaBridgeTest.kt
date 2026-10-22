@@ -421,12 +421,12 @@ class AaBridgeCoreTest {
     }
 
     @Test
-    fun touchSmoothAllSpreadsMoveBurstWithoutHuFlag() {
+    fun vwCns2DelphiSpreadsMoveBurst() {
         val timers = FakeTimers()
         val c = AaBridgeCore({ l, _ -> logs.add(l) }, { timers.now }, audioSchedule = timers::schedule).also { it.attach(link) }
         val peer = FakePeer()
         c.peer = peer
-        c.touchSmoothAllProvider = { true }
+        c.onHuStatistic("20082114")                           // h425: ГУ копит MOVE ~190 мс и шлёт пачкой
         c.onCarlifeTouch(0, 10, 10)
         c.onCarlifeTouch(2, 11, 11)                           // первый MOVE пачки уходит сразу
         c.onCarlifeTouch(2, 12, 12)
@@ -436,8 +436,7 @@ class AaBridgeCoreTest {
         timers.advance(TouchBurstPacer.DEFAULT_STEP_MS)
         assertEquals(Triple(2, 12, 12), peer.touches.last())
         assertEquals(3, peer.touches.size)                    // остальные ещё в очереди
-        c.touchSmoothAllProvider = { false }                  // выключили посреди жеста: очередь досылается
-        c.onCarlifeTouch(1, 14, 14)
+        c.onCarlifeTouch(1, 14, 14)                           // UP: сначала очередь, потом UP
         assertEquals(
             listOf(Triple(0, 10, 10), Triple(2, 11, 11), Triple(2, 12, 12), Triple(2, 13, 13), Triple(2, 14, 14), Triple(1, 14, 14)),
             peer.touches.toList(),
@@ -445,7 +444,7 @@ class AaBridgeCoreTest {
     }
 
     @Test
-    fun touchSmoothOffDispatchesMovesImmediately() {
+    fun touchOnOtherHuDispatchesMovesImmediately() {
         val peer = FakePeer()
         core.peer = peer
         core.onCarlifeTouch(0, 10, 10)

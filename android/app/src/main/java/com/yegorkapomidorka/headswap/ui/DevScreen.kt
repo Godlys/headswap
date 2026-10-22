@@ -105,11 +105,6 @@ class DevScreen(host: MainActivity) : Screen(host) {
         )
         refreshMediaChunk()
 
-        body.addView(c.sectionTitle(c.getString(R.string.dev_section_touch)))
-        body.addView(
-            group(listOf(row(c.getString(R.string.dev_touch_smooth_title), c.getString(R.string.dev_touch_smooth_sub), aa.touchSmoothAll) { aa.touchSmoothAll = it })),
-        )
-
         body.addView(c.sectionTitle(c.getString(R.string.dev_section_video)))
         body.addView(customResCard())
 

@@ -61,9 +61,6 @@ class TouchBurstPacer(
         if (tick == null) armLocked()
     }
 
-    /** Досылает накопленную очередь (сглаживание выключили посреди жеста). */
-    fun flushPending() = synchronized(lock) { flushLocked() }
-
     /** Сессия закрыта: очередь и таймер выбрасываем. */
     fun reset() = synchronized(lock) {
         queue.clear()
