@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="diag_title">Why it won\'t connect</string>
+    <string name="diag_analyzing">Analyzing the log…</string>
+    <string name="diag_failed">Could not analyze the log.</string>
+    <string name="diag_send">Send log to developers</string>
+    <string name="diag_privacy">The analysis runs on the phone, the log is not sent anywhere</string>
+    <string name="diag_home_btn">Why it won\'t connect?</string>
+    <string name="diag_settings_item">Connection diagnostics</string>
+
+    <string name="diag_lead_one">We found a likely cause.</string>
+    <plurals name="diag_lead_many">
+        <item quantity="one">We found %d possible cause. Start with the first one — it is the most likely.</item>
+        <item quantity="other">We found %d possible causes. Start with the first one — it is the most likely.</item>
+    </plurals>
+    <string name="diag_lead_next">Then try the next one.</string>
+    <string name="diag_lead_all_failed">None of the findings helped — send the log and we will look into it.</string>
+
+    <string name="diag_chip_likely">Most likely</string>
+    <string name="diag_chip_maybe">Possible</string>
+    <string name="diag_chip_not_helped">did not help</string>
+    <string name="diag_how_to_fix">HOW TO FIX</string>
+    <string name="diag_show_log">What\'s in the log ⌄</string>
+    <string name="diag_hide_log">What\'s in the log ⌃</string>
+    <string name="diag_show_solution">Show solution ⌄</string>
+    <string name="diag_helped">It helped</string>
+    <string name="diag_not_helped">Did not help</string>
+
+    <string name="diag_done_title">Great, it works</string>
+    <string name="diag_done_sub">The tip \"%1$s\" helped</string>
+    <string name="diag_done">Done</string>
+
+    <string name="diag_works_title">No obvious failures</string>
+    <string name="diag_none_title">Cause not found</string>
+    <string name="diag_none_text">The log did not show the cause. Send the log to the developers — we will look into it and add a hint.</string>
+
+    <string name="diag_old_version">Worth updating Headswap: a lot has been fixed already.</string>
+    <string name="diag_old_update">Update</string>
+
+    <string name="diag_act_open_aa">Open Android Auto</string>
+    <string name="diag_act_video">Video settings</string>
+    <string name="diag_act_audio">Sound settings</string>
+    <string name="diag_act_battery">Battery settings</string>
+    <string name="diag_act_autostart">Autostart</string>
+    <string name="diag_act_app_settings">Permissions</string>
+    <string name="diag_act_wifi">Wi-Fi settings</string>
+    <string name="diag_act_hotspot">Hotspot</string>
+    <string name="diag_act_bluetooth">Bluetooth</string>
+    <string name="diag_act_onboarding">Run setup again</string>
+    <string name="diag_act_update">Check for update</string>
+    <string name="diag_act_share_log">Send log</string>
+</resources>

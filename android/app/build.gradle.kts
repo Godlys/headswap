@@ -59,8 +59,38 @@ android {
     }
 }
 
+// Правила диагностики подключения общие с tools/logdiag.py: лежат в tools/, в APK копируются как assets/logdiag_rules.json
+abstract class CopyLogdiagRules : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val rules: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val dir = outDir.get().asFile
+        dir.deleteRecursively()
+        dir.mkdirs()
+        rules.get().asFile.copyTo(File(dir, "logdiag_rules.json"), overwrite = true)
+    }
+}
+
+val copyLogdiagRules = tasks.register<CopyLogdiagRules>("copyLogdiagRules") {
+    rules.set(rootProject.layout.projectDirectory.file("../tools/logdiag_rules.json"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(copyLogdiagRules, CopyLogdiagRules::outDir)
+    }
+}
+
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    // В unit-тестах android.jar — заглушки (isReturnDefaultValues), настоящий org.json нужен LogDiag
+    testImplementation("org.json:json:20240303")
 }
 
 // Сертификаты head unit AA (assets/aa/<профиль>/cert.pem, key.pem) не в git, в свежем worktree их нет.

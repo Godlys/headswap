@@ -1,0 +1,21 @@
+09:00:00.001 аксессуар не найден (getAccessoryList=null)
+09:00:05.000 == USB_ACCESSORY_ATTACHED, в intent: manufacturer="Baidu" model="CarLife"
+09:00:05.100 сессия: старт
+09:00:05.200 == ВЕРСИЯ ПРОТОКОЛА ГУ: major=1 minor=0
+09:00:06.000 AA TCP подключено 127.0.0.1:5277
+09:00:06.500 AA сессия установлена (TLSv1.2 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256), ждём телефон
+09:00:07.000 AA RX VIDEO(2) MEDIA_START 0x8001 len=4 | {session_id=2 configuration_index=0}
+09:00:07.200 AA телефон закрыл соединение (EOF)
+09:00:07.201 AA итог: кадров rx=20 tx=20; видео config=0 data=0 байт=0; аудио data=0; причина: peer closed: телефон закрыл соединение (EOF)
+09:00:10.000 AA TCP подключено 127.0.0.1:5277
+09:00:10.500 AA сессия установлена (TLSv1.2 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256), ждём телефон
+09:00:11.000 AA RX VIDEO(2) MEDIA_START 0x8001 len=4 | {session_id=2 configuration_index=0}
+09:00:11.150 AA телефон закрыл соединение (EOF)
+09:00:11.151 AA итог: кадров rx=20 tx=20; видео config=0 data=0 байт=0; аудио data=0; причина: peer closed: телефон закрыл соединение (EOF)
+09:00:14.000 AA TCP подключено 127.0.0.1:5277
+09:00:14.500 AA сессия установлена (TLSv1.2 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256), ждём телефон
+09:00:15.000 AA RX VIDEO(2) MEDIA_START 0x8001 len=4 | {session_id=2 configuration_index=0}
+09:00:15.300 AA телефон закрыл соединение (EOF)
+09:00:15.301 AA итог: кадров rx=20 tx=20; видео config=0 data=0 байт=0; аудио data=0; причина: peer closed: телефон закрыл соединение (EOF)
+09:01:00.000 == РЕЗЮМЕ СЕССИИ (55 с, причина: остановлено пользователем)
+  видео: отправлено кадров=1600

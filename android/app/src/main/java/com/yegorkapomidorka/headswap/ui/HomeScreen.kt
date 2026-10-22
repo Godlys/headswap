@@ -200,6 +200,7 @@ class HomeScreen(host: MainActivity) : Screen(host) {
             footer.addView(b)
         }
         if (st.logLink) {
+            footer.addView(c.tonalButton(c.getString(R.string.diag_home_btn)).apply { setOnClickListener { host.showDiag() } })
             footer.addView(c.linkButton(c.getString(R.string.home_btn_send_log)).apply { setOnClickListener { LogShare.shareReport(c) } })
         }
         if (st.phase == Phase.RECONNECTING) updateGrace(st)

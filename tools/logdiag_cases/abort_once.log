@@ -1,0 +1,5 @@
+09:00:00.001 аксессуар не найден (getAccessoryList=null)
+09:00:05.100 сессия: старт
+09:00:05.200 == ВЕРСИЯ ПРОТОКОЛА ГУ: major=3 minor=0
+09:01:00.000 ERROR tcp6 VIDEO(8240): ошибка чтения: Software caused connection abort
+09:01:00.010 WL tcp close by=link chan=VIDEO why="ошибка чтения: Software caused connection abort" t=60010

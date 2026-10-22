@@ -1,0 +1,10 @@
+09:00:00.001 аксессуар не найден (getAccessoryList=null)
+09:00:05.000 == USB_ACCESSORY_ATTACHED, в intent: manufacturer="Baidu" model="CarLife"
+09:00:05.100 сессия: старт
+09:00:05.200 == ВЕРСИЯ ПРОТОКОЛА ГУ: major=2 minor=0
+09:00:06.000 AA TCP подключено 127.0.0.1:5277
+09:00:06.500 AA сессия установлена (TLSv1.2 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256), ждём телефон
+09:25:00.000 AA итог: кадров rx=50000 tx=400; видео config=1 data=44000 байт=900000000; аудио data=100; причина: конец
+09:25:00.100 == РЕЗЮМЕ СЕССИИ (1495 с, причина: остановлено пользователем)
+  видео: отправлено кадров=44000
+  HU_INFO: manufacturer="Desay SV Automotive" model="G6S"
