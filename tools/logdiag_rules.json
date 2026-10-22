@@ -18,7 +18,7 @@
     "autosrv_no_window": "окно Android Auto не появилось",
     "autosrv_consent": "AUTOSRV итог: CONSENT",
     "autosrv_locked": "AUTOSRV итог: LOCKED",
-    "certs_missing": "нет сертификата head unit|FileNotFoundException: aa/\\w+/cert\\.pem",
+    "certs_missing": "нет сертификата head unit",
     "wifi_wait": "сервис: \\S+, слушаю 6 портов",
     "tcp_timeout0": "WL tcp timeout ready=0/6",
     "p2p_no_perm": "Wi-Fi Direct: нет разрешения",
@@ -193,7 +193,7 @@
       "phase": "first_connect",
       "category": "our_bug",
       "score": 95,
-      "all": [["m.certs_missing", ">=", 1]],
+      "all": [["m.certs_missing", ">=", 1], ["frames_max", "<", 30]],
       "evidence": ["certs_missing"],
       "advice": "Эта сборка Headswap собрана без сертификатов Android Auto и не может работать. Установите версию с сайта yegorkapomidorka.com/headswap или из Telegram-канала."
     },
@@ -263,14 +263,36 @@
     },
     {
       "id": "wifi_vpn_abort",
-      "title": "Соединения по воздуху рвёт VPN или система",
+      "title": "Соединение по воздуху обрывает телефон",
       "phase": "drops",
       "category": "network",
-      "score": 60,
-      "all": [["m.abort", ">=", 2], ["m.iface_down", "==", 0]],
+      "score": 50,
+      "all": [["abort_no_iface", ">=", 2]],
       "evidence": ["abort"],
-      "advice": "Сокеты обрываются ошибкой «Software caused connection abort» без потери Wi-Fi — так бывает при VPN/прокси. Исключите Headswap из VPN (раздельное туннелирование) или выключайте VPN в машине.",
+      "advice": "Система телефона сама закрывает сокеты («Software caused connection abort»), при этом Wi-Fi не пропадает. Чаще всего это VPN/прокси: исключите Headswap из VPN или выключайте его в машине. Также снимите для Headswap ограничения батареи. Если не помогает — подключайтесь кабелем.",
       "ask": "Включён ли на телефоне VPN?"
+    },
+    {
+      "id": "mazda_g6s_air_p2p_lost",
+      "title": "Mazda G6S по воздуху: магнитола снимает Wi-Fi Direct",
+      "phase": "drops",
+      "category": "our_bug",
+      "score": 65,
+      "all": [["channel", "~", "^20622116$"], ["m.p2p_group_lost", ">=", 1], ["m.abort", ">=", 1]],
+      "evidence": ["p2p_group_lost", "abort"],
+      "advice": "Эта магнитола снимает Wi-Fi Direct группу после паузы видео (задний ход, меню) и сама не возвращается. Исправление в тестовой сборке. Пока: выключите и включите Bluetooth на телефоне либо подключайтесь кабелем.",
+      "suppresses": ["wifi_vpn_abort"]
+    },
+    {
+      "id": "vw_id_idr_limit",
+      "title": "VW ID рвёт кабель на больших ключевых кадрах",
+      "phase": "drops",
+      "category": "our_bug_fixed",
+      "score": 75,
+      "fixed_in": "2.4.0",
+      "all": [["channel", "~", "^20082138$"], ["hu", "~", "1538"], ["eio_sessions", ">=", 2]],
+      "advice": "Магнитола рвёт USB на ключевых кадрах больше ~600 КиБ. Используйте перекодирование; в «Мой автомобиль» выберите свою модель VW ID.",
+      "suppresses": ["usb_unstable"]
     },
     {
       "id": "wifi_iface_drop",
@@ -278,8 +300,8 @@
       "phase": "drops",
       "category": "network",
       "score": 55,
-      "all": [["m.abort", ">=", 1], ["m.iface_down", ">=", 1]],
-      "any": [["m.abort", ">=", 2], ["m.no_route", ">=", 1]],
+      "all": [["abort_iface", ">=", 1]],
+      "any": [["abort_iface", ">=", 2], ["m.no_route", ">=", 1]],
       "evidence": ["iface_down", "abort"],
       "advice": "Во время поездки у телефона пропадает Wi-Fi-интерфейс (энергосбережение, звонок по Bluetooth, слабый сигнал). Отключите автовыключение точки доступа и энергосбережение Wi-Fi, переведите точку на 5 ГГц, не держите телефон в закрытом бардачке. Самый надёжный вариант — кабель."
     },
@@ -298,7 +320,7 @@
       "title": "Система убивает Headswap в фоне",
       "phase": "drops",
       "category": "user_setup",
-      "score": 60,
+      "score": 33,
       "all": [["m.low_memory", ">=", 1]],
       "evidence": ["low_memory"],
       "advice": "Android завершал Headswap (нехватка памяти или агрессивное энергосбережение). Поставьте Headswap и Android Auto «Без ограничений» в настройках батареи, включите автозапуск (Xiaomi/HyperOS, vivo, Honor), закрепите Headswap замком в списке недавних приложений."
@@ -342,8 +364,28 @@
       "category": "our_bug_fixed",
       "score": 75,
       "fixed_in": "2.4.0",
-      "all": [["pause_eio", ">=", 2]],
+      "all": [["pause_eio", ">=", 2], ["channel", "~", "^200821(20|22|34)$"]],
       "advice": "Магнитола рвёт USB через 5–8 с после паузы видео (выход в меню ГУ, камера).",
+      "suppresses": ["usb_unstable", "pause_eio_other"]
+    },
+    {
+      "id": "vw_cns2_pause_eio",
+      "title": "VW Tharu CNS2 рвёт кабель после выхода в меню магнитолы",
+      "phase": "drops",
+      "category": "our_bug",
+      "score": 75,
+      "all": [["pause_eio", ">=", 1], ["channel", "~", "^20082114$"]],
+      "advice": "Известная проблема этой магнитолы (Delphi CNS2): после паузы видео (меню ГУ, камера) она рвёт USB и сама не возвращается. Исправление готовится в ближайшей версии; пока после выхода из меню нажмите CarLife на магнитоле заново.",
+      "suppresses": ["usb_unstable", "pause_eio_other"]
+    },
+    {
+      "id": "pause_eio_other",
+      "title": "Магнитола рвёт кабель после паузы видео",
+      "phase": "drops",
+      "category": "hu_limit",
+      "score": 55,
+      "all": [["pause_eio", ">=", 2]],
+      "advice": "Обрыв USB приходит через 5–8 с после того, как магнитола приостановила видео (выход в меню ГУ, камера заднего вида). Пришлите лог разработчику с моделью машины — для таких ГУ делается отдельный обход.",
       "suppresses": ["usb_unstable"]
     },
     {

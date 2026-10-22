@@ -42,7 +42,7 @@ def load_rules(path=RULES_PATH):
 def scan_text(logs, logcats, markers):
     """Маркеры: число событий (совпадения в пределах 2 с — одно событие: одна ошибка
     пишется и в лог, и в WL), первая и последняя строка. Плюс пауза → EIO и channel."""
-    found = {k: {"n": 0, "first": None, "last": None, "_t": None} for k in markers}
+    found = {k: {"n": 0, "first": None, "last": None, "_t": None, "ts": []} for k in markers}
     channel = None
     pause_eio = 0
     for _, text in logs + logcats:
@@ -56,6 +56,8 @@ def scan_text(logs, logcats, markers):
                     f = found[k]
                     if t is None or f["_t"] is None or abs((t - f["_t"]).total_seconds()) > 2:
                         f["n"] += 1
+                        if t is not None:
+                            f["ts"].append(t)
                     f["_t"] = t
                     line = raw.strip()[:200]
                     if f["first"] is None:
@@ -76,6 +78,11 @@ def scan_text(logs, logcats, markers):
                     pause_eio += 1
                 last_pause = None
     return found, channel, pause_eio
+
+
+def near(a, b, sec):
+    """Сколько событий из a случилось в пределах sec секунд от какого-нибудь события из b."""
+    return sum(1 for x in a if any(abs((x - y).total_seconds()) <= sec for y in b))
 
 
 def facts_of(path, rules):
@@ -121,7 +128,10 @@ def facts_of(path, rules):
         "eio_median_s": statistics.median(durs) if durs else None,
         "no_gms": ep.get("no_gms_flags") or 0,
         "pause_eio": pause_eio,
+        # abort в ту же секунду, что пропал Wi-Fi, — телефон потерял сеть; без этого — VPN/стек
+        "abort_iface": near(found.get("abort", {}).get("ts", []), found.get("iface_down", {}).get("ts", []), 3),
     }
+    f["abort_no_iface"] = found.get("abort", {}).get("n", 0) - f["abort_iface"]
     for k, v in counts.items():
         f["ep_" + k] = v
     for k, v in found.items():
