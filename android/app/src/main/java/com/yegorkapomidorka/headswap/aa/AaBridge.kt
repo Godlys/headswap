@@ -236,6 +236,10 @@ class AaBridgeCore(
 
     private val ttsStopTimer = AudioTimer()
     private val vrStopTimer = AudioTimer()
+
+    /** h425: VW CNS2 Delphi копит MOVE ~190 мс и шлёт пачкой; раздаём пачку равномерно. Только при [huVwCns2Delphi]. */
+    private val touchPacer = TouchBurstPacer(clockMs, audioSched) { a, x, y, px, py -> dispatchTouch(a, x, y, px, py) }
+    @Volatile private var touchPacerLogged = false
     private val mediaReleaseTimer = AudioTimer()
     private val voiceExitTimer = AudioTimer()
     private var carlifePaused = false          // VIDEO_ENCODER_PAUSE после последнего START
@@ -362,6 +366,8 @@ class AaBridgeCore(
         huVwCns2Delphi = false                 // STATISTIC_INFO придёт заново в этой сессии
         vrReply = false
         vrStopTimer.cancel()
+        touchPacer.reset()
+        touchPacerLogged = false
         h295TouchAt = NEVER
         h295LastTrigger = NEVER
         h295LastTouchAt = NEVER
@@ -679,7 +685,15 @@ class AaBridgeCore(
      * [VideoMode.mapTouch] (без margin-ов 1:1). Один палец уходит в AA так же, как до мультитача (id 0, action_index 0).
      */
     fun onCarlifeTouch(action: Int, x: Int, y: Int, px: Int = 0, py: Int = 0) {
-        dispatchTouch(action, x, y, px, py)
+        if (huVwCns2Delphi) {
+            touchPacer.onTouch(action, x, y, px, py)
+            if (touchPacer.bursts == 1 && !touchPacerLogged) {
+                touchPacerLogged = true
+                log("BRIDGE тач: ГУ шлёт MOVE пачками, раздаю равномерно между пачками (h425)", true)
+            }
+        } else {
+            dispatchTouch(action, x, y, px, py)
+        }
         onHuTouch(action and 0xFF)                                            // вне touchLock: вложенных блокировок нет
     }
 
