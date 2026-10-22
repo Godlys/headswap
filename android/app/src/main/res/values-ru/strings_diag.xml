@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="diag_title">Почему не подключается</string>
+    <string name="diag_analyzing">Анализирую лог…</string>
+    <string name="diag_failed">Не удалось проанализировать лог.</string>
+    <string name="diag_in_log">в логе:</string>
+    <string name="diag_none">Причина не распознана. Отправьте лог разработчикам — мы разберёмся.</string>
+    <string name="diag_send">Отправить лог разработчикам</string>
+    <string name="diag_privacy">Анализ выполняется на телефоне, лог никуда не отправляется</string>
+    <string name="diag_home_btn">Почему не подключается?</string>
+    <string name="diag_settings_item">Диагностика подключения</string>
+</resources>

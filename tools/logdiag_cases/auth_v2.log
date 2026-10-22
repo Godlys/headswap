@@ -1,0 +1,8 @@
+09:00:00.001 аксессуар не найден (getAccessoryList=null)
+09:00:05.000 == USB_ACCESSORY_ATTACHED, в intent: manufacturer="Baidu" model="CarLife"
+09:00:05.100 сессия: старт
+09:00:05.200 == ВЕРСИЯ ПРОТОКОЛА ГУ: major=2 minor=0
+09:00:06.000 == ГУ ШЛЁТ HU_AUTHEN_REQUEST randomValue=2.0;20261012
+09:00:36.000 ERROR ошибка чтения: IOException: read failed: EIO (I/O error)
+09:00:36.100 == РЕЗЮМЕ СЕССИИ (31 с, причина: ошибка чтения: read failed: EIO (I/O error))
+  видео: отправлено кадров=600

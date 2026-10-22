@@ -168,6 +168,8 @@ class SettingsScreen(host: MainActivity) : Screen(host) {
         val links = c.card().apply {
             addView(link(R.drawable.ic_report, c.getString(R.string.set_report_title), c.getString(R.string.set_report_note), false) { LogShare.shareReport(c) })
             addView(c.divider())
+            addView(link(R.drawable.ic_alert, c.getString(R.string.diag_settings_item), null, false) { host.showDiag() })
+            addView(c.divider())
             addView(link(R.drawable.ic_refresh_btn, c.getString(R.string.set_rerun_setup), null, false) { host.showOnboarding(rerun = true) })
             addView(c.divider())
             addView(link(R.drawable.ic_check, c.getString(R.string.set_check_ready), null, false) { host.showOnboarding(checklist = true) })

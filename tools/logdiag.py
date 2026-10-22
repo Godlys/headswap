@@ -45,8 +45,8 @@ def scan_text(logs, logcats, markers):
     found = {k: {"n": 0, "first": None, "last": None, "_t": None, "ts": []} for k in markers}
     channel = None
     pause_eio = 0
-    for _, text in logs + logcats:
-        clock = ld.Clock(None)
+    for name, text in logs + logcats:
+        clock = ld.Clock(ld.stamp_of(name))  # дата из имени: время разных файлов не должно совпадать
         last_pause = None
         for raw in text.splitlines():
             m = ld.TS_RE.match(raw)

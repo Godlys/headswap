@@ -1,0 +1,12 @@
+09:00:00.000 сканирование (старт activity)
+09:00:00.001 аксессуар не найден (getAccessoryList=null)
+09:00:05.000 == USB_ACCESSORY_ATTACHED, в intent: manufacturer="Baidu" model="CarLife"
+09:00:05.100 сессия: старт
+09:00:05.200 == ВЕРСИЯ ПРОТОКОЛА ГУ: major=2 minor=0
+09:00:05.300 WL hs STATISTIC_INFO channel=20832125 t=1
+09:00:10.000 AA сервер 127.0.0.1:5277 недоступен: ConnectException: ECONNREFUSED (Connection refused)
+09:00:13.000 AA сервер 127.0.0.1:5277 недоступен: ConnectException: ECONNREFUSED (Connection refused)
+09:00:16.000 AA сервер 127.0.0.1:5277 недоступен: ConnectException: ECONNREFUSED (Connection refused)
+09:00:19.000 AA сервер 127.0.0.1:5277 недоступен: ConnectException: ECONNREFUSED (Connection refused)
+09:00:20.000 AUTOSRV проверка.1: в меню нет пунктов сервера (попытка 1); тексты: []
+09:00:22.000 AA сервер 127.0.0.1:5277 недоступен: ConnectException: ECONNREFUSED (Connection refused)

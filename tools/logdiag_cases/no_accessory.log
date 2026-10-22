@@ -1,0 +1,4 @@
+09:00:00.000 сканирование (старт activity)
+09:00:00.001 аксессуар не найден (getAccessoryList=null)
+09:00:00.010 AA selftest [jvc]: TLS in-memory OK TLSv1.3 TLS_AES_128_GCM_SHA256 клиентский сертификат принят сервером
+09:00:05.000 открыты настройки Android Auto
