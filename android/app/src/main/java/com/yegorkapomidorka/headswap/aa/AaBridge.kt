@@ -1044,6 +1044,7 @@ class AaBridgeCore(
             vrReply = false
             link.sendAudio(CarlifeAudio.CH_VR, CarlifeAudio.VR_STOP, ByteArray(0))
             log("BRIDGE CarLife VR STOP (0x%08x)".format(CarlifeAudio.VR_STOP), true)
+            vrModuleOff("последний VR STOP после голосовой сессии")
             return
         }
         if (ch == CarlifeAudio.CH_MEDIA) {
@@ -1084,6 +1085,16 @@ class AaBridgeCore(
         if (++ttsPackets <= TTS_DIAG_PACKETS) log("BRIDGE VR пакет #$ttsPackets: ${pcm.size} Б", false)
     }
 
+    /**
+     * h425: VW CNS2 Delphi после ответа в канале VR оставляет кнопки громкости на голосовом канале, пока не переткнуть
+     * кабель. MODULE_STATUS VR=0 уходит при закрытии микрофона, но ответ в VR идёт уже после него: повторяем VR=0,
+     * когда и голосовая сессия AA кончилась, и поток VR закрыт.
+     */
+    private fun vrModuleOff(why: String) {
+        if (!huVwCns2Delphi || voice || vrReply) return
+        if (link.sendModuleStatus(CarlifeAudio.MODULE_VR, 0)) log("BRIDGE CarLife MODULE_STATUS VR=0 ($why)", true)
+    }
+
     // --- голосовая сессия Ассистента: MEDIA на паузу, данные не пересылаем; выход со сглаживанием пачки 2/2/1/2/2 ---
     @Synchronized
     override fun onVoiceSession(status: Int) {
@@ -1103,6 +1114,7 @@ class AaBridgeCore(
                 voiceExitTimer.start(VOICE_EXIT_DELAY_MS) {
                     voice = false
                     log("BRIDGE голосовая сессия: выход, MEDIA поднимется через INIT на первых данных", true)
+                    vrModuleOff("выход из голосовой сессии")
                 }
             }
             else -> log("BRIDGE голосовая сессия: status=$status не знаю, игнор", false)

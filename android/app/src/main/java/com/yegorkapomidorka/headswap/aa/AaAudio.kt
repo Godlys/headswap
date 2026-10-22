@@ -47,6 +47,7 @@ object CarlifeAudio {
     /** moduleID в MODULE_STATUS (ModuleStatusManage): 2 NAVI (перед TTS), 3 MUSIC (MEDIA играет). */
     const val MODULE_NAVI = 2
     const val MODULE_MUSIC = 3
+    const val MODULE_VR = 4
 
     /** MAX_MUSIC_DATA_SIZE / MAX_TTS_DATA_SIZE (audio/AudioUtil.java:14-15); кратно 4, не рвёт PCM-кадр. */
     const val MAX_CHUNK = 10240

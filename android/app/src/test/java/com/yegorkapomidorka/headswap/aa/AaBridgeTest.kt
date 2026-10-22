@@ -1049,6 +1049,10 @@ class AaBridgeAudioTest {
         assertEquals("08807d10011810", hexs(vr[0].payload))             // {16000, 1, 16}
         assertArrayEquals(s, vr[1].payload)
         assertTrue(link.audio.none { it.chan == 4 })
+        assertTrue("VR=0 не раньше выхода из голоса", "M4=0" !in link.events)
+        core.onVoiceSession(2)
+        timers.advance(1000)
+        assertTrue("после голоса и VR STOP - снова VR=0 (громкость)", "M4=0" in link.events)
     }
 
     @Test
