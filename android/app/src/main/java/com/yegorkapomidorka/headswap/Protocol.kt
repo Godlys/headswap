@@ -329,6 +329,46 @@ object Wire {
     }
 }
 
+/**
+ * Сборка data-сообщения, которое ГУ режет на несколько внешних кадров одного канала. VW CNS2 Delphi (h425) шлёт
+ * MIC_DATA [12 + 1024 Б] кадрами по 256 Б: первый с заголовком, дальше голое продолжение.
+ * feed() возвращает целое inner или null, пока сообщение не собрано.
+ */
+class DataReassembler(private val maxLen: Int = 64 * 1024) {
+    private var buf: ByteArray? = null
+    private var have = 0
+
+    /** Сколько сообщений собрано из кусков (для лога). */
+    var assembled = 0
+        private set
+
+    /** Размер первого куска последнего собранного сообщения (для лога). */
+    var firstFragment = 0
+        private set
+
+    fun feed(inner: ByteArray): ByteArray? {
+        val b = buf
+        if (b != null) {
+            val n = minOf(inner.size, b.size - have)
+            System.arraycopy(inner, 0, b, have, n)
+            have += n
+            if (have < b.size) return null
+            buf = null
+            assembled++
+            return b
+        }
+        if (inner.size < 12) return inner
+        val len = Wire.u32(inner, 0)
+        if (len <= inner.size - 12 || len > maxLen) return inner
+        val nb = ByteArray(12 + len)
+        System.arraycopy(inner, 0, nb, 0, inner.size)
+        buf = nb
+        have = inner.size
+        firstFragment = inner.size
+        return null
+    }
+}
+
 class ProtocolDesync(msg: String) : Exception(msg)
 
 /**

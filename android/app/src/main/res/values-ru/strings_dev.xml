@@ -17,6 +17,10 @@
     <string name="dev_meta_progress_title">Прогресс в секундах</string>
     <string name="dev_meta_progress_sub">MEDIA_PROGRESS_BAR в с вместо мс (если на ГУ в 1000 раз больше)</string>
 
+    <string name="dev_section_music_chunk">Размер пакета музыки (эксперимент)</string>
+    <string name="dev_music_chunk_note">Мельче — меньше буфер на ГУ, но больше пакетов по USB. Если звук заикается, верните «Как отдаёт Android Auto»</string>
+
+
     <string name="dev_section_video">Видео (с переподключения)</string>
     <string name="dev_custom_res_title">Своё разрешение</string>
     <string name="dev_custom_res_sub">Вместо режима из настроек видео</string>

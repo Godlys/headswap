@@ -26,6 +26,11 @@ class AaPrefs(ctx: Context) {
         get() = MusicRate.parse(sp.getString("musicRate", MusicRate.DEFAULT.name))
         set(v) = sp.edit().putString("musicRate", v.name).apply()
 
+    /** Размер пакета музыки в CarLife (имя MediaChunk, по умолчанию Авто; эксперимент, не входит в пресеты авто). Мост читает на каждый буфер. */
+    var mediaChunk: MediaChunk
+        get() = MediaChunk.parse(sp.getString("mediaChunk", MediaChunk.DEFAULT.name))
+        set(v) = sp.edit().putString("mediaChunk", v.name).apply()
+
     /** Видео моста:перекодирование (по умолчанию) или passthrough H.264 AA как есть. */
     var transcode: Boolean
         get() = sp.getBoolean("transcode", true)

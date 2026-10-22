@@ -168,7 +168,9 @@ class AaBridgeCore(
     private var naviRaisedAt = NEVER          // Honda: когда последний раз ушёл MODULE_STATUS NAVI=1
     private var naviShownSinceRaise = false   // Honda: после последнего NAVI=1 уже был SHOW (переход 0->1 приборкой «израсходован»)
     @Volatile var huVwBt1420 = false           // VW BT 1420 (Павел, канал 20082138): по воздуху без heartbeat на PAUSE рвёт CarLife через ~1 мин
-    @Volatile var huVw20082120 = false         // VW (STATISTIC_INFO channel 20082120 h93, 20082122 h222): без heartbeat рвёт USB через 3,7-5,6 с PAUSE
+    @Volatile var huVwCns2Delphi = false       // VW CNS2 Delphi 20082114 (h425): речь AA в голосовой сессии молчит в TTS, шлём в VR
+    private var vrReply = false                // поток ответа ассистента открыт в канале VR (VR_INIT ушёл)
+    @Volatile var huVw20082120 = false        // VW (STATISTIC_INFO channel 20082120 h93, 20082122 h222): без heartbeat рвёт USB через 3,7-5,6 с PAUSE
         private set
     @Volatile var huVw20082138 = false         // VW ID (channel 20082138, "VW BT 1538", h196): IDR > ~600 КиБ рвёт USB EIO
         private set
@@ -183,6 +185,8 @@ class AaBridgeCore(
     @Volatile var musicRateProvider: () -> MusicRate = { MusicRate.DEFAULT }
     private var resampler: MusicResampler? = null    // null при 48000: PCM идёт как есть
     private var mediaRateLogged = MEDIA_RATE
+    @Volatile var mediaChunkProvider: () -> MediaChunk = { MediaChunk.DEFAULT }
+    private var mediaChunkLogged = CarlifeAudio.MAX_CHUNK
     private val audioInited = HashMap<Int, Boolean>()
     private val audioLogged = HashMap<Int, Long>()
 
@@ -233,6 +237,10 @@ class AaBridgeCore(
     }
 
     private val ttsStopTimer = AudioTimer()
+
+    /** h425: VW CNS2 Delphi копит MOVE ~190 мс и шлёт пачкой; раздаём пачку равномерно. Только при [huVwCns2Delphi]. */
+    private val touchPacer = TouchBurstPacer(clockMs, audioSched) { a, x, y, px, py -> dispatchTouch(a, x, y, px, py) }
+    @Volatile private var touchPacerLogged = false
     private val mediaReleaseTimer = AudioTimer()
     private val voiceExitTimer = AudioTimer()
     private var carlifePaused = false          // VIDEO_ENCODER_PAUSE после последнего START
@@ -241,6 +249,7 @@ class AaBridgeCore(
     private var resumeOnHuMusic = false        // паузу поставили мы (127 при игравшем AA): на MUSIC=1 от ГУ можно вернуть play
     private var lastHuResumeMs = NEVER         // когда по MUSIC=1 от ГУ слали AA KEYCODE 126
     @Volatile private var lastUserInputMs = NEVER   // последний тач DOWN / клавиша / шайба / голос с ГУ
+    @Volatile private var lastVoiceKeyMs = NEVER    // последний KEYCODE_SEARCH в AA (антидребезг h425)
     private var lastHfpConnectMs = NEVER       // ГУ прислало BT_HFP_CONNECTION=connected (дальше AA сам запускает автоплей по BT)
     private var lastPauseKeyMs = NEVER         // когда последний раз слали AA KEYCODE 127
     private var naviSent = false               // MODULE_STATUS NAVI=1 ушёл (держит TTS и/или маршрут)
@@ -355,10 +364,15 @@ class AaBridgeCore(
         huPioneerRm56 = false                  // HU_INFO придёт заново в этой сессии
         huHonda20772121 = false                // HU_INFO / STATISTIC_INFO придут заново в этой сессии
         huMazda20622111 = false                // STATISTIC_INFO придёт заново в этой сессии
+        huVwCns2Delphi = false                 // STATISTIC_INFO придёт заново в этой сессии
+        vrReply = false
+        touchPacer.reset()
+        touchPacerLogged = false
         h295TouchAt = NEVER
         h295LastTrigger = NEVER
         h295LastTouchAt = NEVER
         mediaRateLogged = MEDIA_RATE
+        mediaChunkLogged = CarlifeAudio.MAX_CHUNK
         resampler?.reset()
         if (aaVideoSeen) placeholderText = TEXT_WAIT_FRAME
         meta.onAttach()
@@ -588,7 +602,12 @@ class AaBridgeCore(
             huMazda20622111 = true
             log("BRIDGE ГУ Mazda 20622111: VIDEO_DATA режу на куски ≤ $MAZDA_20622111_MAX_VIDEO_PACKET Б, потолок ${MAZDA_20622111_CEILING_BPS / 1000} кбит/с", true)
         }
-        if (channel == VW_20082120_CHANNEL || channel == VW_CNS3_20082122_CHANNEL || channel == VW_CNS3_20082134_CHANNEL) huVw20082120 = true
+        if (channel == VW_20082120_CHANNEL || channel == VW_CNS3_20082122_CHANNEL || channel == VW_CNS3_20082134_CHANNEL ||
+            channel == VW_CNS2_20082114_CHANNEL) huVw20082120 = true
+        if (channel == VW_CNS2_20082114_CHANNEL && !huVwCns2Delphi) {
+            huVwCns2Delphi = true
+            log("BRIDGE ГУ VW CNS2 Delphi 20082114: ответ ассистента в канал VR, антидребезг кнопки голоса", true)
+        }
         if (isHondaChannel(channel) && !huHonda) {
             huHonda = true
             log("BRIDGE ГУ Honda (channel $channel): roadName под приборку, стрелки после SUBSCRIBE_START, перевзвод NAVI 0->1", true)
@@ -667,7 +686,15 @@ class AaBridgeCore(
      * [VideoMode.mapTouch] (без margin-ов 1:1). Один палец уходит в AA так же, как до мультитача (id 0, action_index 0).
      */
     fun onCarlifeTouch(action: Int, x: Int, y: Int, px: Int = 0, py: Int = 0) {
-        dispatchTouch(action, x, y, px, py)
+        if (huVwCns2Delphi) {
+            touchPacer.onTouch(action, x, y, px, py)
+            if (touchPacer.bursts == 1 && !touchPacerLogged) {
+                touchPacerLogged = true
+                log("BRIDGE тач: ГУ шлёт MOVE пачками, раздаю равномерно между пачками (h425)", true)
+            }
+        } else {
+            dispatchTouch(action, x, y, px, py)
+        }
         onHuTouch(action and 0xFF)                                            // вне touchLock: вложенных блокировок нет
     }
 
@@ -822,8 +849,21 @@ class AaBridgeCore(
             log("BRIDGE руль keycode=$code проигнорирован: AA не подключён", true)
             return
         }
+        if (android == KEYCODE_SEARCH && voiceKeyBounce("руль keycode=$code")) return
         log("BRIDGE руль keycode=$code -> AA KEYCODE $android", true)
         p.sendKey(android)
+    }
+
+    /**
+     * VW CNS2 Delphi (h425) шлёт VR_START дважды за 1-2 мс: второй KEYCODE_SEARCH закрывает только что открытого
+     * ассистента. Повтор кнопки голоса чаще [VOICE_KEY_DEBOUNCE_MS] глотаем.
+     */
+    private fun voiceKeyBounce(what: String): Boolean {
+        val now = clockMs()
+        val dup = now - lastVoiceKeyMs < VOICE_KEY_DEBOUNCE_MS
+        if (dup) log("BRIDGE $what: повтор кнопки голоса через ${now - lastVoiceKeyMs} мс, глотаю", true)
+        else lastVoiceKeyMs = now
+        return dup
     }
 
     /** MODULE_CONTROL VR=1 от ГУ (кнопка голоса) -> AA KEYCODE_SEARCH: AA открывает ассистента и сам просит микрофон. */
@@ -834,6 +874,7 @@ class AaBridgeCore(
             log("BRIDGE кнопка голоса проигнорирована: AA не подключён", true)
             return
         }
+        if (voiceKeyBounce("кнопка голоса (MODULE_CONTROL VR=1)")) return
         log("BRIDGE кнопка голоса (MODULE_CONTROL VR=1) -> AA KEYCODE $KEYCODE_SEARCH", true)
         p.sendKey(KEYCODE_SEARCH)
     }
@@ -895,6 +936,10 @@ class AaBridgeCore(
                 }
                 log("BRIDGE AA audio ch$chan ${pcm.size} Б не пересылаю ($why), всего отброшено $audioDropped", false)
             }
+            return
+        }
+        if (ch == CarlifeAudio.CH_TTS && (vrReply || (huVwCns2Delphi && voice && micModeProvider() != MicMode.PHONE))) {
+            sendVrReply(chan, pcm)
             return
         }
         if (ch == CarlifeAudio.CH_TTS) {
@@ -962,9 +1007,14 @@ class AaBridgeCore(
                 if (out.isEmpty()) return
             }
         }
+        val chunkMax = if (ch == CarlifeAudio.CH_MEDIA) mediaChunkProvider().bytes ?: CarlifeAudio.MAX_CHUNK else CarlifeAudio.MAX_CHUNK
+        if (ch == CarlifeAudio.CH_MEDIA && chunkMax != mediaChunkLogged) {
+            mediaChunkLogged = chunkMax
+            log("BRIDGE музыка: пакеты по $chunkMax Б (настройка)", true)
+        }
         var off = 0
         while (off < out.size) {
-            val n = minOf(CarlifeAudio.MAX_CHUNK, out.size - off)
+            val n = minOf(chunkMax, out.size - off)
             val chunk = if (off == 0 && n == out.size) out else out.copyOfRange(off, off + n)
             if (!link.sendAudio(ch, CarlifeAudio.dataType(ch), chunk)) {
                 audioDropped++
@@ -987,6 +1037,13 @@ class AaBridgeCore(
     override fun onAudioStop(chan: Int) {
         val ch = carlifeChannel(chan) ?: return
         log("BRIDGE AA audio STOP ch$chan", true)
+        if (vrReply && ch == CarlifeAudio.CH_TTS) {
+            vrReply = false
+            link.sendAudio(CarlifeAudio.CH_VR, CarlifeAudio.VR_STOP, ByteArray(0))
+            log("BRIDGE CarLife VR STOP (0x%08x)".format(CarlifeAudio.VR_STOP), true)
+            vrModuleOff("последний VR STOP после голосовой сессии")
+            return
+        }
         if (ch == CarlifeAudio.CH_MEDIA) {
             requestMediaPause("AA STOP ch$chan")
         } else if (TTS_DEBOUNCE_ENABLED) {
@@ -997,6 +1054,42 @@ class AaBridgeCore(
         } else {
             stopAudio(ch)
         }
+    }
+
+    /**
+     * Речь AA во время голосовой сессии -> канал VR (VR_INIT 16 кГц моно, VR_DATA), как ответ помощника Baidu.
+     * VW CNS2 Delphi (h425) речь ассистента, пришедшую в TTS сразу после записи микрофона, не играет.
+     */
+    private fun sendVrReply(chan: Int, pcm: ByteArray) {
+        if (!vrReply) {
+            if (audioInited[CarlifeAudio.CH_TTS] == true) stopAudio(CarlifeAudio.CH_TTS)
+            if (!link.sendAudio(CarlifeAudio.CH_VR, CarlifeAudio.VR_INIT, CarlifeAudio.initBody(16000, 1, 16))) {
+                audioDropped++
+                return
+            }
+            vrReply = true
+            ttsPackets = 0
+            log("BRIDGE CarLife VR INIT 16000Гц 1к 16бит (0x%08x): речь AA ch$chan в голосовой сессии".format(CarlifeAudio.VR_INIT), true)
+        }
+        var off = 0
+        while (off < pcm.size) {
+            val n = minOf(CarlifeAudio.MAX_CHUNK, pcm.size - off)
+            val chunk = if (off == 0 && n == pcm.size) pcm else pcm.copyOfRange(off, off + n)
+            if (!link.sendAudio(CarlifeAudio.CH_VR, CarlifeAudio.VR_DATA, chunk)) audioDropped++ else audioBytes += n
+            off += n
+        }
+        AaState.audioBytes = audioBytes
+        if (++ttsPackets <= TTS_DIAG_PACKETS) log("BRIDGE VR пакет #$ttsPackets: ${pcm.size} Б", false)
+    }
+
+    /**
+     * h425: VW CNS2 Delphi после ответа в канале VR оставляет кнопки громкости на голосовом канале, пока не переткнуть
+     * кабель. MODULE_STATUS VR=0 уходит при закрытии микрофона, но ответ в VR идёт уже после него: повторяем VR=0,
+     * когда и голосовая сессия AA кончилась, и поток VR закрыт.
+     */
+    private fun vrModuleOff(why: String) {
+        if (!huVwCns2Delphi || voice || vrReply) return
+        if (link.sendModuleStatus(CarlifeAudio.MODULE_VR, 0)) log("BRIDGE CarLife MODULE_STATUS VR=0 ($why)", true)
     }
 
     // --- голосовая сессия Ассистента: MEDIA на паузу, данные не пересылаем; выход со сглаживанием пачки 2/2/1/2/2 ---
@@ -1018,6 +1111,7 @@ class AaBridgeCore(
                 voiceExitTimer.start(VOICE_EXIT_DELAY_MS) {
                     voice = false
                     log("BRIDGE голосовая сессия: выход, MEDIA поднимется через INIT на первых данных", true)
+                    vrModuleOff("выход из голосовой сессии")
                 }
             }
             else -> log("BRIDGE голосовая сессия: status=$status не знаю, игнор", false)
@@ -1621,6 +1715,7 @@ class AaBridgeCore(
 
         /** Android KEYCODE_SEARCH: в AA запускает голосового ассистента. */
         const val KEYCODE_SEARCH = 84
+        const val VOICE_KEY_DEBOUNCE_MS = 500L
         const val KEYCODE_MEDIA_PLAY = 126
         const val KEYCODE_MEDIA_PAUSE = 127
 
@@ -1679,6 +1774,7 @@ class AaBridgeCore(
         const val VW_20082120_CHANNEL = "20082120"        // VW, protocol 1.0, versionName="RADIO" (h93)
         const val VW_CNS3_20082122_CHANNEL = "20082122"   // VW CNS3 (Tharu и др.): рвёт USB через ~5,6 с PAUSE без heartbeat (h222)
         const val VW_CNS3_20082134_CHANNEL = "20082134"   // VW CNS3 Tiguan L Pro: рвёт CarLife по Wi-Fi через ~5,1-5,7 с PAUSE (h224)
+        const val VW_CNS2_20082114_CHANNEL = "20082114"   // VW CNS2 Delphi (Tharu 2020): рвёт USB через 6-8 с PAUSE (h425)
         const val VW_20082138_CHANNEL = "20082138"        // VW ID (h196): HU_INFO manufacturer=model="VW BT 1538"
         const val VW_BT_1420_MANUFACTURER = "VW BT 1420"  // VW (Павел): HU_INFO manufacturer=model, канал 20082138
         const val VW_20082138_MANUFACTURER = "VW BT 1538"

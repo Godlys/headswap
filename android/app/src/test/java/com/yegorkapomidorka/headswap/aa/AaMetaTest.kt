@@ -716,6 +716,14 @@ class AaMetaTest {
     }
 
     @Test
+    fun pauseHeartbeatForVwCns2DelphiChannel20082114() {
+        val r = Rig()
+        r.core.onHuInfo("VW", "")
+        r.core.onHuStatistic("20082114")                  // h425: Tharu 2020 CNS2, EIO через 6-8 с PAUSE
+        assertTrue(r.core.huVw20082120)
+    }
+
+    @Test
     fun routeNaviOffForDesayByChannel() {
         val r = Rig()
         r.core.onHuInfo("", "")

@@ -29,6 +29,7 @@ import com.yegorkapomidorka.headswap.aa.AaPrefs
 import com.yegorkapomidorka.headswap.aa.AaState
 import com.yegorkapomidorka.headswap.aa.CustomResError
 import com.yegorkapomidorka.headswap.aa.CustomVideoMode
+import com.yegorkapomidorka.headswap.aa.MediaChunk
 import com.yegorkapomidorka.headswap.autosrv.AutoServer
 
 /** «Для разработчиков» (Dev.dc.html): отладочные флажки, кнопки, статус и живой лог (последние ~200 строк). */
@@ -51,6 +52,7 @@ class DevScreen(host: MainActivity) : Screen(host) {
     private var customCalc: View? = null
     private val customVals = arrayOfNulls<TextView>(4)
     private var customUpdating = false
+    private val chunkRows = LinkedHashMap<MediaChunk, RadioRow>()
 
     /** AVC-энкодеры телефона (null = список получить не удалось, тогда размер не проверяем). Список не меняется, считаем один раз. */
     private val avcEncoders: List<MediaCodecInfo.VideoCapabilities>? by lazy {
@@ -90,6 +92,18 @@ class DevScreen(host: MainActivity) : Screen(host) {
                 row(c.getString(R.string.dev_meta_progress_title), c.getString(R.string.dev_meta_progress_sub), aa.progressSeconds) { aa.progressSeconds = it },
             )),
         )
+
+        body.addView(c.sectionTitle(c.getString(R.string.dev_section_music_chunk)))
+        for (m in MediaChunk.values()) {
+            val row = RadioRow(c, c.getString(m.titleRes), "") { setMediaChunk(m) }
+            chunkRows[m] = row
+            body.addView(row.view, lp(MATCH, WRAP))
+        }
+        body.addView(
+            c.text(c.getString(R.string.dev_music_chunk_note), 13f, 400, c.clr(R.color.on2)),
+            lp(WRAP, WRAP).margins(c, 8, 2, 8, 0),
+        )
+        refreshMediaChunk()
 
         body.addView(c.sectionTitle(c.getString(R.string.dev_section_video)))
         body.addView(customResCard())
@@ -181,6 +195,15 @@ class DevScreen(host: MainActivity) : Screen(host) {
         )
 
         view = scaffold(c, c.getString(R.string.dev_title), { host.back() }, body)
+    }
+
+    private fun setMediaChunk(m: MediaChunk) {
+        aa.mediaChunk = m
+        refreshMediaChunk()
+    }
+
+    private fun refreshMediaChunk() {
+        for ((m, row) in chunkRows) row.setSelected(aa.mediaChunk == m)
     }
 
     private fun row(title: String, sub: String, checked: Boolean, onChange: (Boolean) -> Unit) =
