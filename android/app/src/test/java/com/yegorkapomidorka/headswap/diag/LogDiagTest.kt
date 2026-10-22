@@ -83,6 +83,18 @@ class LogDiagTest {
     }
 
     @Test
+    fun fixedInStartsWithUpdateStep() {
+        for (en in listOf(false, true)) {
+            val r = runCase("vw_pause.log", "2.3.4", en = en)
+            val c = LogDiag.top(r.causes).first { it.id == "vw_pause_eio" }
+            assertEquals("update", c.steps.first().action)
+            assertTrue(c.steps.first().text.contains("2.4.0"))
+            assertEquals(en, c.steps.first().text.startsWith("Update"))
+            assertTrue("после update должен остаться совет", c.steps.size >= 2)
+        }
+    }
+
+    @Test
     fun englishTitle() {
         val ru = runCase("aa_server_off.log", "2.4.4", en = false)
         val en = runCase("aa_server_off.log", "2.4.4", en = true)

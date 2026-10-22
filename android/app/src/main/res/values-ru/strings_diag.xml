@@ -3,10 +3,52 @@
     <string name="diag_title">Почему не подключается</string>
     <string name="diag_analyzing">Анализирую лог…</string>
     <string name="diag_failed">Не удалось проанализировать лог.</string>
-    <string name="diag_in_log">в логе:</string>
-    <string name="diag_none">Причина не распознана. Отправьте лог разработчикам — мы разберёмся.</string>
     <string name="diag_send">Отправить лог разработчикам</string>
     <string name="diag_privacy">Анализ выполняется на телефоне, лог никуда не отправляется</string>
     <string name="diag_home_btn">Почему не подключается?</string>
     <string name="diag_settings_item">Диагностика подключения</string>
+
+    <string name="diag_lead_one">Нашли вероятную причину.</string>
+    <plurals name="diag_lead_many">
+        <item quantity="one">Нашли %d возможную причину. Начните с первой — она самая вероятная.</item>
+        <item quantity="few">Нашли %d возможные причины. Начните с первой — она самая вероятная.</item>
+        <item quantity="many">Нашли %d возможных причин. Начните с первой — она самая вероятная.</item>
+        <item quantity="other">Нашли %d возможной причины. Начните с первой — она самая вероятная.</item>
+    </plurals>
+    <string name="diag_lead_next">Тогда попробуйте следующее.</string>
+    <string name="diag_lead_all_failed">Не помогло ничего из найденного — отправьте лог, разберёмся.</string>
+
+    <string name="diag_chip_likely">Скорее всего</string>
+    <string name="diag_chip_maybe">Возможно</string>
+    <string name="diag_chip_not_helped">не помогло</string>
+    <string name="diag_how_to_fix">КАК ИСПРАВИТЬ</string>
+    <string name="diag_show_log">Что в логе ⌄</string>
+    <string name="diag_hide_log">Что в логе ⌃</string>
+    <string name="diag_show_solution">Показать решение ⌄</string>
+    <string name="diag_helped">Помогло</string>
+    <string name="diag_not_helped">Не помогло</string>
+
+    <string name="diag_done_title">Отлично, работает</string>
+    <string name="diag_done_sub">Помог совет «%1$s»</string>
+    <string name="diag_done">Готово</string>
+
+    <string name="diag_works_title">Явных сбоев нет</string>
+    <string name="diag_none_title">Причина не найдена</string>
+    <string name="diag_none_text">По логу причину определить не удалось. Отправьте лог разработчикам — разберёмся и добавим подсказку.</string>
+
+    <string name="diag_old_version">Стоит обновить Headswap: многое уже исправлено.</string>
+    <string name="diag_old_update">Обновить</string>
+
+    <string name="diag_act_open_aa">Открыть Android Auto</string>
+    <string name="diag_act_video">Настройки видео</string>
+    <string name="diag_act_audio">Настройки звука</string>
+    <string name="diag_act_battery">Настройки батареи</string>
+    <string name="diag_act_autostart">Автозапуск</string>
+    <string name="diag_act_app_settings">Разрешения</string>
+    <string name="diag_act_wifi">Настройки Wi-Fi</string>
+    <string name="diag_act_hotspot">Точка доступа</string>
+    <string name="diag_act_bluetooth">Bluetooth</string>
+    <string name="diag_act_onboarding">Пройти настройку заново</string>
+    <string name="diag_act_update">Проверить обновление</string>
+    <string name="diag_act_share_log">Отправить лог</string>
 </resources>

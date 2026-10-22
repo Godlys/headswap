@@ -185,12 +185,14 @@ def diagnose(f, found, rules):
             if check(cond, f):
                 score += add
         advice = rule["advice"]
+        steps = [s["text"] for s in rule.get("steps", [])]
         fixed = rule.get("fixed_in")
         if fixed:
             v = vtuple(f.get("version"))
             if v is not None and v >= vtuple(fixed):
                 continue  # уже исправлено в версии юзера — эта причина не та
             advice = f"Обновите Headswap до {fixed} или новее (последняя {rules['latest']}): там это исправлено. " + advice
+            steps.insert(0, f"Обновите Headswap до {fixed} или новее")
         evidence = []
         for k in rule.get("evidence", []):
             e = found.get(k)
@@ -198,6 +200,7 @@ def diagnose(f, found, rules):
                 evidence.append(f"{e['first']}" + (f"  (×{e['n']})" if e["n"] > 1 else ""))
         hits.append({"id": rule["id"], "title": rule["title"], "phase": rule["phase"],
                      "category": rule["category"], "score": min(score, 100),
+                     "what": rule.get("what"), "steps": steps,
                      "advice": advice, "ask": rule.get("ask"), "evidence": evidence,
                      "suppresses": rule.get("suppresses", [])})
     suppressed = {s for h in hits for s in h["suppresses"]}
@@ -246,7 +249,10 @@ def render(f, hits, show_all=False):
         L.append(f"{i}. {h['title']}  [{h['score']}%]")
         for e in h["evidence"][:2]:
             L.append(f"   в логе: {e}")
-        L.append(f"   что делать: {h['advice']}")
+        L.append(f"   что случилось: {h['what']}")
+        L.append("   как исправить:")
+        for n, s in enumerate(h["steps"], 1):
+            L.append(f"     {n}. {s}")
         if h["ask"]:
             L.append(f"   уточнить: {h['ask']}")
         L.append("")

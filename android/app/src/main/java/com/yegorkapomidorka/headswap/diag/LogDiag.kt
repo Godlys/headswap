@@ -16,6 +16,9 @@ object LogDiag {
 
     class Cond(val fact: String, val op: String, val value: Any?)
 
+    /** Шаг решения в правиле: текст ru/en и необязательное действие-кнопка (open_aa, video, ... см. DiagActions). */
+    class RuleStep(val text: String, val textEn: String?, val action: String?)
+
     class Rule(
         val id: String,
         val title: String,
@@ -27,6 +30,9 @@ object LogDiag {
         val none: List<Cond>,
         val boost: List<Pair<Cond, Int>>,
         val evidence: List<String>,
+        val what: String?,
+        val whatEn: String?,
+        val steps: List<RuleStep>,
         val advice: String,
         val adviceEn: String?,
         val ask: String?,
@@ -37,6 +43,9 @@ object LogDiag {
 
     class Rules(val latest: String, val markers: Map<String, Regex>, val rules: List<Rule>)
 
+    /** Шаг для показа: текст на нужном языке и действие (null = без кнопки). */
+    class Step(val text: String, val action: String?)
+
     class Cause(
         val id: String,
         val title: String,
@@ -45,6 +54,8 @@ object LogDiag {
         val advice: String,
         val ask: String?,
         val evidence: List<String>,
+        val what: String? = null,
+        val steps: List<Step> = emptyList(),
     ) {
         val isNote get() = category == "note"
     }
@@ -85,6 +96,13 @@ object LogDiag {
                     (0 until b.length()).map { j -> b.getJSONArray(j).let { cond(it.getJSONArray(0)) to it.getInt(1) } }
                 } ?: emptyList(),
                 evidence = strs(r.optJSONArray("evidence")),
+                what = r.optStr("what"),
+                whatEn = r.optStr("what_en"),
+                steps = r.optJSONArray("steps")?.let { a ->
+                    (0 until a.length()).map { j ->
+                        a.getJSONObject(j).let { s -> RuleStep(s.getString("text"), s.optStr("text_en"), s.optStr("action")) }
+                    }
+                } ?: emptyList(),
                 advice = r.getString("advice"),
                 adviceEn = r.optStr("advice_en"),
                 ask = r.optStr("ask"),
@@ -425,9 +443,13 @@ object LogDiag {
             var score = r.score
             for ((c, add) in r.boost) if (check(c, f)) score += add
             var advice = (if (en) r.adviceEn else null) ?: r.advice
+            var steps = r.steps.map { Step((if (en) it.textEn else null) ?: it.text, it.action) }
             r.fixedIn?.let { fixed ->
                 val fv = vtuple(fixed)
                 if (myVer != null && fv != null && cmpVer(myVer, fv) >= 0) continue
+                // без шагов в правиле сам совет становится вторым шагом, иначе экран показал бы только «обновитесь»
+                if (steps.isEmpty()) steps = listOf(Step(advice, null))
+                steps = listOf(Step(if (en) "Update Headswap to $fixed or newer" else "Обновите Headswap до $fixed или новее", "update")) + steps
                 advice = (if (en) "Update Headswap to $fixed or newer (latest ${rules.latest}): this is fixed there. "
                 else "Обновите Headswap до $fixed или новее (последняя ${rules.latest}): там это исправлено. ") + advice
             }
@@ -442,6 +464,8 @@ object LogDiag {
                 advice = advice,
                 ask = (if (en) r.askEn else null) ?: r.ask,
                 evidence = evidence,
+                what = (if (en) r.whatEn else null) ?: r.what,
+                steps = steps,
             )
             hits.add(cause to r.suppresses)
         }

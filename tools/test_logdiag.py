@@ -17,6 +17,8 @@ import logdiag  # noqa: E402
 RULES = logdiag.load_rules()
 CASES_DIR = os.path.join(HERE, "logdiag_cases")
 LOG_NAME = "headswap-20261012-090000.log"
+ACTIONS = {"open_aa", "video", "audio", "battery", "autostart", "app_settings", "wifi", "hotspot",
+           "bluetooth", "onboarding", "update", "share_log"}
 
 
 def device(version):
@@ -71,11 +73,19 @@ class TestEngine(unittest.TestCase):
                 self.assertIn(k, RULES["markers"], f"{r['id']}: нет маркера {k}")
             for k in ("title_en", "advice_en"):
                 self.assertTrue(r.get(k), f"{r['id']}: нет {k}")
+            for k in ("what", "what_en"):
+                self.assertTrue(r.get(k), f"{r['id']}: нет {k}")
+            self.assertTrue(1 <= len(r.get("steps", [])) <= 4, f"{r['id']}: шагов должно быть 1-4")
+            for s in r["steps"]:
+                self.assertTrue(s.get("text") and s.get("text_en"), f"{r['id']}: шаг без text/text_en")
+                if "action" in s:
+                    self.assertIn(s["action"], ACTIONS, f"{r['id']}: неизвестное действие {s['action']}")
 
     def test_update_prefix(self):
         f, hits = run_case({"log": "auth_v2.log", "version": "1.1.6"})
-        adv = [h for h in hits if h["id"] == "auth_v2_old_version"][0]["advice"]
-        self.assertTrue(adv.startswith("Обновите Headswap до 1.1.7"))
+        h = [h for h in hits if h["id"] == "auth_v2_old_version"][0]
+        self.assertTrue(h["advice"].startswith("Обновите Headswap до 1.1.7"))
+        self.assertTrue(h["steps"][0].startswith("Обновите Headswap до 1.1.7"))
 
     def test_works_not_unrecognized(self):
         f, hits = run_case({"log": "works.log", "version": "2.4.4"})
