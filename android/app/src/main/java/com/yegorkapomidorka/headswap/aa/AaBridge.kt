@@ -235,7 +235,6 @@ class AaBridgeCore(
     }
 
     private val ttsStopTimer = AudioTimer()
-    private val vrStopTimer = AudioTimer()
 
     /** h425: VW CNS2 Delphi копит MOVE ~190 мс и шлёт пачкой; раздаём пачку равномерно. Только при [huVwCns2Delphi]. */
     private val touchPacer = TouchBurstPacer(clockMs, audioSched) { a, x, y, px, py -> dispatchTouch(a, x, y, px, py) }
@@ -365,7 +364,6 @@ class AaBridgeCore(
         huMazda20622111 = false                // STATISTIC_INFO придёт заново в этой сессии
         huVwCns2Delphi = false                 // STATISTIC_INFO придёт заново в этой сессии
         vrReply = false
-        vrStopTimer.cancel()
         touchPacer.reset()
         touchPacerLogged = false
         h295TouchAt = NEVER
@@ -1032,11 +1030,9 @@ class AaBridgeCore(
         val ch = carlifeChannel(chan) ?: return
         log("BRIDGE AA audio STOP ch$chan", true)
         if (vrReply && ch == CarlifeAudio.CH_TTS) {
-            // AA режет ответ на фразы с паузой 0,1-0,3 с: VR не переоткрываем на каждую (заикание, h425)
-            if (!vrStopTimer.pending) {
-                log("BRIDGE CarLife VR STOP отложен на ${TTS_STOP_DELAY_MS} мс", true)
-                vrStopTimer.start(TTS_STOP_DELAY_MS) { vrStopNow() }
-            }
+            vrReply = false
+            link.sendAudio(CarlifeAudio.CH_VR, CarlifeAudio.VR_STOP, ByteArray(0))
+            log("BRIDGE CarLife VR STOP (0x%08x)".format(CarlifeAudio.VR_STOP), true)
             return
         }
         if (ch == CarlifeAudio.CH_MEDIA) {
@@ -1056,7 +1052,6 @@ class AaBridgeCore(
      * VW CNS2 Delphi (h425) речь ассистента, пришедшую в TTS сразу после записи микрофона, не играет.
      */
     private fun sendVrReply(chan: Int, pcm: ByteArray) {
-        if (vrStopTimer.cancel()) log("BRIDGE VR STOP отменён: речь ch$chan до истечения ${TTS_STOP_DELAY_MS} мс, INIT не повторяю", true)
         if (!vrReply) {
             if (audioInited[CarlifeAudio.CH_TTS] == true) stopAudio(CarlifeAudio.CH_TTS)
             if (!link.sendAudio(CarlifeAudio.CH_VR, CarlifeAudio.VR_INIT, CarlifeAudio.initBody(16000, 1, 16))) {
@@ -1066,7 +1061,6 @@ class AaBridgeCore(
             vrReply = true
             ttsPackets = 0
             log("BRIDGE CarLife VR INIT 16000Гц 1к 16бит (0x%08x): речь AA ch$chan в голосовой сессии".format(CarlifeAudio.VR_INIT), true)
-            sendTtsPreroll(CarlifeAudio.CH_VR, CarlifeAudio.VR_DATA)
         }
         var off = 0
         while (off < pcm.size) {
@@ -1077,12 +1071,6 @@ class AaBridgeCore(
         }
         AaState.audioBytes = audioBytes
         if (++ttsPackets <= TTS_DIAG_PACKETS) log("BRIDGE VR пакет #$ttsPackets: ${pcm.size} Б", false)
-    }
-
-    private fun vrStopNow() {
-        vrReply = false
-        link.sendAudio(CarlifeAudio.CH_VR, CarlifeAudio.VR_STOP, ByteArray(0))
-        log("BRIDGE CarLife VR STOP (0x%08x)".format(CarlifeAudio.VR_STOP), true)
     }
 
     // --- голосовая сессия Ассистента: MEDIA на паузу, данные не пересылаем; выход со сглаживанием пачки 2/2/1/2/2 ---
@@ -1146,19 +1134,18 @@ class AaBridgeCore(
      * есть запас; AA отдаёт речь в реальном времени с первого пакета, запаса нет. Нули дают ГУ открыть
      * тракт на тишине и держат буфер на TTS_PREROLL_MS впереди до конца фразы.
      */
-    private fun sendTtsPreroll(ch: Int = CarlifeAudio.CH_TTS, type: Int = CarlifeAudio.TTS_DATA) {
-        val name = if (ch == CarlifeAudio.CH_VR) "VR" else "TTS"
+    private fun sendTtsPreroll() {
         val zeros = ByteArray(TTS_PREROLL_BYTES)
         var off = 0
         while (off < zeros.size) {
             val n = minOf(TTS_PREROLL_CHUNK, zeros.size - off)
-            if (!link.sendAudio(ch, type, zeros.copyOfRange(off, off + n))) {
-                log("BRIDGE $name пре-ролл: очередь полна, отправлено ${off * 1000 / TTS_BYTES_PER_SEC} из $TTS_PREROLL_MS мс", true)
+            if (!link.sendAudio(CarlifeAudio.CH_TTS, CarlifeAudio.TTS_DATA, zeros.copyOfRange(off, off + n))) {
+                log("BRIDGE TTS пре-ролл: очередь полна, отправлено ${off * 1000 / TTS_BYTES_PER_SEC} из $TTS_PREROLL_MS мс", true)
                 return
             }
             off += n
         }
-        log("BRIDGE $name пре-ролл $TTS_PREROLL_MS мс тишины (${zeros.size} Б) после INIT", true)
+        log("BRIDGE TTS пре-ролл $TTS_PREROLL_MS мс тишины (${zeros.size} Б) после INIT", true)
     }
 
     /** Фактический TTS_STOP (таймер debounce); после него MEDIA-пакеты ждут ещё MEDIA_AFTER_TTS_MS. */
