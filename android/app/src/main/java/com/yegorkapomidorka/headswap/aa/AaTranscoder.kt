@@ -19,6 +19,11 @@ import java.util.concurrent.atomic.AtomicLong
  * повторяет последний кадр раз в 100 мс на статичной картинке (KEY_REPEAT_PREVIOUS_FRAME_AFTER, как
  * MD Baidu: core/screen/video/Recorder.java:1364), поэтому ГУ не остаётся без кадров. Декодер создаётся
  * лениво на первом IDR AA и пересоздаётся при новом SPS или resetDecoder().
+ *
+ * feedFrame/feedConfig/resetDecoder не блокируют вызывающую нить (нить AA под монитором моста): кладут в
+ * [FeedQueue], а createDecoder, dequeueInputBuffer и queueInputBuffer выполняет нить aa-trans-feed.
+ * Очередь коротка: при переполнении кадры теряются до следующего IDR, мост получает onNeedAaKeyFrame.
+ * Колбэки [out] не зовутся под lock. "nofeedthread" в tuning - старый синхронный путь на нити вызывающего.
  */
 class AaTranscoder(
     private val width: Int,
@@ -28,7 +33,7 @@ class AaTranscoder(
     private val bitrate: Int,
     private val out: TranscodeOutput,
     private val log: (String) -> Unit = { AppLog.i(it, false) },
-    /** Эксперименты: "vbr", "repeat=NNN" (мкс), "norealtime", "nolowlat", "nobase". */
+    /** Эксперименты: "vbr", "repeat=NNN" (мкс), "norealtime", "nolowlat", "nobase", "nofeedthread". */
     private val tuning: String = "",
     /** Размер кадра AA на входе (подсказка декодеру) и вырезаемая из него часть; по умолчанию вход = выход, без кропа. */
     private val srcWidth: Int = width,
@@ -57,6 +62,19 @@ class AaTranscoder(
     private var decoderCfg: ByteArray? = null          // SPS+PPS, с которыми создан текущий декодер
     private var cfgStale = false
     private var needIdr = true
+
+    // нить кормления: вся работа с декодером уезжает с нити AA сюда
+    private val threaded = !tuning.contains("nofeedthread")
+    private val queue = FeedQueue()
+    private var feedThread: Thread? = null
+
+    /** Итог обработки кадра под lock; колбэки [out] зовёт вызывающий код уже после выхода из lock. */
+    private sealed class Outcome {
+        object None : Outcome()
+        object Skip : Outcome()                      // кадр пропущен, колбэк не нужен
+        object NeedIdr : Outcome()
+        class Error(val msg: String) : Outcome()
+    }
 
     // статистика окна
     private val inTimes = ConcurrentHashMap<Long, Long>()
@@ -138,6 +156,10 @@ class AaTranscoder(
         if (relay == null && !crop.isNone) log("транскодер: !!!!!! без GL-реле кроп невозможен, кадр AA будет сжат целиком")
         running = true
         encThread = Thread({ encodeLoop(c) }, "aa-trans-enc").also { it.start() }
+        if (threaded) {
+            queue.clear()
+            feedThread = Thread({ feedLoop() }, "aa-trans-feed").also { it.start() }
+        }
         log("транскодер: энкодер $encoderName ${width}x$height (вход AA ${srcWidth}x$srcHeight${if (crop.isNone) "" else ", кроп $crop"}) ${fps}fps ${bitrate / 1000}kbps ($encoderNote)")
     }
 
@@ -200,7 +222,12 @@ class AaTranscoder(
 
     // ---------------- вход AA ----------------
 
+    /** Не блокирует: в режиме нити кладёт в очередь, разбор SPS/PPS делает нить кормления. */
     override fun feedConfig(annexB: ByteArray) {
+        if (threaded) queue.post(FeedItem.Config(annexB)) else processConfig(annexB)
+    }
+
+    private fun processConfig(annexB: ByteArray) {
         val (s, p) = H264Stream.spsPps(annexB)
         if (s == null || p == null) return
         synchronized(lock) {
@@ -211,61 +238,116 @@ class AaTranscoder(
         }
     }
 
+    /**
+     * Не блокирует (O(1)): в режиме нити кладёт в очередь. Очередь полна -> кадр теряется, пока не придёт IDR,
+     * мост получает onNeedAaKeyFrame один раз на эпизод. Колбэк зовётся на нити вызывающего, не под lock.
+     */
     override fun feedFrame(annexB: ByteArray, ptsUs: Long) {
         if (!running) return
         winIn.incrementAndGet()
         totalIn.incrementAndGet()
         val idr = 5 in AnnexB.nalTypes(annexB)
-        synchronized(lock) {
-            if (decoder == null || (cfgStale && idr)) {
-                if (!idr) {
-                    winDrop.incrementAndGet()
-                    return                           // декодеру нужен IDR для старта
-                }
-                if (!createDecoder(annexB)) return
-            }
-            if (needIdr && !idr) {
+        val f = FeedItem.Frame(annexB, ptsUs, idr, SystemClock.elapsedRealtimeNanos())
+        if (!threaded) {
+            report(processFrame(f))
+            return
+        }
+        when (queue.offerFrame(f)) {
+            Offer.ACCEPTED -> {}
+            Offer.DROPPED_FULL -> {
                 winDrop.incrementAndGet()
-                return
-            }
-            val d = decoder ?: return
-            val idx = try {
-                d.codec.dequeueInputBuffer(15_000)
-            } catch (e: Exception) {
-                out.onTranscodeError("декодер: dequeueInputBuffer: ${e.message}")
-                return
-            }
-            if (idx < 0) {
-                // декодер не успевает: кадр потерян, дальше P нельзя - ждём IDR от AA
-                winDrop.incrementAndGet()
-                needIdr = true
+                log("транскодер: очередь кормления полна (декодер не успевает), кадры до следующего IDR теряются")
                 out.onNeedAaKeyFrame()
-                return
             }
-            val buf = d.codec.getInputBuffer(idx)
-            if (buf == null || buf.capacity() < annexB.size) {
-                d.codec.queueInputBuffer(idx, 0, 0, ptsUs, 0)
-                // кадр потерян, как и без входного буфера: P после него декодер испортит - ждём IDR от AA
-                winDrop.incrementAndGet()
-                needIdr = true
-                out.onNeedAaKeyFrame()
-                return
-            }
-            buf.clear()
-            buf.put(annexB)
-            inTimes[ptsUs] = SystemClock.elapsedRealtimeNanos()
-            if (inTimes.size > 256) inTimes.keys.take(128).forEach { inTimes.remove(it) }
-            try {
-                d.codec.queueInputBuffer(idx, 0, annexB.size, ptsUs, 0)
-                if (idr) needIdr = false
-            } catch (e: Exception) {
-                out.onTranscodeError("декодер: queueInputBuffer: ${e.message}")
-            }
+            Offer.DROPPED_GATED -> winDrop.incrementAndGet()
         }
     }
 
-    /** Создаёт декодер по SPS/PPS (из CODEC_CONFIG или из самого IDR). Под lock. */
-    private fun createDecoder(idrFrame: ByteArray): Boolean {
+    /** Колбэки по итогу обработки; только вне lock. */
+    private fun report(o: Outcome) {
+        when (o) {
+            Outcome.NeedIdr -> out.onNeedAaKeyFrame()
+            is Outcome.Error -> out.onTranscodeError(o.msg)
+            Outcome.None, Outcome.Skip -> {}
+        }
+    }
+
+    /** Кормит декодер одним кадром (создаёт его на IDR). Под lock, колбэков [out] не зовёт - итог возвращает. */
+    private fun processFrame(f: FeedItem.Frame): Outcome = synchronized(lock) {
+        val annexB = f.annexB
+        val ptsUs = f.ptsUs
+        val idr = f.idr
+        if (decoder == null || (cfgStale && idr)) {
+            if (!idr) {
+                winDrop.incrementAndGet()
+                return Outcome.Skip                  // декодеру нужен IDR для старта
+            }
+            val created = createDecoder(annexB)
+            if (created !== Outcome.None) return created
+        }
+        if (needIdr && !idr) {
+            winDrop.incrementAndGet()
+            return Outcome.Skip
+        }
+        val d = decoder ?: return Outcome.Skip
+        val idx = try {
+            d.codec.dequeueInputBuffer(15_000)
+        } catch (e: Exception) {
+            return Outcome.Error("декодер: dequeueInputBuffer: ${e.message}")
+        }
+        if (idx < 0) {
+            // декодер не успевает: кадр потерян, дальше P нельзя - ждём IDR от AA
+            winDrop.incrementAndGet()
+            needIdr = true
+            return Outcome.NeedIdr
+        }
+        val buf = d.codec.getInputBuffer(idx)
+        if (buf == null || buf.capacity() < annexB.size) {
+            d.codec.queueInputBuffer(idx, 0, 0, ptsUs, 0)
+            // кадр потерян, как и без входного буфера: P после него декодер испортит - ждём IDR от AA
+            winDrop.incrementAndGet()
+            needIdr = true
+            return Outcome.NeedIdr
+        }
+        buf.clear()
+        buf.put(annexB)
+        inTimes[ptsUs] = f.atNs                      // от прихода из AA: ожидание в очереди кормления входит в задержку декодера
+        if (inTimes.size > 256) inTimes.keys.take(128).forEach { inTimes.remove(it) }
+        try {
+            d.codec.queueInputBuffer(idx, 0, annexB.size, ptsUs, 0)
+            if (idr) needIdr = false
+            Outcome.None
+        } catch (e: Exception) {
+            Outcome.Error("декодер: queueInputBuffer: ${e.message}")
+        }
+    }
+
+    /** Нить кормления: берёт из очереди кадры и команды, всё с декодером делает здесь. */
+    private fun feedLoop() {
+        try {
+            while (true) {
+                val item = queue.take(500) ?: if (running) continue else break
+                if (item is FeedItem.Stop) break
+                if (!running) continue               // остановка: декодер уже не трогаем, выходим по Stop или таймауту
+                try {
+                    when (item) {
+                        is FeedItem.Frame -> report(processFrame(item))
+                        is FeedItem.Config -> processConfig(item.annexB)
+                        FeedItem.Reset -> processReset()
+                        FeedItem.Stop -> {}
+                    }
+                } catch (e: Exception) {
+                    out.onTranscodeError("нить кормления: ${e.javaClass.simpleName}: ${e.message}")
+                }
+            }
+        } finally {
+            // любой выход (Stop, таймаут после running=false, необработанное исключение): декодер освобождает владевшая им нить
+            synchronized(lock) { releaseDecoderLocked() }
+        }
+    }
+
+    /** Создаёт декодер по SPS/PPS (из CODEC_CONFIG или из самого IDR). Под lock. None = создан. */
+    private fun createDecoder(idrFrame: ByteArray): Outcome {
         releaseDecoderLocked()
         var s = sps
         var p = pps
@@ -276,9 +358,9 @@ class AaTranscoder(
         }
         if (s == null || p == null) {
             log("транскодер: нет SPS/PPS для декодера, жду")
-            return false
+            return Outcome.Skip
         }
-        val surf = relay?.inputSurface ?: surface ?: return false
+        val surf = relay?.inputSurface ?: surface ?: return Outcome.Skip
         return try {
             val f = MediaFormat.createVideoFormat(MIME, srcWidth, srcHeight)
             f.setByteBuffer("csd-0", ByteBuffer.wrap(s))
@@ -314,10 +396,9 @@ class AaTranscoder(
             cfgStale = false
             needIdr = true
             log("транскодер: декодер ${c.name} создан (SPS ${s.size} Б, PPS ${p.size} Б)")
-            true
+            Outcome.None
         } catch (e: Exception) {
-            out.onTranscodeError("декодер не создан: ${e.javaClass.simpleName}: ${e.message}")
-            false
+            Outcome.Error("декодер не создан: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
 
@@ -349,7 +430,12 @@ class AaTranscoder(
         }
     }
 
+    /** Не блокирует: в режиме нити команда встаёт в очередь после уже принятых кадров, те до сброса и обработаются. */
     override fun resetDecoder() {
+        if (threaded) queue.post(FeedItem.Reset) else processReset()
+    }
+
+    private fun processReset() {
         synchronized(lock) {
             releaseDecoderLocked()
             relay?.clear()
@@ -446,15 +532,30 @@ class AaTranscoder(
         val gatedNow = r?.gated?.get() ?: 0L
         val gatedWin = gatedNow - lastGated
         lastGated = gatedNow
-        return "транскод за %.1f с: вход AA %d, декодировано %d, выход энкодера %d (%.1f fps), повторов (перерисовок GL) %d, задержано гейтом fps %d, потеряно %d; задержка декодер %.1f мс + энкодер %.1f мс = %.1f мс"
-            .format(sec, inN, dec, outN, outN / sec, repeats, gatedWin, drop, decMs, encMs, decMs + encMs)
+        val queueNote = if (threaded) ", очередь кормления макс ${queue.resetMaxPending()}" else ""
+        return ("транскод за %.1f с: вход AA %d, декодировано %d, выход энкодера %d (%.1f fps), повторов (перерисовок GL) %d, задержано гейтом fps %d, потеряно %d; задержка декодер %.1f мс + энкодер %.1f мс = %.1f мс"
+            .format(sec, inN, dec, outN, outN / sec, repeats, gatedWin, drop, decMs, encMs, decMs + encMs)) + queueNote
     }
 
     @Synchronized
     override fun stop() {
         if (!running && encoder == null) return
         running = false
-        synchronized(lock) { releaseDecoderLocked() }
+        var decoderReleased = false
+        val ft = feedThread
+        feedThread = null
+        if (ft != null) {
+            queue.post(FeedItem.Stop)
+            if (ft !== Thread.currentThread()) {
+                try {
+                    ft.join(1500)
+                } catch (_: InterruptedException) {
+                }
+            }
+            decoderReleased = !ft.isAlive
+            if (ft.isAlive) log("транскодер: !!!!!! нить кормления не завершилась за 1,5 с, освобождаю декодер сама")
+        }
+        if (!decoderReleased) synchronized(lock) { releaseDecoderLocked() }
         try {
             relay?.stop()
         } catch (_: Exception) {
