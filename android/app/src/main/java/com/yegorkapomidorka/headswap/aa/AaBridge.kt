@@ -392,6 +392,12 @@ class AaBridgeCore(
         // остальные ГУ (Mazda G6S по воздуху, задний ход) - как было, через IDR от AA.
         val resume = AIR_WARM_RESUME_ENABLED && huVwBt1420 && link.isAir && carlifeStarted && carlifePaused &&
             transcodeEnabled && transcoder != null && gotIdr && active == Source.AA
+        // START после PAUSE - та же живая сессия: отложенный TTS STOP шлём сразу, иначе resetAudio его съест,
+        // ГУ так и держит канал подсказок открытым и глушит музыку до следующей подсказки (h482, ix35 HSAE).
+        if (carlifeStarted && carlifePaused && ttsStopTimer.pending) {
+            log("BRIDGE CarLife START после PAUSE: отложенный TTS STOP шлю сразу", true)
+            stopAudio(CarlifeAudio.CH_TTS)
+        }
         carlifeStarted = true
         carlifePaused = false
         if (warm) log("BRIDGE CarLife START без PAUSE: звук не трогаю, INIT не повторяю", true)
