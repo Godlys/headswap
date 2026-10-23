@@ -237,6 +237,7 @@ class CarlifeBtProbe(
 
     private fun rejoinStep(g: Int, s: BluetoothSocket, attempt: Int) {
         if (g != rejoinGen || !running || active !== s || p2pIp != null) return
+        if (P2pPolicy.rejoinDropBt(attempt)) return dropBt(s, attempt)
         if (attempt == 0) lastTarget?.let {
             WLog.ev(WLog.P2P, "rejoin-cached")
             p2p.start(it)
@@ -250,6 +251,21 @@ class CarlifeBtProbe(
             }
         }, "bt-rejoin").apply { isDaemon = true }.start()
         scheduleRejoin(g, s, attempt + 1)
+    }
+
+    /**
+     * ГУ отвечает TARGET_INFO, а группу не поднимает (h211, h185): закрываем только активный сокет, слушатели остаются.
+     * Цикл accept принимает переподключение ГУ, и TARGET_INFO приходит обычным обменом. Попытку входа снимаем: иначе
+     * тот же TARGET_INFO после переподключения попадёт в SKIP «попытка идёт». [stop] тут нельзя: он оборвёт слушателей.
+     */
+    private fun dropBt(s: BluetoothSocket, attempts: Int) {
+        rejoining = false
+        rejoinGen++
+        WLog.ev(WLog.P2P, "rejoin-drop-bt", "attempts" to attempts)
+        AppLog.i("Wi-Fi Direct: ГУ не подняла группу за $attempts запросов, рву Bluetooth - жду, пока она переподключится")
+        CarLifeState.btProbe = "Bluetooth сброшен, жду переподключения ГУ"
+        p2p.stop("сброс BT")
+        try { s.close() } catch (_: IOException) {}
     }
 
     /** MD_WIFI_IP после IP_REQUEST и входа в группу; на повторный запрос того же адреса отвечаем снова. */

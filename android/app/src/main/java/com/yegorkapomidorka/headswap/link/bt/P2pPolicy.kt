@@ -31,5 +31,13 @@ object P2pPolicy {
         else -> null
     }
 
+    /**
+     * Запросы TARGET_INFO на 2-й, 7-й, 17-й и 27-й секундах ГУ отвечает, но пир в эфире так и не появился (первая 30-секундная
+     * попытка входа кончилась на ~32 с): Desay G6S поднимает Wi-Fi Direct только на новом подключении Bluetooth (h211,
+     * S23 23.10: 2 мин rejoin без пира, после переподключения BT пир за 1,5 с; h185). На ~37 с рвём RFCOMM.
+     */
+    fun rejoinDropBt(attempt: Int): Boolean = attempt >= REJOIN_DROP_BT_AFTER
+
     const val REJOIN_ATTEMPTS = 60
+    const val REJOIN_DROP_BT_AFTER = 4
 }

@@ -1,6 +1,7 @@
 package com.yegorkapomidorka.headswap.link.bt
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class P2pPolicyTest {
@@ -45,5 +46,15 @@ class P2pPolicyTest {
         assertEquals(10_000L, P2pPolicy.rejoinDelayMs(2))
         assertEquals(10_000L, P2pPolicy.rejoinDelayMs(P2pPolicy.REJOIN_ATTEMPTS - 1))
         assertEquals(null, P2pPolicy.rejoinDelayMs(P2pPolicy.REJOIN_ATTEMPTS))
+    }
+
+    /** h211/h185: четыре запроса (~27 с) без входа, первая 30-секундная попытка кончилась - на шаге 4 (~37 с) рвём RFCOMM. */
+    @Test
+    fun rejoinDropsBtAfterFirstFailedJoin() {
+        assertEquals(false, P2pPolicy.rejoinDropBt(0))
+        assertEquals(false, P2pPolicy.rejoinDropBt(P2pPolicy.REJOIN_DROP_BT_AFTER - 1))
+        assertEquals(true, P2pPolicy.rejoinDropBt(P2pPolicy.REJOIN_DROP_BT_AFTER))
+        val dropAtMs = (0 until P2pPolicy.REJOIN_DROP_BT_AFTER + 1).sumOf { P2pPolicy.rejoinDelayMs(it)!! }
+        assertTrue("сброс BT раньше конца первой попытки входа: $dropAtMs мс", dropAtMs > 32_000L)
     }
 }
