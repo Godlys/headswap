@@ -10,6 +10,9 @@ HU_AUTHEN_REQUEST "2.0;<date>", video init/start, feature config), then a VIDEO_
 MD_AUTHEN_RESPONSE is checked as md5("CARLIFE" + brand + model + sdk + <random after ';'>).
 Video goes to out/carlife_video.h264, the whole log to out/carlife_hu.log. Standard library only.
 
+--pause-cycles N (with --pause-every S, --pause-for S) repeats VIDEO_ENCODER_PAUSE -> wait -> VIDEO_ENCODER_START and
+reports start->first frame, start->IDR and frames received during the pause.
+
 Wireless format (--transport tcp6): the HU is the TCP client of 6 phone ports (CMD 7240, VIDEO 8240, MEDIA 9240,
 TTS 9241, VR 9242, TOUCH 9340; reach them with `adb forward`). No outer header, each channel is its own socket
 with plain inner messages. Session logic is the same. --kill-chan/--kill-after close one socket to see whether
@@ -56,6 +59,7 @@ HU_INFO = 0x00018003
 VIDEO_ENCODER_INIT = 0x00018007
 VIDEO_ENCODER_INIT_DONE = 0x00010008
 VIDEO_ENCODER_START = 0x00018009
+VIDEO_ENCODER_PAUSE = 0x0001800A    # Protocol.kt, Msg.VIDEO_ENCODER_PAUSE; тело пустое, как у START
 STATISTIC_INFO = 0x00018027
 HU_AUTHEN_REQUEST = 0x00018048
 MD_AUTHEN_RESPONSE = 0x00010049
@@ -83,7 +87,7 @@ NAMES = {
     0x00030001: "MEDIA_INIT", 0x00030006: "MEDIA_DATA", 0x00040001: "TTS_INIT", 0x00040003: "TTS_DATA",
     0x00050002: "VR_INIT", 0x00050003: "VR_DATA",
     HU_PROTOCOL_VERSION: "HU_PROTOCOL_VERSION", HU_INFO: "HU_INFO", VIDEO_ENCODER_INIT: "VIDEO_ENCODER_INIT",
-    VIDEO_ENCODER_START: "VIDEO_ENCODER_START", HU_AUTHEN_REQUEST: "HU_AUTHEN_REQUEST",
+    VIDEO_ENCODER_START: "VIDEO_ENCODER_START", VIDEO_ENCODER_PAUSE: "VIDEO_ENCODER_PAUSE", HU_AUTHEN_REQUEST: "HU_AUTHEN_REQUEST",
     HU_AUTHEN_RESULT: "HU_AUTHEN_RESULT", HU_UNKNOWN_1804C: "HU_1804C",
     HU_FEATURE_CONFIG_RESPONSE: "HU_FEATURE_CONFIG_RESPONSE", TOUCH_ACTION: "TOUCH_ACTION",
 }
@@ -220,6 +224,16 @@ def cmd_inner(mtype: int, body: bytes = b"") -> bytes:
 def data_inner(mtype: int, body: bytes = b"", time_: int = 0) -> bytes:
     """Inner для VIDEO/MEDIA/TTS/VR: len u32 BE, time u32 BE, type u32 BE."""
     return struct.pack(">III", len(body), time_, mtype) + body
+
+
+def nal_types(data: bytes) -> list[int]:
+    """Типы NAL-единиц Annex-B буфера (старт-коды 00 00 01 / 00 00 00 01): 5 = IDR, 7/8 = SPS/PPS."""
+    types = []
+    p = data.find(b"\x00\x00\x01")
+    while p >= 0 and p + 3 < len(data):
+        types.append(data[p + 3] & 0x1F)
+        p = data.find(b"\x00\x00\x01", p + 3)
+    return types
 
 
 def is_cmd_style(chan: int) -> bool:
@@ -369,8 +383,11 @@ class Options:
                  kill_chan: str | None = None, kill_after=10.0, extra_data_socket=False,
                  discover=False, beacon_port=BEACON_PORT, bind_ip="0.0.0.0", discover_timeout=60.0,
                  probe_8999=False, probe_port=PROBE_PORT,
-                 video_kbps=0, dip_kbps=0, dip_at=20.0, dip_for=5.0):
+                 video_kbps=0, dip_kbps=0, dip_at=20.0, dip_for=5.0,
+                 pause_cycles=0, pause_every=10.0, pause_for=3.0):
         self.host, self.port, self.duration = host, port, duration
+        # циклы паузы: pause_every с от первого кадра (потом от каждого START) шлём PAUSE, через pause_for с - START
+        self.pause_cycles, self.pause_every, self.pause_for = pause_cycles, pause_every, pause_for
         # шейпер видео (tcp6): ГУ читает video-сокет не быстрее video_kbps (0 = без ограничения), а с dip_at по
         # dip_at+dip_for секунд от первого кадра - не быстрее dip_kbps (0 = без провала). Обратное давление настоящее, TCP.
         self.video_kbps, self.dip_kbps, self.dip_at, self.dip_for = video_kbps, dip_kbps, dip_at, dip_for
@@ -399,6 +416,8 @@ class Options:
             raise ValueError("video shaping works only with transport tcp6")
         if self.kill_chan and self.kill_chan not in CH_NAMES.values():
             raise ValueError(f"unknown channel {self.kill_chan!r}")
+        if self.pause_cycles < 0 or self.pause_every <= 0 or self.pause_for < 0:
+            raise ValueError("pause_cycles >= 0, pause_every > 0, pause_for >= 0 expected")
 
 
 class HeadUnit:
@@ -451,6 +470,13 @@ class HeadUnit:
         self.beacons = 0
         self.discovered_host: str | None = None
         self.probe_reply: bool | None = None
+        # циклы паузы: фаза "wait" (идёт видео, ждём следующий PAUSE) или "paused"; замки: on_video зовётся из потоков чтения
+        self.plock = threading.Lock()
+        self.pause_phase = "wait"
+        self.pause_k = 0                            # сколько PAUSE уже послано
+        self.pause_next_at: float | None = None
+        self.pause_cur: dict | None = None          # текущий цикл; после START в нём же копятся замеры
+        self.pause_results: list[dict] = []         # циклы, у которых послан START
 
     def log(self, msg: str):
         line = f"{time.strftime('%H:%M:%S')}.{int(time.time() * 1000) % 1000:03d} {msg}"
@@ -577,6 +603,84 @@ class HeadUnit:
         self.vbytes += len(body)
         if self.vfile:
             self.vfile.write(body)
+        if self.o.pause_cycles:
+            self.pause_on_video(now, body)
+
+    # --- циклы паузы ---
+
+    def pause_on_video(self, now: float, body: bytes):
+        """Кадр в фазе паузы - нарушение (мост на PAUSE слать не должен); после START - замер первого кадра и IDR."""
+        msg = None
+        with self.plock:
+            c = self.pause_cur
+            if c is None:
+                return
+            if self.pause_phase == "paused":
+                c["paused_frames"] += 1
+                if c["paused_frames"] == 1:
+                    msg = (f"pause #{c['k']}: video frame DURING pause, {(now - c['pause_t']) * 1000:.0f} ms after PAUSE, "
+                           f"{len(body)} B")
+            elif c["start_t"] is not None:
+                ms = (now - c["start_t"]) * 1000
+                if c["first_ms"] is None:
+                    c["first_ms"] = ms
+                if c["idr_ms"] is None and 5 in nal_types(body):
+                    c["idr_ms"] = ms
+                    msg = f"pause #{c['k']}: IDR {ms:.0f} ms after START"
+        if msg:
+            self.log(msg)
+
+    def pause_tick(self, now: float):
+        """Из loop(): отсчёт от первого кадра, PAUSE -> ждать pause_for -> START -> снова ждать pause_every."""
+        if self.pause_phase == "wait":
+            if self.pause_k >= self.o.pause_cycles:
+                return
+            if self.pause_next_at is None:
+                if self.first_frame_at is None:
+                    return
+                self.pause_next_at = self.first_frame_at + self.o.pause_every
+            if now < self.pause_next_at:
+                return
+            self.pause_k += 1
+            with self.plock:
+                self.pause_cur = {"k": self.pause_k, "paused_frames": 0, "pause_t": time.monotonic(), "start_t": None,
+                                  "first_ms": None, "idr_ms": None}
+                self.pause_phase = "paused"
+            self.send_cmd(VIDEO_ENCODER_PAUSE, cmd_inner(VIDEO_ENCODER_PAUSE))
+        else:
+            c = self.pause_cur
+            if now - c["pause_t"] < self.o.pause_for:
+                return
+            with self.plock:
+                c["start_t"] = time.monotonic()
+                self.pause_phase = "wait"
+                self.pause_results.append(c)
+                self.pause_next_at = c["start_t"] + self.o.pause_every
+            self.send_cmd(VIDEO_ENCODER_START, cmd_inner(VIDEO_ENCODER_START))
+
+    def pause_summary(self) -> dict:
+        """Строки итога по циклам паузы -> dict для результата; пишет в лог."""
+        res = self.pause_results
+        total = sum(c["paused_frames"] for c in res)
+        c = self.pause_cur
+        if self.pause_phase == "paused" and c is not None:       # сессия кончилась посреди паузы
+            total += c["paused_frames"]
+            self.log(f"pause #{c['k']}: session ended during pause, paused_frames={c['paused_frames']}")
+
+        def fmt(ms):
+            return "none" if ms is None else f"{ms:.0f} ms"
+
+        for c in res:
+            self.log(f"pause #{c['k']}: paused_frames={c['paused_frames']}, start->first_frame={fmt(c['first_ms'])}, "
+                     f"start->idr={fmt(c['idr_ms'])}")
+        idrs = [c["idr_ms"] for c in res if c["idr_ms"] is not None]
+        no_idr = len(res) - len(idrs)
+        line = f"pause cycles: {len(res)}, worst start->idr {fmt(max(idrs) if idrs else None)}"
+        if no_idr:
+            line += f" (no IDR in {no_idr} cycles)"
+        self.log(line + f", frames during pause total {total}")
+        return {"cycles": [{k: c[k] for k in ("k", "paused_frames", "first_ms", "idr_ms")} for c in res],
+                "worst_idr_ms": max(idrs) if idrs else None, "no_idr": no_idr, "paused_frames_total": total}
 
     # --- потоки ---
 
@@ -877,6 +981,8 @@ class HeadUnit:
                 fps_bytes = self.vbytes
                 next_fps += 5
                 self.log(f"video: {self.frames} frames, {self.vbytes} B total, {n / 5:.1f} fps, {kbps:.0f} kbit/s (last 5 s)")
+            if self.o.pause_cycles:
+                self.pause_tick(now)
             if (self.o.touch_test and not touched and self.first_frame_at is not None
                     and now - self.first_frame_at >= self.TOUCH_DELAY):
                 touched = True
@@ -926,7 +1032,8 @@ class HeadUnit:
             else:
                 self.log(f"kill: {self.o.kill_chan} at {self.kill_at - self.t0:.1f} s, "
                          f"bridge did NOT close others within {self.KILL_WAIT:g} s")
-        return {"duration": dur, "auth": self.auth_status, "counts": dict(self.counts), "frames": self.frames,
+        pause = self.pause_summary() if self.o.pause_cycles else None
+        return {"duration": dur, "auth": self.auth_status, "pause": pause, "counts": dict(self.counts), "frames": self.frames,
                 "video_bytes": self.vbytes, "avg_fps": avg, "stop_reason": self.stop_reason,
                 "transport": self.o.transport, "connected": connected,
                 "kill_chan": self.o.kill_chan if self.killed else None,
@@ -968,6 +1075,13 @@ def parse_args(argv=None) -> argparse.Namespace:
                         "the first frame (e.g. --video-kbps 6000 --dip-kbps 1000 for the 6->1 Mbit/s scenario)")
     p.add_argument("--dip-at", type=float, default=20.0, metavar="N", help="shaper: dip start, s after the first frame (default 20)")
     p.add_argument("--dip-for", type=float, default=5.0, metavar="N", help="shaper: dip length, s (default 5)")
+    p.add_argument("--pause-cycles", type=int, default=0, metavar="N",
+                   help="run N cycles VIDEO_ENCODER_PAUSE -> wait -> VIDEO_ENCODER_START and measure start->first frame, "
+                        "start->IDR and frames received during the pause (default 0 = off)")
+    p.add_argument("--pause-every", type=float, default=10.0, metavar="S",
+                   help="--pause-cycles: seconds from the first video frame (then from each START) to the next PAUSE (default 10)")
+    p.add_argument("--pause-for", type=float, default=3.0, metavar="S",
+                   help="--pause-cycles: seconds between PAUSE and START (default 3)")
     p.add_argument("--duration", type=float, default=120.0, metavar="N",
                    help="stop N seconds after the bridge connects (default 120)")
     p.add_argument("--no-auth", action="store_true", help="do not send HU_AUTHEN_REQUEST")
@@ -981,6 +1095,8 @@ def parse_args(argv=None) -> argparse.Namespace:
         p.error("--probe-8999 needs --discover")
     if (a.video_kbps or a.dip_kbps) and a.transport != "tcp6":
         p.error("--video-kbps/--dip-kbps work only with --transport tcp6")
+    if a.pause_cycles < 0 or a.pause_every <= 0 or a.pause_for < 0:
+        p.error("--pause-cycles must be >= 0, --pause-every > 0, --pause-for >= 0")
     return a
 
 
@@ -990,7 +1106,8 @@ def main(argv=None) -> int:
                           kill_chan=a.kill_chan, kill_after=a.kill_after, extra_data_socket=a.extra_data_socket,
                           discover=a.discover, beacon_port=a.beacon_port, bind_ip=a.bind_ip,
                           discover_timeout=a.discover_timeout, probe_8999=a.probe_8999,
-                          video_kbps=a.video_kbps, dip_kbps=a.dip_kbps, dip_at=a.dip_at, dip_for=a.dip_for))
+                          video_kbps=a.video_kbps, dip_kbps=a.dip_kbps, dip_at=a.dip_at, dip_for=a.dip_for,
+                          pause_cycles=a.pause_cycles, pause_every=a.pause_every, pause_for=a.pause_for))
     hu.run()
     return 0
 
