@@ -420,6 +420,39 @@ class AaBridgeCoreTest {
         assertTrue(logs.any { it.contains("DOWN 40,675") })
     }
 
+    @Test
+    fun vwCns2DelphiSpreadsMoveBurst() {
+        val timers = FakeTimers()
+        val c = AaBridgeCore({ l, _ -> logs.add(l) }, { timers.now }, audioSchedule = timers::schedule).also { it.attach(link) }
+        val peer = FakePeer()
+        c.peer = peer
+        c.onHuStatistic("20082114")                           // h425: ГУ копит MOVE ~190 мс и шлёт пачкой
+        c.onCarlifeTouch(0, 10, 10)
+        c.onCarlifeTouch(2, 11, 11)                           // первый MOVE пачки уходит сразу
+        c.onCarlifeTouch(2, 12, 12)
+        c.onCarlifeTouch(2, 13, 13)
+        c.onCarlifeTouch(2, 14, 14)
+        assertEquals(listOf(Triple(0, 10, 10), Triple(2, 11, 11)), peer.touches.toList())
+        timers.advance(TouchBurstPacer.DEFAULT_STEP_MS)
+        assertEquals(Triple(2, 12, 12), peer.touches.last())
+        assertEquals(3, peer.touches.size)                    // остальные ещё в очереди
+        c.onCarlifeTouch(1, 14, 14)                           // UP: сначала очередь, потом UP
+        assertEquals(
+            listOf(Triple(0, 10, 10), Triple(2, 11, 11), Triple(2, 12, 12), Triple(2, 13, 13), Triple(2, 14, 14), Triple(1, 14, 14)),
+            peer.touches.toList(),
+        )
+    }
+
+    @Test
+    fun touchOnOtherHuDispatchesMovesImmediately() {
+        val peer = FakePeer()
+        core.peer = peer
+        core.onCarlifeTouch(0, 10, 10)
+        core.onCarlifeTouch(2, 11, 11)
+        core.onCarlifeTouch(2, 12, 12)
+        assertEquals(3, peer.touches.size)
+    }
+
     private fun pts(vararg p: Int) = p.toList().chunked(3).map { TouchPoint(it[0], it[1], it[2]) }
 
     @Test
@@ -701,6 +734,30 @@ class AaBridgeAudioTest {
     }
 
     @Test
+    fun mediaChunkSettingSplitsMusicIntoFixedPackets() {
+        core.mediaChunkProvider = { MediaChunk.B2048 }
+        core.onCarlifeStart()
+        val d = pcm(8192)
+        core.onAudioData(AapMessages.CH_AUDIO_MEDIA, d, 1)
+        assertEquals(0x00030001, link.audio[0].type)
+        val data = link.audio.drop(1)
+        assertEquals(List(4) { 0x00030006 }, data.map { it.type })
+        assertEquals(List(4) { 2048 }, data.map { it.payload.size })
+        assertArrayEquals(d, data.flatMap { it.payload.toList() }.toByteArray())
+        assertEquals(1, logs.count { it.contains("пакеты по 2048 Б") })
+    }
+
+    @Test
+    fun mediaChunkAutoKeepsAaPacketWhole() {
+        core.mediaChunkProvider = { MediaChunk.AUTO }
+        core.onCarlifeStart()
+        core.onAudioData(AapMessages.CH_AUDIO_MEDIA, pcm(8192), 1)
+        assertEquals(listOf(0x00030001, 0x00030006), link.audio.map { it.type })
+        assertEquals(8192, link.audio[1].payload.size)
+        assertEquals(0, logs.count { it.contains("пакеты по") })
+    }
+
+    @Test
     fun speechGoesToTtsChannel() {
         core.onCarlifeStart()
         core.onAudioData(AapMessages.CH_AUDIO_SPEECH, pcm(640), 1)
@@ -973,6 +1030,61 @@ class AaBridgeAudioTest {
         core.onAudioData(SPEECH, pcm(100), 2)
         core.onAudioData(MEDIA, pcm(100), 3)                             // ГУ сам дакает
         assertEquals(listOf(0x30001, 0x30006, 0x40001, 0x40003, 0x30006), link.audio.map { it.type })
+    }
+
+    @Test
+    fun vwCns2DelphiRoutesAssistantSpeechToVrDuringVoiceSession() {
+        core.onHuStatistic("20082114")                                   // h425: ответ ассистента в TTS не слышно
+        core.micModeProvider = { MicMode.CAR }
+        core.onCarlifeStart()
+        core.onVoiceSession(1)
+        val s = pcm(2048, 3)
+        core.onAudioStart(SPEECH)
+        core.onAudioData(SPEECH, s, 1)
+        core.onAudioData(SPEECH, s, 2)
+        core.onAudioStop(SPEECH)
+        val vr = link.audio.filter { it.chan == 5 }
+        assertEquals(listOf(0x50002, 0x50003, 0x50003, 0x50004), vr.map { it.type })
+        assertEquals("08807d10011810", hexs(vr[0].payload))             // {16000, 1, 16}
+        assertArrayEquals(s, vr[1].payload)
+        assertTrue(link.audio.none { it.chan == 4 })
+        assertTrue("VR=0 не раньше выхода из голоса", "M4=0" !in link.events)
+        core.onVoiceSession(2)
+        timers.advance(1000)
+        assertTrue("после голоса и VR STOP - снова VR=0 (громкость)", "M4=0" in link.events)
+    }
+
+    @Test
+    fun speechInVoiceSessionStaysOnTtsWithoutDelphiOrWithPhoneMic() {
+        core.onCarlifeStart()
+        core.onVoiceSession(1)
+        core.onAudioData(SPEECH, pcm(2048), 1)
+        assertTrue(link.audio.none { it.chan == 5 })
+        assertEquals(0x40001, link.audio.first { it.chan == 4 }.type)
+
+        val l2 = FakeLink()
+        val c2 = AaBridgeCore({ l, _ -> logs.add(l) }, audioSchedule = timers::schedule).also { it.attach(l2) }
+        c2.onHuStatistic("20082114")
+        c2.micModeProvider = { MicMode.PHONE }
+        c2.onCarlifeStart()
+        c2.onVoiceSession(1)
+        c2.onAudioData(SPEECH, pcm(2048), 1)
+        assertTrue(l2.audio.none { it.chan == 5 })
+    }
+
+    @Test
+    fun voiceKeyDoubleFromHuIsDebounced() {
+        var now = 1_000L
+        val c = AaBridgeCore({ l, _ -> logs.add(l) }, clockMs = { now })
+        val peer = FakePeer()
+        c.peer = peer
+        c.onCarlifeHardKey(0x21)                                         // h425: Delphi шлёт VR_START дважды за 1-2 мс
+        now += 2
+        c.onCarlifeHardKey(0x21)
+        assertEquals(listOf(AaBridgeCore.KEYCODE_SEARCH), peer.keys.toList())
+        now += 600
+        c.onCarlifeHardKey(0x21)
+        assertEquals(listOf(AaBridgeCore.KEYCODE_SEARCH, AaBridgeCore.KEYCODE_SEARCH), peer.keys.toList())
     }
 
     @Test

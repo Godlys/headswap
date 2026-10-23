@@ -1,0 +1,814 @@
+{
+  "latest": "2.4.4",
+  "markers": {
+    "attached": "== USB_ACCESSORY_ATTACHED",
+    "acc_no_perm": "аксессуар\\[\\d+\\]: .*hasPermission=false",
+    "acc_not_carlife": "строки Baidu/CarLife: НЕТ",
+    "open_acc_fail": "openAccessory вернул null|ERROR openAccessory",
+    "hu_proto": "== ВЕРСИЯ ПРОТОКОЛА ГУ",
+    "hu_silent": "ГУ не прислало ни одного байта",
+    "auth_v2": "HU_AUTHEN_REQUEST randomValue=2\\.0;",
+    "auth_result": "HU_AUTHEN_RESULT",
+    "aa_refused": "AA сервер \\S+:5277 недоступен",
+    "aa_tcp": "AA TCP подключено",
+    "aa_no_version": "AA нет VERSION_RESPONSE",
+    "aa_established": "AA сессия установлена",
+    "aa_phone_eof": "AA телефон закрыл соединение",
+    "autosrv_no_items": "в меню нет пунктов сервера",
+    "autosrv_no_window": "окно Android Auto не появилось",
+    "autosrv_consent": "AUTOSRV итог: CONSENT",
+    "autosrv_locked": "AUTOSRV итог: LOCKED",
+    "certs_missing": "нет сертификата head unit",
+    "wifi_wait": "сервис: \\S+, слушаю 6 портов",
+    "tcp_timeout0": "WL tcp timeout ready=0/6",
+    "p2p_no_perm": "Wi-Fi Direct: нет разрешения",
+    "p2p_busy": "Wi-Fi Direct занят \\(BUSY\\)",
+    "p2p_wifi_off": "Wi-Fi Direct: Wi-Fi на телефоне выключен",
+    "p2p_join_timeout": "в группу ГУ не вошли",
+    "p2p_group_lost": "группа ГУ распалась",
+    "low_memory": "EXIT прошлое завершение .*(LOW_MEMORY|SIGNALED status=9)",
+    "codec_fail": "configure уровня \\d не прошёл|ошибка транскодера",
+    "abort": "Software caused connection abort",
+    "no_route": "No route to host",
+    "hu_closed_sock": "EOF \\(ГУ закрыла сокет\\)",
+    "iface_down": "WL net iface-down",
+    "stream_desync": "РАССИНХРОН потока",
+    "pause": "VIDEO_ENCODER_PAUSE",
+    "eio": "EIO \\(I/O error\\)|ENODEV"
+  },
+  "rules": [
+    {
+      "id": "aoa_not_started",
+      "title": "Машина не включила режим CarLife на кабеле",
+      "title_en": "The car didn't switch the cable to CarLife mode",
+      "phase": "first_connect",
+      "category": "user_setup",
+      "score": 70,
+      "all": [["n_sessions", "==", 0], ["m.attached", "==", 0], ["m.hu_proto", "==", 0], ["m.wifi_wait", "==", 0]],
+      "advice": "Телефон ни разу не увидел машину как CarLife-аксессуар. Если лог сохранён до подключения к машине — подключите кабель, дождитесь ошибки и сразу сохраните лог снова. Если кабель был подключён: 1) Удалите с телефона оригинальный Baidu CarLife и другие CarLife-клиенты, если они стоят: ГУ отдаёт кабель им. 2) На экране магнитолы выберите CarLife (на VW/Skoda: плитку Baidu CarLife, не Android Auto) и примите разрешения, если ГУ их показывает. 3) Проверьте кабель: нужен кабель с передачей данных и порт USB с иконкой телефона, без хабов.",
+      "advice_en": "The phone has never seen the car as a CarLife accessory. If the log was saved before you plugged into the car, connect the cable, wait for the error, and save the log again right away. If the cable was already connected: 1) Uninstall the original Baidu CarLife and any other CarLife clients from the phone, if installed: the head unit hands the cable to them. 2) On the head unit screen, pick CarLife (on VW/Skoda: the Baidu CarLife tile, not Android Auto) and accept the permissions if the head unit shows them. 3) Check the cable: it must be a data cable, plugged into a USB port with a phone icon, no hubs.",
+      "what": "Телефон ни разу не увидел машину как CarLife-аксессуар.",
+      "what_en": "The phone has never seen the car as a CarLife accessory.",
+      "steps": [
+        {"text": "Удалите оригинальный Baidu CarLife и другие CarLife-клиенты: ГУ отдаёт кабель им", "text_en": "Uninstall the original Baidu CarLife and other CarLife clients: they grab the cable"},
+        {"text": "На магнитоле выберите CarLife (на VW/Skoda — плитку Baidu CarLife) и примите разрешения", "text_en": "On the head unit pick CarLife (VW/Skoda: Baidu CarLife tile) and accept permissions"},
+        {"text": "Возьмите кабель с передачей данных, порт USB с иконкой телефона, без хабов", "text_en": "Use a data cable and a USB port with a phone icon, no hubs"},
+        {"text": "Если лог сохранён до подключения к машине — подключите кабель и сохраните лог снова", "text_en": "If the log was saved before connecting to the car, connect and save the log again"}
+      ],
+      "ask": "Установлен ли на телефоне Baidu CarLife? Что показывает магнитола при подключении (фото)?",
+      "ask_en": "Is Baidu CarLife installed on the phone? What does the head unit show when you connect (photo)?"
+    },
+    {
+      "id": "usb_permission_not_granted",
+      "title": "Не выдано разрешение на USB-аксессуар",
+      "title_en": "USB accessory permission not granted",
+      "phase": "first_connect",
+      "category": "user_setup",
+      "score": 75,
+      "all": [["m.acc_no_perm", ">=", 1], ["m.attached", "==", 0], ["n_sessions", "==", 0]],
+      "evidence": ["acc_no_perm"],
+      "advice": "Телефон видит машину, но Headswap не получил доступ к USB. Отключите и снова подключите кабель и в появившемся окне выберите Headswap и «Всегда»/«ОК». Если окно открывает другое приложение (Baidu CarLife, Android Auto), удалите его или сбросьте у него «Открывать по умолчанию».",
+      "advice_en": "The phone sees the car, but Headswap has no access to USB. Unplug and replug the cable, and in the dialog that appears pick Headswap and \"Always\"/\"OK\". If the dialog opens another app (Baidu CarLife, Android Auto), uninstall it or reset its \"Open by default\" setting.",
+      "what": "Телефон видит машину, но Headswap не получил доступ к USB.",
+      "what_en": "The phone sees the car, but Headswap has no access to USB.",
+      "steps": [
+        {"text": "Отключите и снова подключите кабель", "text_en": "Unplug and replug the cable"},
+        {"text": "В появившемся окне выберите Headswap и «Всегда»/«ОК»", "text_en": "In the dialog that appears pick Headswap and \"Always\"/\"OK\""},
+        {"text": "Если окно открывает другое приложение — удалите его или сбросьте «Открывать по умолчанию»", "text_en": "If another app opens the dialog, uninstall it or reset its \"Open by default\""}
+      ],
+      "suppresses": ["aoa_not_started"]
+    },
+    {
+      "id": "accessory_not_carlife",
+      "title": "Машина подключилась не в режиме CarLife",
+      "title_en": "The car connected in a mode other than CarLife",
+      "phase": "first_connect",
+      "category": "user_setup",
+      "score": 80,
+      "all": [["m.acc_not_carlife", ">=", 1], ["m.hu_proto", "==", 0]],
+      "evidence": ["acc_not_carlife"],
+      "advice": "Магнитола открыла кабель в другом режиме (обычно Android Auto или CarPlay). На экране ГУ выберите Baidu CarLife (на VW/Skoda App-Connect — плитку Baidu CarLife), затем переподключите кабель.",
+      "advice_en": "The head unit opened the cable in a different mode (usually Android Auto or CarPlay). On the head unit screen pick Baidu CarLife (on VW/Skoda App-Connect: the Baidu CarLife tile), then replug the cable.",
+      "what": "Магнитола открыла кабель в другом режиме, обычно Android Auto или CarPlay.",
+      "what_en": "The head unit opened the cable in a different mode, usually Android Auto or CarPlay.",
+      "steps": [
+        {"text": "На экране магнитолы выберите Baidu CarLife (на VW/Skoda — плитку Baidu CarLife)", "text_en": "On the head unit screen pick Baidu CarLife (on VW/Skoda: the Baidu CarLife tile)"},
+        {"text": "Переподключите кабель", "text_en": "Replug the cable"}
+      ],
+      "suppresses": ["aoa_not_started"]
+    },
+    {
+      "id": "open_accessory_failed",
+      "title": "Android не открыл USB-аксессуар",
+      "title_en": "Android failed to open the USB accessory",
+      "phase": "first_connect",
+      "category": "phone_limit",
+      "score": 65,
+      "all": [["m.open_acc_fail", ">=", 1], ["m.hu_proto", "==", 0]],
+      "evidence": ["open_acc_fail"],
+      "advice": "Аксессуар найден, но система отказала в открытии. Закройте другие автомобильные приложения (Baidu CarLife, Android Auto для машин), переподключите кабель; если повторяется — перезагрузите телефон.",
+      "advice_en": "The accessory was found, but the system refused to open it. Close other car apps (Baidu CarLife, Android Auto for cars), replug the cable; if it keeps happening, restart the phone.",
+      "what": "Аксессуар найден, но система отказала в его открытии.",
+      "what_en": "The accessory was found, but the system refused to open it.",
+      "steps": [
+        {"text": "Закройте другие автомобильные приложения (Baidu CarLife, Android Auto для машин)", "text_en": "Close other car apps (Baidu CarLife, Android Auto for cars)"},
+        {"text": "Переподключите кабель", "text_en": "Replug the cable"},
+        {"text": "Если повторяется — перезагрузите телефон", "text_en": "If it keeps happening, restart the phone"}
+      ],
+      "suppresses": ["aoa_not_started"]
+    },
+    {
+      "id": "hu_silent",
+      "title": "Магнитола молчит после подключения",
+      "title_en": "The head unit is silent after connecting",
+      "phase": "first_connect",
+      "category": "hu_limit",
+      "score": 70,
+      "all": [["m.hu_silent", ">=", 2], ["frames_max", "<", 300]],
+      "any": [["m.hu_proto", "==", 0], ["m.hu_silent", ">=", 5]],
+      "evidence": ["hu_silent"],
+      "advice": "Кабель открылся, но ГУ не прислала ни байта. Перезапустите магнитолу (заглушите машину, откройте и закройте дверь, подождите пару минут, либо долгое нажатие на кнопку питания ГУ). Если не помогло — очистите данные Android Auto на телефоне и подключите снова. Проверьте, что на телефоне нет оригинального Baidu CarLife.",
+      "advice_en": "The cable opened, but the head unit didn't send a single byte. Restart the head unit (turn off the car, open and close the door, wait a couple of minutes, or long-press the head unit power button). If that doesn't help, clear Android Auto data on the phone and connect again. Make sure the original Baidu CarLife isn't installed on the phone.",
+      "what": "Кабель открылся, но магнитола не прислала ни одного байта.",
+      "what_en": "The cable opened, but the head unit didn't send a single byte.",
+      "steps": [
+        {"text": "Перезапустите магнитолу: заглушите машину на пару минут или зажмите кнопку питания ГУ", "text_en": "Restart the head unit: turn off the car for a few minutes or long-press its power button"},
+        {"text": "Если не помогло — очистите данные Android Auto на телефоне и подключитесь снова", "text_en": "If that doesn't help, clear Android Auto data on the phone and connect again"},
+        {"text": "Проверьте, что на телефоне нет оригинального Baidu CarLife", "text_en": "Make sure the original Baidu CarLife isn't installed on the phone"}
+      ],
+      "ask": "Работал ли раньше на этой машине Baidu CarLife или другой телефон?",
+      "ask_en": "Did Baidu CarLife or another phone ever work on this car before?"
+    },
+    {
+      "id": "aa_server_off",
+      "title": "Не запущен сервер ГУ Android Auto",
+      "title_en": "Android Auto head unit server is not running",
+      "phase": "first_connect",
+      "category": "user_setup",
+      "score": 85,
+      "all": [["m.aa_refused", ">=", 3], ["m.aa_tcp", "==", 0]],
+      "evidence": ["aa_refused", "autosrv_no_items"],
+      "advice": "Машина подключилась, но Android Auto на телефоне не принимает соединение (порт 5277 закрыт). Включите в Android Auto режим разработчика (Настройки Android Auto → 10 раз нажать на «Версия»), затем в меню ⋮ выберите «Запустить сервер ГУ». Проще всего — пройти заново онбординг Headswap.",
+      "advice_en": "The car connected, but Android Auto on the phone doesn't accept the connection (port 5277 is closed). Enable developer settings in Android Auto (Android Auto settings → tap \"Version\" 10 times), then in the ⋮ menu choose \"Start head unit server\". The easiest way is to go through the Headswap onboarding again.",
+      "what": "Магнитола подключилась, но Android Auto на телефоне не принимает соединение.",
+      "what_en": "The car connected, but Android Auto on the phone doesn't accept the connection.",
+      "steps": [
+        {"text": "Откройте настройки Android Auto", "text_en": "Open Android Auto settings", "action": "open_aa"},
+        {"text": "10 раз нажмите на строку «Версия» — включится режим разработчика", "text_en": "Tap the \"Version\" row 10 times to enable developer mode"},
+        {"text": "В меню ⋮ выберите «Запустить сервер ГУ»", "text_en": "In the ⋮ menu choose \"Start head unit server\""},
+        {"text": "Переподключите кабель", "text_en": "Replug the cable"}
+      ],
+      "boost": [[["m.autosrv_no_items", ">=", 1], 10]]
+    },
+    {
+      "id": "aa_server_off_partial",
+      "title": "Сервер ГУ Android Auto часто не отвечает",
+      "title_en": "Android Auto head unit server often doesn't respond",
+      "phase": "no_video",
+      "category": "user_setup",
+      "score": 45,
+      "all": [["m.aa_refused", ">=", 20], ["m.aa_tcp", ">=", 1], ["frames_max", "<", 30]],
+      "evidence": ["aa_refused"],
+      "advice": "Android Auto то принимает, то отклоняет соединение. Проверьте, что «Сервер ГУ» запущен в меню разработчика Android Auto, и снимите для Android Auto и Headswap ограничения батареи (Настройки → Приложения → Батарея → «Без ограничений»).",
+      "advice_en": "Android Auto sometimes accepts the connection and sometimes refuses it. Check that \"Head unit server\" is running in the Android Auto developer settings, and remove battery restrictions for Android Auto and Headswap (Settings → Apps → Battery → \"Unrestricted\").",
+      "what": "Android Auto то принимает соединение, то отклоняет его.",
+      "what_en": "Android Auto sometimes accepts the connection and sometimes refuses it.",
+      "steps": [
+        {"text": "Проверьте, что «Сервер ГУ» запущен в меню разработчика Android Auto", "text_en": "Check that \"Head unit server\" is running in the Android Auto developer settings", "action": "open_aa"},
+        {"text": "Для Headswap и Android Auto выберите в настройках батареи «Без ограничений»", "text_en": "Set Headswap and Android Auto to \"Unrestricted\" in battery settings", "action": "battery"}
+      ]
+    },
+    {
+      "id": "aa_dev_menu_missing",
+      "title": "В меню Android Auto нет пунктов сервера ГУ",
+      "title_en": "The Android Auto menu has no head unit server items",
+      "phase": "first_connect",
+      "category": "user_setup",
+      "score": 60,
+      "all": [["m.autosrv_no_items", ">=", 2], ["frames_max", "<", 30]],
+      "evidence": ["autosrv_no_items"],
+      "advice": "Автозапуск не нашёл в меню ⋮ Android Auto пункт «Запустить сервер ГУ»: скорее всего, не включён режим разработчика. Настройки Android Auto → 10 раз нажмите на строку «Версия» → подтвердите, затем подключите машину снова.",
+      "advice_en": "Autostart didn't find the \"Start head unit server\" item in the Android Auto ⋮ menu: most likely developer settings are not enabled. Android Auto settings → tap the \"Version\" row 10 times → confirm, then connect the car again.",
+      "what": "В меню ⋮ Android Auto нет пункта «Запустить сервер ГУ» — скорее всего, не включён режим разработчика.",
+      "what_en": "The Android Auto ⋮ menu has no \"Start head unit server\" item - developer mode is probably off.",
+      "steps": [
+        {"text": "Откройте настройки Android Auto", "text_en": "Open Android Auto settings", "action": "open_aa"},
+        {"text": "10 раз нажмите на строку «Версия» и подтвердите", "text_en": "Tap the \"Version\" row 10 times and confirm"},
+        {"text": "Подключите машину снова", "text_en": "Connect the car again"}
+      ]
+    },
+    {
+      "id": "aa_silent",
+      "title": "Android Auto на телефоне не отвечает",
+      "title_en": "Android Auto on the phone isn't responding",
+      "phase": "no_video",
+      "category": "phone_limit",
+      "score": 70,
+      "all": [["m.aa_no_version", ">=", 3], ["m.aa_established", "==", 0]],
+      "evidence": ["aa_no_version"],
+      "advice": "Соединение с Android Auto открывается, но он молчит. 1) Остановите Android Auto принудительно (Настройки → Приложения → Android Auto → Остановить) или перезагрузите телефон. 2) Проверьте, что установлены и включены Сервисы Google Play и сам Android Auto обновлён (на китайских прошивках Google-сервисов часто нет — тогда Android Auto не заработает).",
+      "advice_en": "The connection to Android Auto opens, but it stays silent. 1) Force stop Android Auto (Settings → Apps → Android Auto → Force stop) or restart the phone. 2) Make sure Google Play services are installed and enabled and Android Auto itself is up to date (Chinese firmwares often have no Google services - then Android Auto won't work).",
+      "what": "Соединение с Android Auto открывается, но он молчит.",
+      "what_en": "The connection to Android Auto opens, but it stays silent.",
+      "steps": [
+        {"text": "Остановите Android Auto принудительно (Настройки → Приложения) или перезагрузите телефон", "text_en": "Force stop Android Auto (Settings → Apps) or restart the phone"},
+        {"text": "Проверьте, что Сервисы Google Play установлены и включены", "text_en": "Make sure Google Play services are installed and enabled"},
+        {"text": "Обновите Android Auto", "text_en": "Update Android Auto"}
+      ],
+      "ask": "Есть ли на телефоне Google Play и Сервисы Google Play? Прошивка глобальная или китайская?",
+      "ask_en": "Does the phone have Google Play and Google Play services? Is the firmware global or Chinese?"
+    },
+    {
+      "id": "no_gms",
+      "title": "Похоже, на телефоне нет Сервисов Google Play",
+      "title_en": "The phone seems to have no Google Play services",
+      "phase": "no_video",
+      "category": "phone_limit",
+      "score": 80,
+      "all": [["no_gms", ">=", 3], ["aa_video_max", "<", 30]],
+      "evidence": ["aa_phone_eof"],
+      "suppresses": ["aa_no_video", "aa_silent"],
+      "advice": "Android Auto закрывает проекцию сразу после старта видео — так ведут себя телефоны без родных Сервисов Google Play (Huawei/Honor с GBox/microG, китайские прошивки). Мост это не обойдёт: нужен телефон с Google-сервисами.",
+      "advice_en": "Android Auto closes the projection right after video starts - this is how phones without native Google Play services behave (Huawei/Honor with GBox/microG, Chinese firmwares). The bridge can't work around this: you need a phone with Google services.",
+      "what": "Android Auto закрывает проекцию сразу после старта видео — так ведут себя телефоны без Сервисов Google Play.",
+      "what_en": "Android Auto closes the projection right after video starts - how phones without Google Play services behave.",
+      "steps": [
+        {"text": "Используйте телефон с родными Сервисами Google Play — мост это не обойдёт", "text_en": "Use a phone with native Google Play services - the bridge can't work around this"}
+      ],
+      "ask": "Какая модель телефона, есть ли родной Google Play?",
+      "ask_en": "What phone model is it, and does it have native Google Play?"
+    },
+    {
+      "id": "aa_no_video",
+      "title": "Android Auto подключается, но не отдаёт картинку",
+      "title_en": "Android Auto connects but sends no picture",
+      "phase": "no_video",
+      "category": "phone_limit",
+      "score": 55,
+      "all": [["aa_video_max", "==", 0], ["m.aa_established", ">=", 1]],
+      "evidence": ["aa_established"],
+      "advice": "Сессия с Android Auto устанавливается, но видео от него не приходит. Разблокируйте телефон и откройте Android Auto — возможно, он ждёт согласия или обновления. Затем остановите Android Auto принудительно и подключитесь снова. Проверьте, что Сервисы Google Play и Android Auto обновлены.",
+      "advice_en": "The session with Android Auto is established, but no video comes from it. Unlock the phone and open Android Auto - it may be waiting for consent or an update. Then force stop Android Auto and connect again. Make sure Google Play services and Android Auto are up to date.",
+      "what": "Сессия с Android Auto установлена, но видео от него не приходит.",
+      "what_en": "The session with Android Auto is established, but no video comes from it.",
+      "steps": [
+        {"text": "Разблокируйте телефон и откройте Android Auto — он может ждать согласия или обновления", "text_en": "Unlock the phone and open Android Auto - it may be waiting for consent or an update"},
+        {"text": "Остановите Android Auto принудительно и подключитесь снова", "text_en": "Force stop Android Auto and connect again"},
+        {"text": "Обновите Сервисы Google Play и Android Auto", "text_en": "Update Google Play services and Android Auto"}
+      ],
+      "suppresses": ["hu_silent"]
+    },
+    {
+      "id": "aa_consent",
+      "title": "Android Auto ждёт подтверждения на телефоне",
+      "title_en": "Android Auto is waiting for confirmation on the phone",
+      "phase": "first_connect",
+      "category": "user_setup",
+      "score": 55,
+      "all": [["m.autosrv_consent", ">=", 1], ["frames_max", "<", 30]],
+      "evidence": ["autosrv_consent"],
+      "advice": "На телефоне открыт экран согласия/разрешений Android Auto. Разблокируйте телефон, примите все запросы Android Auto один раз, затем переподключите машину.",
+      "advice_en": "The Android Auto consent/permissions screen is open on the phone. Unlock the phone, accept all Android Auto prompts once, then reconnect the car.",
+      "what": "На телефоне открыт экран согласия или разрешений Android Auto.",
+      "what_en": "The Android Auto consent/permissions screen is open on the phone.",
+      "steps": [
+        {"text": "Разблокируйте телефон и примите все запросы Android Auto", "text_en": "Unlock the phone and accept all Android Auto prompts"},
+        {"text": "Переподключите машину", "text_en": "Reconnect the car"}
+      ]
+    },
+    {
+      "id": "aa_bg_start_blocked",
+      "title": "Система не даёт Headswap запускать Android Auto в фоне",
+      "title_en": "The system won't let Headswap start Android Auto in the background",
+      "phase": "first_connect",
+      "category": "phone_limit",
+      "score": 45,
+      "all": [["m.autosrv_no_window", ">=", 3], ["frames_max", "<", 30]],
+      "evidence": ["autosrv_no_window"],
+      "advice": "Окно Android Auto не открывается из фона. Дайте Headswap разрешения «Отображение поверх других приложений» и «Запуск в фоне»/«Автозапуск» (Xiaomi, vivo, OPPO, Honor), либо запускайте сервер ГУ вручную в меню разработчика Android Auto.",
+      "advice_en": "The Android Auto window can't be opened from the background. Give Headswap the \"Display over other apps\" and \"Run in background\"/\"Autostart\" permissions (Xiaomi, vivo, OPPO, Honor), or start the head unit server manually in the Android Auto developer settings.",
+      "what": "Окно Android Auto не открывается из фона.",
+      "what_en": "The Android Auto window can't be opened from the background.",
+      "steps": [
+        {"text": "Дайте Headswap разрешение «Отображение поверх других приложений»", "text_en": "Give Headswap the \"Display over other apps\" permission", "action": "app_settings"},
+        {"text": "Разрешите запуск в фоне и автозапуск (Xiaomi, vivo, OPPO, Honor)", "text_en": "Allow running in the background and autostart (Xiaomi, vivo, OPPO, Honor)", "action": "autostart"},
+        {"text": "Или запустите сервер ГУ вручную в меню разработчика Android Auto", "text_en": "Or start the head unit server manually in the Android Auto developer settings", "action": "open_aa"}
+      ]
+    },
+    {
+      "id": "phone_locked",
+      "title": "Телефон был заблокирован при подключении",
+      "title_en": "The phone was locked when connecting",
+      "phase": "first_connect",
+      "category": "user_setup",
+      "score": 35,
+      "all": [["m.autosrv_locked", ">=", 3], ["frames_max", "<", 30]],
+      "evidence": ["autosrv_locked"],
+      "advice": "Автозапуск сервера Android Auto не работает на заблокированном экране. Разблокируйте телефон при первом подключении в поездке.",
+      "advice_en": "Android Auto server autostart doesn't work on a locked screen. Unlock the phone the first time you connect on a trip.",
+      "what": "Автозапуск сервера Android Auto не работает на заблокированном экране.",
+      "what_en": "Android Auto server autostart doesn't work on a locked screen.",
+      "steps": [
+        {"text": "Разблокируйте телефон при первом подключении в поездке", "text_en": "Unlock the phone the first time you connect on a trip"}
+      ]
+    },
+    {
+      "id": "build_without_certs",
+      "title": "Сборка Headswap без сертификатов Android Auto",
+      "title_en": "Headswap build without Android Auto certificates",
+      "phase": "first_connect",
+      "category": "our_bug",
+      "score": 95,
+      "all": [["m.certs_missing", ">=", 1], ["frames_max", "<", 30]],
+      "evidence": ["certs_missing"],
+      "advice": "Эта сборка Headswap собрана без сертификатов Android Auto и не может работать. Установите версию с сайта yegorkapomidorka.com/headswap или из Telegram-канала.",
+      "advice_en": "This Headswap build was made without Android Auto certificates and can't work. Install the version from yegorkapomidorka.com/headswap or from the Telegram channel.",
+      "what": "Эта сборка Headswap собрана без сертификатов Android Auto и не может работать.",
+      "what_en": "This Headswap build was made without Android Auto certificates and can't work.",
+      "steps": [
+        {"text": "Установите версию с yegorkapomidorka.com/headswap или из Telegram-канала", "text_en": "Install the version from yegorkapomidorka.com/headswap or from the Telegram channel", "action": "update"}
+      ]
+    },
+    {
+      "id": "auth_v2_old_version",
+      "title": "Магнитола требует авторизацию CarLife 2.0",
+      "title_en": "The head unit requires CarLife 2.0 authorization",
+      "phase": "drops",
+      "category": "our_bug_fixed",
+      "score": 90,
+      "fixed_in": "1.1.7",
+      "all": [["m.auth_v2", ">=", 1]],
+      "evidence": ["auth_v2"],
+      "advice": "Магнитола рвёт связь через 30 с без ответа на авторизацию CarLife 2.0.",
+      "advice_en": "The head unit drops the connection after 30 s without a reply to the CarLife 2.0 authorization.",
+      "what": "Магнитола рвёт связь через 30 с без ответа на авторизацию CarLife 2.0.",
+      "what_en": "The head unit drops the connection after 30 s without a reply to the CarLife 2.0 authorization.",
+      "steps": [
+        {"text": "Если после обновления связь рвётся — отправьте лог разработчикам", "text_en": "If the connection still drops after updating, send the log to the developers", "action": "share_log"}
+      ]
+    },
+    {
+      "id": "wifi_hu_never_came",
+      "title": "По воздуху магнитола так и не подключилась",
+      "title_en": "The head unit never connected over the air",
+      "phase": "first_connect",
+      "category": "network",
+      "score": 55,
+      "all": [["n_sessions", "==", 0], ["m.wifi_wait", ">=", 1]],
+      "boost": [[["m.tcp_timeout0", ">=", 1], 10]],
+      "evidence": ["tcp_timeout0", "wifi_wait"],
+      "advice": "Headswap ждал магнитолу по Wi-Fi, но она не открыла ни одного соединения. Проверьте, что телефон и ГУ в одной сети (точка доступа телефона включена и ГУ к ней подключена, либо Wi-Fi Direct), что ГУ поддерживает CarLife по воздуху, и выдано разрешение «Устройства поблизости». Сначала добейтесь работы по кабелю.",
+      "advice_en": "Headswap waited for the head unit over Wi-Fi, but it didn't open a single connection. Check that the phone and head unit are on the same network (phone hotspot is on and the head unit is connected to it, or Wi-Fi Direct), that the head unit supports wireless CarLife, and that the \"Nearby devices\" permission is granted. First get it working over the cable.",
+      "what": "Headswap ждал магнитолу по Wi-Fi, но она не открыла ни одного соединения.",
+      "what_en": "Headswap waited for the head unit over Wi-Fi, but it didn't open a single connection.",
+      "steps": [
+        {"text": "Включите точку доступа телефона и подключите к ней ГУ, либо используйте Wi-Fi Direct", "text_en": "Turn on the phone hotspot and connect the head unit to it, or use Wi-Fi Direct", "action": "hotspot"},
+        {"text": "Проверьте, что магнитола поддерживает CarLife по воздуху", "text_en": "Check that the head unit supports wireless CarLife"},
+        {"text": "Выдайте Headswap разрешение «Устройства поблизости»", "text_en": "Grant Headswap the \"Nearby devices\" permission", "action": "app_settings"},
+        {"text": "Сначала добейтесь работы по кабелю", "text_en": "First get it working over the cable"}
+      ],
+      "suppresses": ["aoa_not_started", "no_attempt"]
+    },
+    {
+      "id": "p2p_no_permission",
+      "title": "Нет разрешения «Устройства поблизости» для Wi-Fi Direct",
+      "title_en": "No \"Nearby devices\" permission for Wi-Fi Direct",
+      "phase": "first_connect",
+      "category": "user_setup",
+      "score": 80,
+      "all": [["m.p2p_no_perm", ">=", 1]],
+      "evidence": ["p2p_no_perm"],
+      "advice": "Дайте Headswap разрешение «Устройства поблизости» (Настройки → Приложения → Headswap → Разрешения), иначе Wi-Fi Direct с магнитолой не поднимется.",
+      "advice_en": "Give Headswap the \"Nearby devices\" permission (Settings → Apps → Headswap → Permissions), otherwise Wi-Fi Direct with the head unit won't come up.",
+      "what": "Без разрешения «Устройства поблизости» Wi-Fi Direct с магнитолой не поднимется.",
+      "what_en": "Without the \"Nearby devices\" permission Wi-Fi Direct with the head unit won't come up.",
+      "steps": [
+        {"text": "Выдайте Headswap разрешение «Устройства поблизости»", "text_en": "Grant Headswap the \"Nearby devices\" permission", "action": "app_settings"}
+      ]
+    },
+    {
+      "id": "p2p_hotspot_busy",
+      "title": "Wi-Fi Direct занят точкой доступа телефона",
+      "title_en": "Wi-Fi Direct is blocked by the phone hotspot",
+      "phase": "first_connect",
+      "category": "user_setup",
+      "score": 75,
+      "all": [["m.p2p_busy", ">=", 1]],
+      "evidence": ["p2p_busy"],
+      "advice": "Для подключения по Wi-Fi Direct выключите на телефоне точку доступа: телефон не может держать их одновременно.",
+      "advice_en": "To connect over Wi-Fi Direct, turn off the hotspot on the phone: it can't run both at the same time.",
+      "what": "Телефон не может держать точку доступа и Wi-Fi Direct одновременно.",
+      "what_en": "The phone can't run a hotspot and Wi-Fi Direct at the same time.",
+      "steps": [
+        {"text": "Выключите на телефоне точку доступа", "text_en": "Turn off the hotspot on the phone", "action": "hotspot"}
+      ]
+    },
+    {
+      "id": "p2p_wifi_off",
+      "title": "Wi-Fi на телефоне выключен",
+      "title_en": "Wi-Fi is turned off on the phone",
+      "phase": "first_connect",
+      "category": "user_setup",
+      "score": 70,
+      "all": [["m.p2p_wifi_off", ">=", 1], ["frames_max", "<", 30]],
+      "evidence": ["p2p_wifi_off"],
+      "advice": "Для подключения по воздуху включите Wi-Fi на телефоне (подключаться к сети не нужно).",
+      "advice_en": "To connect over the air, turn on Wi-Fi on the phone (you don't need to join a network).",
+      "what": "Wi-Fi на телефоне выключен, по воздуху не подключиться.",
+      "what_en": "Wi-Fi is off on the phone, so it can't connect over the air.",
+      "steps": [
+        {"text": "Включите Wi-Fi на телефоне (подключаться к сети не нужно)", "text_en": "Turn on Wi-Fi on the phone (you don't need to join a network)", "action": "wifi"}
+      ]
+    },
+    {
+      "id": "p2p_join_fail",
+      "title": "Телефон не может войти в Wi-Fi Direct группу магнитолы",
+      "title_en": "The phone can't join the head unit's Wi-Fi Direct group",
+      "phase": "first_connect",
+      "category": "hu_limit",
+      "score": 55,
+      "all": [["m.p2p_join_timeout", ">=", 2]],
+      "any": [["frames_max", "<", 30], ["m.p2p_join_timeout", ">=", 5]],
+      "evidence": ["p2p_join_timeout", "p2p_group_lost"],
+      "advice": "Магнитола приглашает телефон в Wi-Fi Direct, но войти не получается. Перезагрузите ГУ (заглушите машину на 5–10 минут), на телефоне в Wi-Fi → Wi-Fi Direct удалите запомненные группы и пару Bluetooth с машиной, затем свяжите заново. Если не помогает — используйте кабель.",
+      "advice_en": "The head unit invites the phone over Wi-Fi Direct, but joining fails. Restart the head unit (turn off the car for 5-10 minutes), on the phone go to Wi-Fi → Wi-Fi Direct and remove saved groups and the Bluetooth pairing with the car, then pair again. If that doesn't help, use the cable.",
+      "what": "Магнитола приглашает телефон в Wi-Fi Direct, но войти в группу не получается.",
+      "what_en": "The head unit invites the phone over Wi-Fi Direct, but joining the group fails.",
+      "steps": [
+        {"text": "Перезагрузите магнитолу: заглушите машину на 5–10 минут", "text_en": "Restart the head unit: turn off the car for 5-10 minutes"},
+        {"text": "В Wi-Fi → Wi-Fi Direct удалите запомненные группы", "text_en": "In Wi-Fi → Wi-Fi Direct remove saved groups", "action": "wifi"},
+        {"text": "Удалите пару Bluetooth с машиной и свяжите заново", "text_en": "Remove the Bluetooth pairing with the car and pair again", "action": "bluetooth"},
+        {"text": "Если не помогает — используйте кабель", "text_en": "If that doesn't help, use the cable"}
+      ]
+    },
+    {
+      "id": "wifi_vpn_abort",
+      "title": "Соединение по воздуху обрывает телефон",
+      "title_en": "The phone is dropping the wireless connection",
+      "phase": "drops",
+      "category": "network",
+      "score": 50,
+      "all": [["abort_no_iface", ">=", 2]],
+      "evidence": ["abort"],
+      "advice": "Система телефона сама закрывает сокеты («Software caused connection abort»), при этом Wi-Fi не пропадает. Чаще всего это VPN/прокси: исключите Headswap из VPN или выключайте его в машине. Также снимите для Headswap ограничения батареи. Если не помогает — подключайтесь кабелем.",
+      "advice_en": "The phone's system closes the sockets itself (\"Software caused connection abort\") while Wi-Fi stays up. Most often it's a VPN/proxy: exclude Headswap from the VPN or turn it off in the car. Also remove battery restrictions for Headswap. If that doesn't help, connect with the cable.",
+      "what": "Система телефона сама закрывает сокеты, хотя Wi-Fi не пропадает.",
+      "what_en": "The phone's system closes the sockets itself while Wi-Fi stays up.",
+      "steps": [
+        {"text": "Исключите Headswap из VPN или выключайте VPN в машине", "text_en": "Exclude Headswap from the VPN or turn the VPN off in the car"},
+        {"text": "Снимите для Headswap ограничения батареи", "text_en": "Remove battery restrictions for Headswap", "action": "battery"},
+        {"text": "Если не помогает — подключайтесь кабелем", "text_en": "If that doesn't help, connect with the cable"}
+      ],
+      "ask": "Включён ли на телефоне VPN?",
+      "ask_en": "Is a VPN turned on on the phone?"
+    },
+    {
+      "id": "mazda_g6s_air_p2p_lost",
+      "title": "Mazda G6S по воздуху: магнитола снимает Wi-Fi Direct",
+      "title_en": "Mazda G6S over the air: the head unit drops Wi-Fi Direct",
+      "phase": "drops",
+      "category": "our_bug",
+      "score": 65,
+      "all": [["channel", "~", "^20622116$"], ["m.p2p_group_lost", ">=", 1], ["m.abort", ">=", 1]],
+      "evidence": ["p2p_group_lost", "abort"],
+      "advice": "Эта магнитола снимает Wi-Fi Direct группу после паузы видео (задний ход, меню) и сама не возвращается. Исправление в тестовой сборке. Пока: выключите и включите Bluetooth на телефоне либо подключайтесь кабелем.",
+      "advice_en": "This head unit drops the Wi-Fi Direct group after a video pause (reverse gear, menu) and doesn't come back on its own. A fix is in a test build. For now: turn Bluetooth off and on on the phone, or connect with the cable.",
+      "what": "Магнитола снимает группу Wi-Fi Direct после паузы видео и сама не возвращается.",
+      "what_en": "The head unit drops the Wi-Fi Direct group after a video pause and doesn't come back on its own.",
+      "steps": [
+        {"text": "Выключите и включите Bluetooth на телефоне", "text_en": "Turn Bluetooth off and on on the phone", "action": "bluetooth"},
+        {"text": "Или подключайтесь кабелем", "text_en": "Or connect with the cable"}
+      ],
+      "suppresses": ["wifi_vpn_abort"]
+    },
+    {
+      "id": "vw_id_idr_limit",
+      "title": "VW ID рвёт кабель на больших ключевых кадрах",
+      "title_en": "VW ID drops the cable on large keyframes",
+      "phase": "drops",
+      "category": "our_bug_fixed",
+      "score": 75,
+      "fixed_in": "2.4.0",
+      "all": [["channel", "~", "^20082138$"], ["hu", "~", "1538"], ["eio_sessions", ">=", 2]],
+      "advice": "Магнитола рвёт USB на ключевых кадрах больше ~600 КиБ. Используйте перекодирование; в «Мой автомобиль» выберите свою модель VW ID.",
+      "advice_en": "The head unit drops USB on keyframes larger than ~600 KiB. Use Transcoding; in \"My car\" pick your VW ID model.",
+      "what": "Магнитола рвёт USB на ключевых кадрах больше ~600 КиБ.",
+      "what_en": "The head unit drops USB on keyframes larger than ~600 KiB.",
+      "steps": [
+        {"text": "Включите перекодирование", "text_en": "Turn on Transcoding", "action": "video"},
+        {"text": "В «Мой автомобиль» выберите свою модель VW ID", "text_en": "In \"My car\" pick your VW ID model", "action": "video"}
+      ],
+      "suppresses": ["usb_unstable"]
+    },
+    {
+      "id": "wifi_iface_drop",
+      "title": "Телефон теряет Wi-Fi связь с магнитолой",
+      "title_en": "The phone loses its Wi-Fi link to the head unit",
+      "phase": "drops",
+      "category": "network",
+      "score": 55,
+      "all": [["abort_iface", ">=", 1]],
+      "any": [["abort_iface", ">=", 2], ["m.no_route", ">=", 1]],
+      "evidence": ["iface_down", "abort"],
+      "advice": "Во время поездки у телефона пропадает Wi-Fi-интерфейс (энергосбережение, звонок по Bluetooth, слабый сигнал). Отключите автовыключение точки доступа и энергосбережение Wi-Fi, переведите точку на 5 ГГц, не держите телефон в закрытом бардачке. Самый надёжный вариант — кабель.",
+      "advice_en": "During the trip the phone's Wi-Fi interface goes down (power saving, a call over Bluetooth, weak signal). Turn off hotspot auto-off and Wi-Fi power saving, switch the hotspot to 5 GHz, and don't keep the phone in a closed glovebox. The most reliable option is the cable.",
+      "what": "Во время поездки у телефона пропадает Wi-Fi-интерфейс.",
+      "what_en": "During the trip the phone's Wi-Fi interface goes down.",
+      "steps": [
+        {"text": "Отключите автовыключение точки доступа и энергосбережение Wi-Fi", "text_en": "Turn off hotspot auto-off and Wi-Fi power saving", "action": "hotspot"},
+        {"text": "Переведите точку доступа на 5 ГГц", "text_en": "Switch the hotspot to 5 GHz", "action": "hotspot"},
+        {"text": "Не держите телефон в закрытом бардачке", "text_en": "Don't keep the phone in a closed glovebox"},
+        {"text": "Самый надёжный вариант — подключение кабелем", "text_en": "The most reliable option is the cable"}
+      ]
+    },
+    {
+      "id": "wifi_hu_closes",
+      "title": "Магнитола сама закрывает соединение по воздуху",
+      "title_en": "The head unit closes the wireless connection itself",
+      "phase": "drops",
+      "category": "network",
+      "score": 40,
+      "all": [["m.hu_closed_sock", ">=", 3], ["m.abort", "<", 2]],
+      "evidence": ["hu_closed_sock"],
+      "advice": "ГУ периодически закрывает Wi-Fi-соединение — обычно из-за задержек в радиоканале. Переведите точку доступа на 5 ГГц, уберите телефон из бардачка/металлического держателя, сравните с работой по кабелю.",
+      "advice_en": "The head unit periodically closes the Wi-Fi connection - usually because of delays on the radio channel. Switch the hotspot to 5 GHz, take the phone out of the glovebox/metal holder, and compare with the cable.",
+      "what": "Магнитола периодически сама закрывает Wi-Fi-соединение, обычно из-за задержек радиоканала.",
+      "what_en": "The head unit periodically closes the Wi-Fi connection itself, usually due to radio channel delays.",
+      "steps": [
+        {"text": "Переведите точку доступа на 5 ГГц", "text_en": "Switch the hotspot to 5 GHz", "action": "hotspot"},
+        {"text": "Уберите телефон из бардачка и металлического держателя", "text_en": "Take the phone out of the glovebox and metal holder"},
+        {"text": "Сравните с работой по кабелю", "text_en": "Compare with the cable"}
+      ]
+    },
+    {
+      "id": "process_killed",
+      "title": "Система убивает Headswap в фоне",
+      "title_en": "The system kills Headswap in the background",
+      "phase": "drops",
+      "category": "user_setup",
+      "score": 33,
+      "all": [["m.low_memory", ">=", 1]],
+      "evidence": ["low_memory"],
+      "advice": "Android завершал Headswap (нехватка памяти или агрессивное энергосбережение). Поставьте Headswap и Android Auto «Без ограничений» в настройках батареи, включите автозапуск (Xiaomi/HyperOS, vivo, Honor), закрепите Headswap замком в списке недавних приложений.",
+      "advice_en": "Android was terminating Headswap (low memory or aggressive power saving). Set Headswap and Android Auto to \"Unrestricted\" in battery settings, enable autostart (Xiaomi/HyperOS, vivo, Honor), and pin Headswap with the lock in the recent apps list.",
+      "what": "Android завершал Headswap из-за нехватки памяти или агрессивного энергосбережения.",
+      "what_en": "Android was terminating Headswap due to low memory or aggressive power saving.",
+      "steps": [
+        {"text": "Поставьте Headswap и Android Auto «Без ограничений» в настройках батареи", "text_en": "Set Headswap and Android Auto to \"Unrestricted\" in battery settings", "action": "battery"},
+        {"text": "Включите автозапуск (Xiaomi/HyperOS, vivo, Honor)", "text_en": "Enable autostart (Xiaomi/HyperOS, vivo, Honor)", "action": "autostart"},
+        {"text": "Закрепите Headswap замком в списке недавних приложений", "text_en": "Pin Headswap with the lock in the recent apps list"}
+      ]
+    },
+    {
+      "id": "phone_encoder_fail",
+      "title": "Кодек телефона не справляется с перекодированием",
+      "title_en": "The phone's codec can't handle transcoding",
+      "phase": "no_video",
+      "category": "phone_limit",
+      "score": 55,
+      "all": [["m.codec_fail", ">=", 2]],
+      "any": [["frames_max", "<", 300]],
+      "evidence": ["codec_fail"],
+      "advice": "Аппаратный кодек телефона не принимает настройки перекодирования. Выберите в Headswap разрешение 720p и 15 FPS; если не помогло — режим «Прямой проброс».",
+      "advice_en": "The phone's hardware codec doesn't accept the transcoding settings. In Headswap choose 720p and 15 FPS; if that doesn't help, use Passthrough mode.",
+      "what": "Аппаратный кодек телефона не принимает настройки перекодирования.",
+      "what_en": "The phone's hardware codec doesn't accept the transcoding settings.",
+      "steps": [
+        {"text": "Выберите в Headswap разрешение 720p и 15 FPS", "text_en": "In Headswap choose 720p and 15 FPS", "action": "video"},
+        {"text": "Если не помогло — включите режим «Прямой проброс»", "text_en": "If that doesn't help, use Passthrough mode", "action": "video"}
+      ]
+    },
+    {
+      "id": "two_frames_hu",
+      "title": "Магнитола принимает два кадра и останавливается",
+      "title_en": "The head unit accepts two frames and stops",
+      "phase": "no_video",
+      "category": "our_bug_fixed",
+      "score": 80,
+      "fixed_in": "2.4.4",
+      "all": [["two_frame_sessions", ">=", 3]],
+      "advice": "Магнитола (Mazda 3 Китай и похожие 1280x480) не принимает крупные видеопакеты. В режиме «Мой автомобиль» выберите Mazda 3 (2025, Китай).",
+      "advice_en": "This head unit (Mazda 3 China and similar 1280x480 ones) doesn't accept large video packets. In \"My car\" choose Mazda 3 (2025, China).",
+      "what": "Магнитола (Mazda 3 Китай и похожие 1280x480) не принимает крупные видеопакеты.",
+      "what_en": "This head unit (Mazda 3 China and similar 1280x480 ones) doesn't accept large video packets.",
+      "steps": [
+        {"text": "В «Мой автомобиль» выберите Mazda 3 (2025, Китай)", "text_en": "In \"My car\" choose Mazda 3 (2025, China)", "action": "video"}
+      ]
+    },
+    {
+      "id": "mobis_short_loop",
+      "title": "Hyundai/Kia Mobis CCNC рвёт кабель каждые 8–12 с",
+      "title_en": "Hyundai/Kia Mobis CCNC drops the cable every 8-12 s",
+      "phase": "drops",
+      "category": "unresolved",
+      "score": 75,
+      "all": [["eio_short", ">=", 5]],
+      "any": [["hu", "~", "Mobis|NX4"], ["channel", "~", "^20022188$"]],
+      "advice": "Известная проблема этой магнитолы: она повторяет команду старта видео и рвёт USB через 8–12 с. Причина пока не найдена. Попробуйте другой кабель и другой телефон и пришлите лог разработчику.",
+      "advice_en": "A known issue with this head unit: it repeats the video start command and drops USB after 8-12 s. The cause hasn't been found yet. Try a different cable and a different phone, and send the log to the developer.",
+      "what": "Магнитола повторяет команду старта видео и рвёт USB через 8–12 с, причина пока не найдена.",
+      "what_en": "The head unit repeats the video start command and drops USB after 8-12 s; the cause isn't found yet.",
+      "steps": [
+        {"text": "Попробуйте другой кабель и другой телефон", "text_en": "Try a different cable and a different phone"},
+        {"text": "Отправьте лог разработчикам", "text_en": "Send the log to the developers", "action": "share_log"}
+      ],
+      "suppresses": ["usb_unstable"]
+    },
+    {
+      "id": "vw_pause_eio",
+      "title": "VW/Skoda рвёт кабель после выхода в меню магнитолы",
+      "title_en": "VW/Skoda drops the cable after leaving to the head unit menu",
+      "phase": "drops",
+      "category": "our_bug_fixed",
+      "score": 75,
+      "fixed_in": "2.4.0",
+      "all": [["pause_eio", ">=", 2], ["channel", "~", "^200821(20|22|34)$"]],
+      "advice": "Магнитола рвёт USB через 5–8 с после паузы видео (выход в меню ГУ, камера).",
+      "advice_en": "The head unit drops USB 5-8 s after a video pause (leaving to the head unit menu, camera).",
+      "what": "Магнитола рвёт USB через 5–8 с после паузы видео (выход в меню ГУ, камера).",
+      "what_en": "The head unit drops USB 5-8 s after a video pause (leaving to the head unit menu, camera).",
+      "steps": [
+        {"text": "Если после обновления обрывы остались — отправьте лог разработчикам", "text_en": "If the drops remain after updating, send the log to the developers", "action": "share_log"}
+      ],
+      "suppresses": ["usb_unstable", "pause_eio_other"]
+    },
+    {
+      "id": "vw_cns2_pause_eio",
+      "title": "VW Tharu CNS2 рвёт кабель после выхода в меню магнитолы",
+      "title_en": "VW Tharu CNS2 drops the cable after leaving to the head unit menu",
+      "phase": "drops",
+      "category": "our_bug",
+      "score": 75,
+      "all": [["pause_eio", ">=", 1], ["channel", "~", "^20082114$"]],
+      "advice": "Известная проблема этой магнитолы (Delphi CNS2): после паузы видео (меню ГУ, камера) она рвёт USB и сама не возвращается. Исправление готовится в ближайшей версии; пока после выхода из меню нажмите CarLife на магнитоле заново.",
+      "advice_en": "A known issue with this head unit (Delphi CNS2): after a video pause (head unit menu, camera) it drops USB and doesn't come back on its own. A fix is coming in the next version; for now, after leaving the menu, tap CarLife on the head unit again.",
+      "what": "Магнитола (Delphi CNS2) после паузы видео рвёт USB и сама не возвращается.",
+      "what_en": "This head unit (Delphi CNS2) drops USB after a video pause and doesn't come back on its own.",
+      "steps": [
+        {"text": "После выхода из меню нажмите CarLife на магнитоле заново", "text_en": "After leaving the menu, tap CarLife on the head unit again"}
+      ],
+      "suppresses": ["usb_unstable", "pause_eio_other"]
+    },
+    {
+      "id": "pause_eio_other",
+      "title": "Магнитола рвёт кабель после паузы видео",
+      "title_en": "The head unit drops the cable after a video pause",
+      "phase": "drops",
+      "category": "hu_limit",
+      "score": 55,
+      "all": [["pause_eio", ">=", 2]],
+      "advice": "Обрыв USB приходит через 5–8 с после того, как магнитола приостановила видео (выход в меню ГУ, камера заднего вида). Пришлите лог разработчику с моделью машины — для таких ГУ делается отдельный обход.",
+      "advice_en": "The USB drop comes 5-8 s after the head unit paused the video (leaving to the head unit menu, rear-view camera). Send the log to the developer along with the car model - a separate workaround is made for such head units.",
+      "what": "USB обрывается через 5–8 с после того, как магнитола приостановила видео.",
+      "what_en": "USB drops 5-8 s after the head unit paused the video.",
+      "steps": [
+        {"text": "Отправьте лог разработчикам и укажите модель машины", "text_en": "Send the log to the developers and state the car model", "action": "share_log"}
+      ],
+      "suppresses": ["usb_unstable"]
+    },
+    {
+      "id": "pioneer_bitrate",
+      "title": "Pioneer RM56E8B не тянет битрейт",
+      "title_en": "Pioneer RM56E8B can't handle the bitrate",
+      "phase": "drops",
+      "category": "our_bug_fixed",
+      "score": 85,
+      "fixed_in": "2.4.2",
+      "all": [["hu", "~", "RM56E8B"], ["ep_EIO", ">=", 2]],
+      "advice": "Эта магнитола рвёт USB уже от ~2 Мбит/с. В «Мой автомобиль» выберите Dongfeng DF6 2023 (720p/1024, 800 кбит/с, ≤10 FPS).",
+      "advice_en": "This head unit drops USB from about 2 Mbit/s. In \"My car\" choose Dongfeng DF6 2023 (720p/1024, 800 kbit/s, ≤10 FPS).",
+      "what": "Эта магнитола рвёт USB уже от ~2 Мбит/с.",
+      "what_en": "This head unit drops USB from about 2 Mbit/s.",
+      "steps": [
+        {"text": "В «Мой автомобиль» выберите Dongfeng DF6 2023", "text_en": "In \"My car\" choose Dongfeng DF6 2023", "action": "video"}
+      ],
+      "suppresses": ["usb_unstable"]
+    },
+    {
+      "id": "fixed_window_hu",
+      "title": "Магнитола показывает картинку в фиксированном окне",
+      "title_en": "The head unit shows the picture in a fixed window",
+      "phase": "feature",
+      "category": "hu_limit",
+      "score": 30,
+      "all": [["requested", "~", "960x540|1120x630"]],
+      "advice": "ГУ сама задаёт окно (960x540 или 1120x630) и вписывает картинку в него; широкий и портретный режимы не помогут. Оптимально — режим R720 (16:9).",
+      "advice_en": "The head unit sets the window itself (960x540 or 1120x630) and fits the picture into it; wide and portrait modes won't help. The best option is R720 mode (16:9).",
+      "what": "Магнитола сама задаёт окно (960x540 или 1120x630) и вписывает в него картинку.",
+      "what_en": "The head unit sets the window (960x540 or 1120x630) itself and fits the picture into it.",
+      "steps": [
+        {"text": "Выберите в Headswap режим R720 (16:9)", "text_en": "In Headswap choose R720 mode (16:9)", "action": "video"}
+      ]
+    },
+    {
+      "id": "usb_unstable",
+      "title": "Обрывы кабельного соединения (EIO)",
+      "title_en": "Cable connection drops (EIO)",
+      "phase": "drops",
+      "category": "hu_limit",
+      "score": 35,
+      "all": [["eio_sessions", ">=", 3], ["frames_max", ">=", 30]],
+      "evidence": ["eio"],
+      "advice": "Связь по USB рвётся со стороны магнитолы или кабеля. 1) Оригинальный короткий кабель с данными, без хабов и переходников, порт с иконкой телефона. 2) Перекодирование 720p, 15 FPS — меньший поток. 3) Если обрывы в момент запуска двигателя или выхода в меню ГУ — сообщите, что делали в момент обрыва.",
+      "advice_en": "The USB link breaks on the head unit's or the cable's side. 1) Use the original short data cable, no hubs or adapters, in a port with a phone icon. 2) Transcoding at 720p, 15 FPS - a smaller stream. 3) If the drops happen when starting the engine or leaving to the head unit menu, tell us what you were doing at the moment of the drop.",
+      "what": "Связь по USB рвётся со стороны магнитолы или кабеля.",
+      "what_en": "The USB link breaks on the head unit's or the cable's side.",
+      "steps": [
+        {"text": "Возьмите оригинальный короткий кабель с данными, без хабов и переходников", "text_en": "Use the original short data cable, no hubs or adapters"},
+        {"text": "Подключайте в порт USB с иконкой телефона", "text_en": "Plug into a USB port with a phone icon"},
+        {"text": "Включите перекодирование 720p, 15 FPS — меньший поток", "text_en": "Use Transcoding at 720p, 15 FPS - a smaller stream", "action": "video"},
+        {"text": "Если обрывы при запуске двигателя или выходе в меню — отправьте лог и опишите момент", "text_en": "If drops happen at engine start or leaving the menu, send the log and describe the moment", "action": "share_log"}
+      ]
+    },
+    {
+      "id": "usb_drop_before_video",
+      "title": "Магнитола рвёт кабель до начала видео",
+      "title_en": "The head unit drops the cable before video starts",
+      "phase": "no_video",
+      "category": "hu_limit",
+      "score": 50,
+      "all": [["eio_sessions", ">=", 3], ["frames_max", "<", 30]],
+      "evidence": ["eio"],
+      "advice": "Связь с ГУ устанавливается, но рвётся по USB раньше, чем пошла картинка. Обновите Headswap до последней версии, выберите перекодирование 720p и 15 FPS, попробуйте другой кабель с передачей данных и другой USB-порт машины.",
+      "advice_en": "The link with the head unit is established, but USB drops before the picture appears. Update Headswap to the latest version, choose Transcoding at 720p and 15 FPS, and try a different data cable and a different USB port in the car.",
+      "what": "Связь с магнитолой устанавливается, но USB рвётся раньше, чем пошла картинка.",
+      "what_en": "The link with the head unit is established, but USB drops before the picture appears.",
+      "steps": [
+        {"text": "Обновите Headswap до последней версии", "text_en": "Update Headswap to the latest version", "action": "update"},
+        {"text": "Выберите перекодирование 720p и 15 FPS", "text_en": "Choose Transcoding at 720p and 15 FPS", "action": "video"},
+        {"text": "Попробуйте другой кабель с передачей данных", "text_en": "Try a different data cable"},
+        {"text": "Попробуйте другой USB-порт машины", "text_en": "Try a different USB port in the car"}
+      ],
+      "ask": "Что видно на магнитоле в момент обрыва? Работает ли на этой машине оригинальный Baidu CarLife?",
+      "ask_en": "What does the head unit show at the moment of the drop? Does the original Baidu CarLife work on this car?"
+    },
+    {
+      "id": "usb_rare_drop",
+      "title": "Единичный обрыв по кабелю",
+      "title_en": "A single cable drop",
+      "phase": "drops",
+      "category": "hu_limit",
+      "score": 32,
+      "all": [["eio_sessions", ">=", 1], ["eio_sessions", "<=", 2], ["frames_max", ">=", 300]],
+      "evidence": ["eio"],
+      "advice": "Видео шло, затем один-два обрыва USB. Если это было при запуске двигателя, выключении машины или при задевании кабеля — это нормально. Если повторяется в поездке: оригинальный короткий кабель с данными, без хабов, другой USB-порт.",
+      "advice_en": "Video was running, then one or two USB drops. If it happened when starting the engine, turning off the car, or bumping the cable, that's normal. If it keeps happening on trips: original short data cable, no hubs, a different USB port.",
+      "what": "Видео шло, затем один-два обрыва USB; при запуске двигателя или задевании кабеля это нормально.",
+      "what_en": "Video was running, then one or two USB drops; at engine start or a bumped cable that's normal.",
+      "steps": [
+        {"text": "Если повторяется в поездке — возьмите оригинальный короткий кабель с данными, без хабов", "text_en": "If it keeps happening on trips, use the original short data cable, no hubs"},
+        {"text": "Попробуйте другой USB-порт", "text_en": "Try a different USB port"}
+      ]
+    },
+    {
+      "id": "usb_stream_desync",
+      "title": "Поток с магнитолой рассинхронизировался",
+      "title_en": "The stream with the head unit went out of sync",
+      "phase": "drops",
+      "category": "hu_limit",
+      "score": 35,
+      "all": [["m.stream_desync", ">=", 1]],
+      "evidence": ["stream_desync"],
+      "advice": "Данные от ГУ пришли в неожиданном формате. Часто это значит, что ГУ открыла кабель не в режиме CarLife (выберите на ГУ Baidu CarLife) или помехи по кабелю — замените кабель.",
+      "advice_en": "The data from the head unit arrived in an unexpected format. Often this means the head unit opened the cable not in CarLife mode (pick Baidu CarLife on the head unit) or there is interference on the cable - replace the cable.",
+      "what": "Данные от магнитолы пришли в неожиданном формате.",
+      "what_en": "The data from the head unit arrived in an unexpected format.",
+      "steps": [
+        {"text": "Выберите на магнитоле Baidu CarLife", "text_en": "Pick Baidu CarLife on the head unit"},
+        {"text": "Замените кабель — возможны помехи", "text_en": "Replace the cable - there may be interference"}
+      ]
+    },
+    {
+      "id": "old_version",
+      "title": "Устаревшая версия Headswap",
+      "title_en": "Outdated Headswap version",
+      "phase": "any",
+      "category": "note",
+      "score": 30,
+      "all": [["version", "<v", "2.4.0"]],
+      "advice": "У вас старая версия Headswap, многие проблемы подключения уже исправлены. Обновите приложение до последней версии.",
+      "advice_en": "You have an old Headswap version, and many connection problems have already been fixed. Update the app to the latest version.",
+      "what": "У вас старая версия Headswap, многие проблемы подключения уже исправлены.",
+      "what_en": "You have an old Headswap version, and many connection problems have already been fixed.",
+      "steps": [
+        {"text": "Обновите Headswap до последней версии", "text_en": "Update Headswap to the latest version", "action": "update"}
+      ]
+    },
+    {
+      "id": "works",
+      "title": "Подключение работало",
+      "title_en": "The connection worked",
+      "phase": "ok",
+      "category": "note",
+      "score": 30,
+      "all": [["frames_max", ">=", 300], ["aa_video_max", "!=", 0], ["eio_sessions", "==", 0], ["m.abort", "<=", 1]],
+      "advice": "Явных сбоев подключения в логе нет: видео шло. Если проблема в звуке, навигации, тач-управлении или картинке — опишите её словами и приложите фото экрана магнитолы.",
+      "advice_en": "No obvious connection failures in the log: video was running. If the problem is with sound, navigation, touch control, or the picture, describe it in words and attach a photo of the head unit screen.",
+      "what": "Явных сбоев подключения в логе нет: видео шло.",
+      "what_en": "No obvious connection failures in the log: video was running.",
+      "steps": [
+        {"text": "Опишите проблему словами и приложите фото экрана магнитолы", "text_en": "Describe the problem in words and attach a photo of the head unit screen", "action": "share_log"}
+      ]
+    }
+  ]
+}

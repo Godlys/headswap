@@ -149,6 +149,7 @@ class CarLifeSession(
     @Volatile private var bannerText: String? = null
     @Volatile private var acceptEncoder = true
     @Volatile private var carlifeStarted = false
+    private val vrReassembler = DataReassembler()  // h425: Delphi режет VR MIC_DATA на кадры по 256 Б
 
     fun start() {
         bridge.attach(this)
@@ -217,7 +218,11 @@ class CarLifeSession(
             AppLog.msg("RX", chan, inner.size, m.type, m.declaredLen, decoded, inner, ui = !quiet, note = note)
             if (chan == Ch.CMD) onCmd(m) else onTouch(m)
         } else {
-            val m = Wire.parseData(inner)
+            val whole = if (chan == Ch.VR) vrReassembler.feed(inner) ?: return else inner
+            if (chan == Ch.VR && vrReassembler.assembled == 1 && whole !== inner) {
+                AppLog.i("RX VR: ГУ режет сообщение на кадры по ${vrReassembler.firstFragment} Б, собираю (${whole.size} Б)")
+            }
+            val m = Wire.parseData(whole)
             if (m == null) {
                 AppLog.i("RX ${Ch.name(chan)} слишком короткое inner (${inner.size} байт): ${Hex.compact(inner, 32)}")
                 return
@@ -738,7 +743,7 @@ class CarLifeSession(
     override fun sendAudio(channel: Int, type: Int, payload: ByteArray): Boolean {
         if (closed.get()) return false
         if (payload.isNotEmpty() && transport.queueSize(channel) > MAX_AUDIO_QUEUE) return false   // звук не должен душить видео в очереди
-        val isData = type == CarlifeAudio.MEDIA_DATA || type == CarlifeAudio.TTS_DATA
+        val isData = type == CarlifeAudio.MEDIA_DATA || type == CarlifeAudio.TTS_DATA || type == CarlifeAudio.VR_DATA
         val time = if (isData) (System.currentTimeMillis() and 0xFFFFFFFFL).toInt() else 0
         send(channel, Wire.dataInner(type, time, payload))
         return true

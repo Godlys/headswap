@@ -726,4 +726,31 @@ class ProtocolTest {
         assertTrue(d.contains("еще 44 байт"))
         assertEquals("00 01 02 ...(+3)", Hex.compact(ByteArray(6) { it.toByte() }, 3))
     }
+
+    @Test
+    fun reassemblesVrMicDataSplitInto256ByteFrames() {
+        // h425: VW CNS2 Delphi шлёт MIC_DATA [12 + 1024] кадрами по 256 Б
+        val pcm = ByteArray(1024) { (it * 7).toByte() }
+        val inner = Wire.dataInner(Msg.VR_MIC_DATA, 0, pcm)
+        val r = DataReassembler()
+        val parts = inner.toList().chunked(256).map { it.toByteArray() }
+        assertEquals(5, parts.size)
+        for (p in parts.dropLast(1)) assertNull(r.feed(p))
+        val whole = r.feed(parts.last())
+        assertNotNull(whole)
+        val m = Wire.parseData(whole!!)!!
+        assertFalse(m.truncated)
+        assertEquals(Msg.VR_MIC_DATA, m.type)
+        assertArrayEquals(pcm, m.data)
+        assertEquals(1, r.assembled)
+        // целое сообщение проходит как есть
+        val small = Wire.dataInner(Msg.VR_MIC_DATA, 0, ByteArray(200))
+        assertTrue(r.feed(small) === small)
+    }
+
+    @Test
+    fun reassemblerPassesInsaneLengthThrough() {
+        val bad = ByteArray(256).also { Wire.putU32(it, 0, 10 * 1024 * 1024) }
+        assertTrue(DataReassembler().feed(bad) === bad)
+    }
 }

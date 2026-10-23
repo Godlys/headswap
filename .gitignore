@@ -25,6 +25,7 @@ local.properties
 # артефакты, ключи, сертификаты
 *.h264
 *.log
+!tools/logdiag_cases/*.log
 *.pem
 *.key
 *.jks

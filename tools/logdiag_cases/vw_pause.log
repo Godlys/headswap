@@ -1,0 +1,15 @@
+09:00:00.001 аксессуар не найден (getAccessoryList=null)
+09:00:05.000 == USB_ACCESSORY_ATTACHED, в intent: manufacturer="Baidu" model="CarLife"
+09:00:05.100 сессия: старт
+09:00:05.200 == ВЕРСИЯ ПРОТОКОЛА ГУ: major=2 minor=0
+09:00:05.300 WL hs STATISTIC_INFO channel=20082122 t=1
+09:10:00.000 RX CMD 0x0001800A VIDEO_ENCODER_PAUSE len=0 [resv=0]
+09:10:05.500 ERROR ошибка записи: IOException: write failed: EIO (I/O error)
+09:10:05.600 == РЕЗЮМЕ СЕССИИ (600 с, причина: ошибка записи: write failed: EIO (I/O error))
+  видео: отправлено кадров=18000
+09:10:20.000 == USB_ACCESSORY_ATTACHED, в intent: manufacturer="Baidu" model="CarLife"
+09:10:20.100 сессия: старт
+09:20:00.000 RX CMD 0x0001800A VIDEO_ENCODER_PAUSE len=0 [resv=0]
+09:20:05.500 ERROR ошибка записи: IOException: write failed: EIO (I/O error)
+09:20:05.600 == РЕЗЮМЕ СЕССИИ (585 с, причина: ошибка записи: write failed: EIO (I/O error))
+  видео: отправлено кадров=17500
