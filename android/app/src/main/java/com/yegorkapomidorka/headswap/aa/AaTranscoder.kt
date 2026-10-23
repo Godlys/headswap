@@ -22,7 +22,8 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * feedFrame/feedConfig/resetDecoder не блокируют вызывающую нить (нить AA под монитором моста): кладут в
  * [FeedQueue], а createDecoder, dequeueInputBuffer и queueInputBuffer выполняет нить aa-trans-feed.
- * Очередь коротка: при переполнении кадры теряются до следующего IDR, мост получает onNeedAaKeyFrame.
+ * Очередь на [FeedQueue.DEFAULT_MAX_FRAMES] кадров (~0,5 с при 30 fps: пока создаётся декодер, 80-300 мс, кадры копятся, а не
+ * теряются); при переполнении кадры теряются до следующего IDR, мост получает onNeedAaKeyFrame.
  * Колбэки [out] не зовутся под lock. "nofeedthread" в tuning - старый синхронный путь на нити вызывающего.
  */
 class AaTranscoder(

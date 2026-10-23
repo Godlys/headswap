@@ -17,7 +17,7 @@ enum class Offer { ACCEPTED, DROPPED_FULL, DROPPED_GATED }
  * (команды остаются на местах), снимает закрытие и проходит всегда. Команды ([post]) не отказывают.
  * Один потребитель ([take]), несколько производителей.
  */
-class FeedQueue(private val maxFrames: Int = 4) {
+class FeedQueue(private val maxFrames: Int = DEFAULT_MAX_FRAMES) {
     private val items = ArrayDeque<FeedItem>()
     private var frames = 0
     private var gated = false
@@ -87,5 +87,14 @@ class FeedQueue(private val maxFrames: Int = 4) {
         items.clear()
         frames = 0
         gated = false
+    }
+
+    companion object {
+        /**
+         * ~0,5 с при 30 fps. Декодер создаётся 80-300 мс (на 60 fps это до 18 кадров), и эти кадры должны дождаться
+         * его, а не выбить IDR-запрос к AA на каждом старте. На 4 кадрах пачка из 10 кадров переполняла очередь
+         * прямо во время createDecoder (transcode_test burst, 23.10.2026).
+         */
+        const val DEFAULT_MAX_FRAMES = 16
     }
 }
