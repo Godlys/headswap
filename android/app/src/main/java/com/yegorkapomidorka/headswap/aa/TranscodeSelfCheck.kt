@@ -251,6 +251,7 @@ object TranscodeSelfCheck {
                 t.requestSyncFrame()
             } else {
                 skippedP++
+                continue                                 // IDR в дампе AA раз в ~минуту: к нему шагаем без задержки, как мост по сокету
             }
             if (SystemClock.elapsedRealtime() - lastStats >= 5000) {
                 AppLog.i("transcode_test: ${stats()}")
