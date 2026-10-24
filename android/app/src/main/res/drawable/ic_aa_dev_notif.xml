@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Значок уведомления «Android Auto Developer»: персиковый круг и знак «дорожные работы» -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="28dp" android:height="28dp" android:viewportWidth="28" android:viewportHeight="28">
+    <path android:fillColor="#F4B99A" android:pathData="M14 0a14 14 0 1 0 0 28a14 14 0 1 0 0 -28z" />
+    <path android:fillColor="#2A1A12" android:pathData="M14 7.2L21.4 20H6.6z" android:strokeColor="#2A1A12" android:strokeWidth="1.6" android:strokeLineJoin="round" />
+    <path android:fillColor="#F4B99A" android:pathData="M13.4 10.5a1.1 1.1 0 1 0 0 2.2a1.1 1.1 0 1 0 0 -2.2z" />
+    <path android:pathData="M13.2 13.2L11.4 18.2M13.2 13.4l1.4 2.4M11.8 16l-1.6 2.2" android:strokeColor="#F4B99A" android:strokeWidth="1.2" android:strokeLineCap="round" />
+    <path android:fillColor="#F4B99A" android:pathData="M15.4 18.4l1.8 -1.6l1.6 1.6z" />
+</vector>
