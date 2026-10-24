@@ -15,6 +15,7 @@ import com.yegorkapomidorka.headswap.BridgeService
 import com.yegorkapomidorka.headswap.CarLifeState
 import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.aa.AaCreds
+import com.yegorkapomidorka.headswap.aa.AaServerCheck
 import com.yegorkapomidorka.headswap.aa.PhoneMicCapture
 import com.yegorkapomidorka.headswap.aa.TranscodeSelfCheck
 
@@ -95,6 +96,7 @@ object Actions {
      */
     fun startServerFromUi(ctx: Context) {
         HeadswapStatus.markServerRequested()
+        AaServerCheck.onOpenAaRequested(ctx)         // после "не отвечает" вернёмся и перепроверим без правила 10 минут
         openAaSettings(ctx)
     }
 

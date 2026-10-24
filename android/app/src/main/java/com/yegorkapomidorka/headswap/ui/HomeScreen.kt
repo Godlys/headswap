@@ -22,7 +22,7 @@ import com.yegorkapomidorka.headswap.MainActivity
 import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.update.Updater
 
-/** Главный экран «Готов к поездке» (Main.dc.html): пять состояний, этапы, кнопки; сверху плашка обновления. */
+/** Главный экран «Готов к поездке» (Main.dc.html): шесть состояний, этапы, кнопки; сверху плашка обновления. */
 class HomeScreen(host: MainActivity) : Screen(host) {
     private val root = ctx.vbox()
     override val view: View get() = root
@@ -169,6 +169,7 @@ class HomeScreen(host: MainActivity) : Screen(host) {
         val iconRes = when (st.icon) {
             HeroIcon.POWER -> R.drawable.ic_power
             HeroIcon.PLUG -> R.drawable.ic_plug
+            HeroIcon.CAR -> R.drawable.ic_car
             HeroIcon.CAR_USB -> R.drawable.ic_car_usb
             HeroIcon.CAR_WIFI -> R.drawable.ic_car_wifi
             HeroIcon.REFRESH -> R.drawable.ic_refresh

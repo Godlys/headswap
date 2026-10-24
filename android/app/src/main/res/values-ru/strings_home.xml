@@ -6,7 +6,8 @@
     <string name="home_title_ok">Всё работает</string>
     <string name="home_title_off">Запустите сервер ГУ</string>
     <string name="home_title_connecting">Подключаюсь</string>
-    <string name="home_title_lost">Связь потеряна</string>
+    <string name="home_title_parked">Машина отключена</string>
+    <string name="home_title_server_down">Сервер ГУ не отвечает</string>
     <string name="home_title_ready">Готов к поездке</string>
 
     <!-- Главный экран: подзаголовки -->
@@ -18,7 +19,8 @@
     <string name="home_sub_refused">Кабель подключён, но сервер ГУ не отвечает. %1$s</string>
     <string name="home_sub_aa_dropped">Android Auto отключился. Снова включите сервер ГУ.</string>
     <string name="home_sub_cable_ok">Кабель подключён. Жду Android Auto.</string>
-    <string name="home_sub_lost">Обрыв дольше %1$d с. Снова включите сервер ГУ: Android Auto → ⋮ → «Вкл. сервер головного устр-ва», затем переподключите кабель.</string>
+    <string name="home_sub_parked">Сервер ГУ остался работать в фоне. В следующей поездке просто подключите кабель.</string>
+    <string name="home_sub_server_down">Android закрыл сервер ГУ. Включите его снова: Android Auto → ⋮ → «Вкл. сервер головного устр-ва».</string>
     <string name="home_sub_ready">Подключите телефон к магнитоле кабелем.</string>
 
     <!-- Главный экран: как запустить сервер ГУ (жирное - то, что нажать) -->
@@ -44,8 +46,9 @@
     <string name="home_stage_not_started">запустите</string>
     <string name="home_stage_connecting">подключаюсь</string>
     <string name="home_stage_handshake">рукопожатие</string>
-    <string name="home_stage_closed">закрыт</string>
-    <string name="home_stage_disconnected">отключён</string>
+    <string name="home_stage_checking">проверяю</string>
+    <string name="home_stage_hu_parked">отключена</string>
+    <string name="home_stage_no_answer">не отвечает</string>
     <string name="home_stage_started">запущен</string>
     <string name="home_stage_wait_cable">ждём кабель</string>
 
@@ -64,8 +67,8 @@
     <string name="notif_video">Видео</string>
     <string name="notif_server_off">Сервер ГУ не запущен</string>
     <string name="notif_cable_waiting">Кабель подключён · жду Android Auto</string>
-    <string name="notif_restart_title">Перезапустите сервер ГУ</string>
-    <string name="notif_lost">Связь потеряна дольше %1$d с</string>
+    <string name="notif_parked">Сервер ГУ работает в фоне</string>
+    <string name="notif_server_down">Android закрыл сервер ГУ · включите его снова</string>
     <string name="notif_server_started">Сервер ГУ запущен</string>
 
     <!-- Иллюстрации онбординга (нарисованные макеты системного UI) -->

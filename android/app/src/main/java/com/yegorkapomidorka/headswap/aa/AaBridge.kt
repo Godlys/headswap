@@ -1855,6 +1855,8 @@ class AaConnector(
             log("BRIDGE FEATURE_CONFIG ${if (core.featureConfigSeen) "получен" else "не пришёл за $waited мс"}, звук по USB: ${core.audioViaUsb}", true)
         }
         while (!stopping) {
+            // проба живости сервера (AaServerCheck) не должна держать сервер 5277, когда подключаемся мы
+            AaServerCheck.beforeBridgeConnect()
             val ended = CountDownLatch(1)
             core.onAaConnecting()
             attempts++

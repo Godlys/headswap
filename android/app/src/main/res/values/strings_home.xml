@@ -6,7 +6,8 @@
     <string name="home_title_ok">All working</string>
     <string name="home_title_off">Start the head unit server</string>
     <string name="home_title_connecting">Connecting</string>
-    <string name="home_title_lost">Connection lost</string>
+    <string name="home_title_parked">Car disconnected</string>
+    <string name="home_title_server_down">Head unit server not responding</string>
     <string name="home_title_ready">Ready for the trip</string>
 
     <!-- Home screen: hero subtitles -->
@@ -18,7 +19,8 @@
     <string name="home_sub_refused">USB cable connected, but the head unit server does not answer. %1$s</string>
     <string name="home_sub_aa_dropped">Android Auto disconnected. Turn the head unit server on again.</string>
     <string name="home_sub_cable_ok">USB cable connected. Waiting for Android Auto.</string>
-    <string name="home_sub_lost">Connection was lost for more than %1$d s. Turn the head unit server on again: Android Auto → ⋮ → “Start head unit server”, then reconnect the USB cable.</string>
+    <string name="home_sub_parked">The head unit server kept running in the background. On the next trip, just connect the cable.</string>
+    <string name="home_sub_server_down">Android closed the head unit server. Turn it on again: Android Auto → ⋮ → “Start head unit server”.</string>
     <string name="home_sub_ready">Connect the phone to the head unit with a USB cable.</string>
 
     <!-- Home screen: how to start the head unit server (bold = what to tap) -->
@@ -45,8 +47,9 @@
     <string name="home_stage_not_started">start it</string>
     <string name="home_stage_connecting">connecting</string>
     <string name="home_stage_handshake">handshake</string>
-    <string name="home_stage_closed">closed</string>
-    <string name="home_stage_disconnected">disconnected</string>
+    <string name="home_stage_checking">checking</string>
+    <string name="home_stage_hu_parked">disconnected</string>
+    <string name="home_stage_no_answer">not responding</string>
     <string name="home_stage_started">started</string>
     <string name="home_stage_wait_cable">waiting for cable</string>
 
@@ -65,8 +68,8 @@
     <string name="notif_video">Video</string>
     <string name="notif_server_off">Head unit server not started</string>
     <string name="notif_cable_waiting">USB cable connected · waiting for Android Auto</string>
-    <string name="notif_restart_title">Restart the head unit server</string>
-    <string name="notif_lost">Connection lost for more than %1$d s</string>
+    <string name="notif_parked">Head unit server keeps running in the background</string>
+    <string name="notif_server_down">Android closed the head unit server · turn it on again</string>
     <string name="notif_server_started">Head unit server started</string>
 
     <!-- Onboarding mock screens (drawn illustrations of system UI) -->

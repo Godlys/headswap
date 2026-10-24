@@ -1,6 +1,7 @@
 package com.yegorkapomidorka.headswap.ui
 
 import com.yegorkapomidorka.headswap.R
+import com.yegorkapomidorka.headswap.aa.ServerState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -11,12 +12,14 @@ class HomeLogicTest {
         status: String = "не запущено",
         protocol: Boolean = false,
         serverUp: Boolean = false,
-        lost: Boolean = false,
+        ended: Boolean = false,
         graceLeft: Int = -1,
         usbAudio: Boolean = true,
         setupError: UiText? = null,
         wireless: Boolean = false,
-    ) = Inputs(running, status, protocol, serverUp, lost, graceLeft, 8, usbAudio, setupError, wireless = wireless)
+        server: ServerState = ServerState.UNKNOWN,
+        seenAlive: Boolean = false,
+    ) = Inputs(running, status, protocol, serverUp, ended, graceLeft, 8, usbAudio, setupError, wireless = wireless, server = server, serverSeenAlive = seenAlive)
 
     @Test
     fun errorWhenCertificateMissing() {
@@ -84,12 +87,72 @@ class HomeLogicTest {
     }
 
     @Test
-    fun errorAfterLossWhenServiceStopped() {
-        val s = HomeLogic.compute(inp(lost = true, status = "мост: AA отключился"))
+    fun parkedAfterSessionEndedWhileCheckIsPendingOrAlive() {
+        // проба ещё не стартовала, идёт или ответила ALIVE: «Машина отключена», сервер ГУ в фоне, кнопок нет
+        for (server in listOf(ServerState.UNKNOWN, ServerState.CHECKING, ServerState.ALIVE, ServerState.ERROR)) {
+            val s = HomeLogic.compute(inp(ended = true, server = server))
+            assertEquals(server.toString(), Phase.PARKED, s.phase)
+            assertEquals(Tone.PRI, s.tone)
+            assertEquals(HeroIcon.CAR, s.icon)
+            assertEquals(UiText.res(R.string.home_title_parked), s.title)
+            assertEquals(UiText.res(R.string.home_sub_parked), s.sub)
+            assertNull(s.primary)
+            assertNull(s.outline)
+            assertEquals(false, s.logLink)
+            assertEquals(StageState.PEND, s.stages[1].second.first)
+            assertEquals(UiText.res(R.string.home_stage_hu_parked), s.stages[1].second.second)
+            assertEquals(UiText.res(R.string.notif_parked), s.notifText)
+        }
+        val checking = HomeLogic.compute(inp(ended = true, server = ServerState.CHECKING))
+        assertEquals(StageState.ACTIVE to UiText.res(R.string.home_stage_checking), checking.stages[0].second)
+        val alive = HomeLogic.compute(inp(ended = true, server = ServerState.ALIVE))
+        assertEquals(StageState.DONE to UiText.res(R.string.home_stage_working), alive.stages[0].second)
+    }
+
+    @Test
+    fun serverDownWhenCheckFailedAfterSessionEnded() {
+        val s = HomeLogic.compute(inp(ended = true, server = ServerState.DOWN, status = "мост: AA отключился"))
         assertEquals(Phase.ERROR, s.phase)
-        assertEquals(PrimaryAction.RESTART_SERVER, s.primary)
+        assertEquals(Tone.ERR, s.tone)
+        assertEquals(HeroIcon.ALERT, s.icon)
+        assertEquals(UiText.res(R.string.home_title_server_down), s.title)
+        assertEquals(UiText.res(R.string.home_sub_server_down), s.sub)
+        assertEquals(StageState.ERR to UiText.res(R.string.home_stage_no_answer), s.stages[0].second)
+        assertEquals(PrimaryAction.START_SERVER, s.primary)
         assertEquals(true, s.logLink)
-        assertEquals(UiText.res(R.string.notif_restart_title), s.notifTitle)
+        assertEquals(UiText.res(R.string.home_title_server_down), s.notifTitle)
+        assertEquals(UiText.res(R.string.notif_server_down), s.notifText)
+    }
+
+    @Test
+    fun serverDownNeedsEvidenceThatItWasUp() {
+        // новичок: проба видит закрытый порт, но сервер он ещё не включал, поэтому прежнее «Запустите сервер ГУ»
+        val fresh = HomeLogic.compute(inp(server = ServerState.DOWN))
+        assertEquals(Phase.OFF, fresh.phase)
+        assertEquals(true, fresh.showChain)
+        // включал сам (нажал «Открыть Android Auto») или проба раньше отвечала: «не отвечает»
+        assertEquals(Phase.ERROR, HomeLogic.compute(inp(server = ServerState.DOWN, serverUp = true)).phase)
+        assertEquals(Phase.ERROR, HomeLogic.compute(inp(server = ServerState.DOWN, seenAlive = true)).phase)
+    }
+
+    @Test
+    fun aliveServerWithoutHistoryIsReadyForTrip() {
+        val s = HomeLogic.compute(inp(server = ServerState.ALIVE))
+        assertEquals(Phase.WAITING, s.phase)
+        assertEquals(UiText.res(R.string.home_title_ready), s.title)
+        // проба идёт или не удалась технически: без доказательств состояние прежнее
+        assertEquals(Phase.OFF, HomeLogic.compute(inp(server = ServerState.CHECKING)).phase)
+        assertEquals(Phase.OFF, HomeLogic.compute(inp(server = ServerState.ERROR)).phase)
+    }
+
+    @Test
+    fun bridgeStatesIgnoreServerCheck() {
+        // пока мост работает, результат пробы не показываем: сервер занят самим мостом
+        val s = HomeLogic.compute(inp(running = true, status = "мост: AA -> CarLife", server = ServerState.DOWN, ended = true))
+        assertEquals(Phase.CONNECTED, s.phase)
+        val refused = HomeLogic.compute(inp(running = true, status = "мост: жду сервер ГУ AA", server = ServerState.ALIVE))
+        assertEquals(Phase.OFF, refused.phase)
+        assertEquals(true, refused.showChain)
     }
 
     @Test

@@ -24,6 +24,7 @@ import com.yegorkapomidorka.headswap.aa.AaConnector
 import com.yegorkapomidorka.headswap.aa.AaCertsMissingException
 import com.yegorkapomidorka.headswap.aa.AaCreds
 import com.yegorkapomidorka.headswap.aa.AaPrefs
+import com.yegorkapomidorka.headswap.aa.AaServerCheck
 import com.yegorkapomidorka.headswap.aa.AaState
 import com.yegorkapomidorka.headswap.aa.AapOptions
 import com.yegorkapomidorka.headswap.aa.BridgeHost
@@ -860,6 +861,8 @@ class BridgeService : Service() {
                 main.post {
                     if (host === ref[0]) host = null
                     AppLog.i("BRIDGE: AA закрыта полностью")
+                    // ByeBye позади: через 8 с проверить, что сервер ГУ остался жив (AaServerCheck сама пропустит, если мост занят)
+                    if (ref[0]?.wasStarted == true) AaServerCheck.afterBridgeClosed(applicationContext)
                     if (session == null && host == null && !linkWaiting && !wifiBMode && !usbToAirPending) finish()
                 }
             })

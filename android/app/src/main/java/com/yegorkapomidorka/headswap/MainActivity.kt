@@ -16,6 +16,7 @@ import android.view.WindowInsets
 import android.widget.FrameLayout
 import com.yegorkapomidorka.headswap.aa.AaCreds
 import com.yegorkapomidorka.headswap.aa.AaProbe
+import com.yegorkapomidorka.headswap.aa.AaServerCheck
 import com.yegorkapomidorka.headswap.link.car.CarPairing
 import com.yegorkapomidorka.headswap.link.diag.NetProbe
 import com.yegorkapomidorka.headswap.ui.Actions
@@ -102,6 +103,8 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        // до onShow: состояние "проверяю" должно быть уже выставлено, когда экран первый раз рисуется
+        AaServerCheck.onAppOpened(this)
         current()?.onShow()
         handler.post(refresh)
         Updater.maybeCheck(this)
