@@ -2,10 +2,14 @@ package com.yegorkapomidorka.headswap.link.bt
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
@@ -51,6 +55,7 @@ class CarlifeBtProbe(
     /** Поколение восстановления после распада группы: новый BT-сеанс, вход в группу или стоп его отменяют. */
     @Volatile private var rejoinGen = 0
     @Volatile private var rejoining = false
+    private var adapterReceiver: BroadcastReceiver? = null
 
     /** Входящий TCP из P2P-группы ГУ: пускаем в Tcp6Listener наравне с подсетями маяка. */
     fun ownsPeer(a: java.net.InetAddress): Boolean = p2p.owns(a)
@@ -88,6 +93,39 @@ class CarlifeBtProbe(
             Thread({ acceptLoop(tag, ss) }, "bt-accept-$tag").apply { isDaemon = true }.start()
         }
         CarLifeState.btProbe = if (synchronized(lock) { servers.isEmpty() }) "не слушает" else "слушаю carlife, ГУ не подключалась"
+        watchAdapter()
+    }
+
+    /**
+     * Ожидание без толку: нет ни RFCOMM от ГУ, ни входа в группу, либо слушатели умерли. h211: ГУ закрыла RFCOMM сразу
+     * после приглашения и за ~5 с вернула ACL; старые слушатели и P2P по мёртвой цели держались минутами, а ГУ
+     * открыла SPP только после чистого перезапуска.
+     */
+    fun idle(): Boolean = active == null && p2pIp == null || synchronized(lock) { running && servers.isEmpty() }
+
+    /** stop + start: новые записи SDP, P2P по старой цели снимается. */
+    fun restart(why: String) {
+        stop(why)
+        start()
+    }
+
+    /** Состояние Bluetooth телефона в лог: по логу иначе не понять, чей BT выключали (h211). */
+    private fun watchAdapter() {
+        if (adapterReceiver != null) return
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                val st = when (i.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1)) {
+                    BluetoothAdapter.STATE_OFF -> "off"
+                    BluetoothAdapter.STATE_TURNING_OFF -> "turning-off"
+                    BluetoothAdapter.STATE_ON -> "on"
+                    BluetoothAdapter.STATE_TURNING_ON -> "turning-on"
+                    else -> "?"
+                }
+                WLog.ev(WLog.BT, "adapter", "state" to st)
+            }
+        }
+        adapterReceiver = r
+        ctx.registerReceiver(r, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED), Context.RECEIVER_NOT_EXPORTED)
     }
 
     fun stop(why: String) {
@@ -97,6 +135,8 @@ class CarlifeBtProbe(
             servers.toList().also { servers.clear() }
         }
         for (s in list) try { s.close() } catch (_: IOException) {}
+        adapterReceiver?.let { try { ctx.unregisterReceiver(it) } catch (_: IllegalArgumentException) {} }
+        adapterReceiver = null
         rejoinGen++
         rejoining = false
         active?.let { try { it.close() } catch (_: IOException) {} }
@@ -114,7 +154,12 @@ class CarlifeBtProbe(
         while (running) {
             val s = try {
                 ss.accept()
-            } catch (_: IOException) {
+            } catch (e: IOException) {
+                // не stop(): слушатель умер сам (BT телефона выключили); restart по следующему ACL поднимет заново
+                if (running) {
+                    synchronized(lock) { servers.remove(ss) }
+                    WLog.ev(WLog.BT, "listen-dead", "uuid" to tag, "err" to e.message)
+                }
                 return
             }
             accepts++
