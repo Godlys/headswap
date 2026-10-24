@@ -67,13 +67,6 @@
     <string name="set_car_make_default_short">Без марки</string>
     <string name="set_car_make_note">Логотип марки на кнопке выхода из Android Auto. С выбранной маркой Android Auto скрывает сторонние видеоприложения (Fermata Auto). Применится при следующем подключении.</string>
 
-    <string name="set_autostart">Автозапуск сервера ГУ</string>
-    <string name="set_autostart_sub">При подключении кабеля и после сессии AA</string>
-    <string name="set_autostart_enable">Включить</string>
-    <string name="set_svc_connected">Служба спецвозможностей подключена</string>
-    <string name="set_svc_not_connected">Служба включена, но не подключена</string>
-    <string name="set_svc_off">Служба спецвозможностей выключена</string>
-
     <string name="set_mic">Микрофон</string>
     <string name="mic_car_title">Машина</string>
     <string name="mic_car_sub">Микрофон магнитолы</string>
@@ -116,9 +109,7 @@
     <string name="set_help">Помощь</string>
     <string name="set_sum_appearance">Язык: %1$s · тема: %2$s</string>
     <string name="set_sum_mic">микрофон: %1$s</string>
-    <string name="set_sum_headunit">Сертификат %1$s · автозапуск %2$s</string>
-    <string name="set_sum_on">вкл.</string>
-    <string name="set_sum_off">выкл.</string>
+    <string name="set_sum_headunit">Сертификат %1$s</string>
     <string name="set_footer">Headswap %1$s</string>
 
     <!-- Video modes (VideoMode) -->
@@ -159,6 +150,23 @@
     <string name="mchunk_2560">2560 Б (как Baidu)</string>
     <string name="mchunk_2048">2048 Б</string>
     <string name="mchunk_1024">1024 Б</string>
+
+    <!-- Размер пакета голоса (VoiceChunk) -->
+    <string name="vchunk_auto">Авто</string>
+    <string name="vchunk_2048">2048 Б</string>
+    <string name="vchunk_1024">1024 Б</string>
+    <string name="vchunk_512">512 Б</string>
+
+    <!-- Тишина перед подсказкой (TtsPreroll) -->
+    <string name="tpreroll_auto">Авто</string>
+    <string name="tpreroll_0">Нет</string>
+    <string name="tpreroll_100">100 мс</string>
+    <string name="tpreroll_200">200 мс</string>
+    <string name="tpreroll_400">400 мс</string>
+
+    <!-- Прореживание тача (TouchDecimation) -->
+    <string name="tdec_off">Выкл</string>
+    <string name="tdec_x2">×2</string>
 
     <!-- Frame rate (FpsSetting) -->
     <string name="fps_auto_title">Авто</string>

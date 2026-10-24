@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="diag_title">Why it won\'t connect</string>
+    <string name="diag_title">Self-diagnosis</string>
     <string name="diag_analyzing">Analyzing the log…</string>
     <string name="diag_failed">Could not analyze the log.</string>
     <string name="diag_send">Send log to developers</string>
     <string name="diag_privacy">The analysis runs on the phone, the log is not sent anywhere</string>
-    <string name="diag_home_btn">Why it won\'t connect?</string>
+    <string name="diag_home_btn">Self-diagnosis</string>
     <string name="diag_settings_item">Connection diagnostics</string>
 
     <string name="diag_lead_one">We found a likely cause.</string>

@@ -107,7 +107,7 @@ class AaBridgeCore(
     private var aaVideoSeen = false
     private var gotIdr = false
     private var active = Source.PLACEHOLDER
-    private var placeholderText = TEXT_START_SERVER
+    private var placeholderText = TEXT_CONNECTING
     private var waitSince = 0L
     private var lastKeyframeRequest = NEVER
     private var lastIdrSentMs = NEVER              // когда в CarLife ушёл последний IDR passthrough (h295)
@@ -187,6 +187,9 @@ class AaBridgeCore(
     private var mediaRateLogged = MEDIA_RATE
     @Volatile var mediaChunkProvider: () -> MediaChunk = { MediaChunk.DEFAULT }
     private var mediaChunkLogged = CarlifeAudio.MAX_CHUNK
+    @Volatile var voiceChunkProvider: () -> VoiceChunk = { VoiceChunk.DEFAULT }
+    private var voiceChunkLogged = CarlifeAudio.MAX_CHUNK
+    @Volatile var ttsPrerollProvider: () -> TtsPreroll = { TtsPreroll.DEFAULT }
     private val audioInited = HashMap<Int, Boolean>()
     private val audioLogged = HashMap<Int, Long>()
 
@@ -241,6 +244,11 @@ class AaBridgeCore(
     /** h425: VW CNS2 Delphi копит MOVE ~190 мс и шлёт пачкой; раздаём пачку равномерно. Только при [huVwCns2Delphi]. */
     private val touchPacer = TouchBurstPacer(clockMs, audioSched) { a, x, y, px, py -> dispatchTouch(a, x, y, px, py) }
     @Volatile private var touchPacerLogged = false
+
+    /** Прореживание MOVE ([TouchDecimation]) стоит перед пейсером и прямой отправкой. */
+    @Volatile var touchDecimationProvider: () -> TouchDecimation = { TouchDecimation.DEFAULT }
+    private val touchDecimator = TouchDecimator { a, x, y, px, py -> routeTouch(a, x, y, px, py) }
+    @Volatile private var touchDecimationLogged = 1
     private val mediaReleaseTimer = AudioTimer()
     private val voiceExitTimer = AudioTimer()
     private var carlifePaused = false          // VIDEO_ENCODER_PAUSE после последнего START
@@ -299,7 +307,7 @@ class AaBridgeCore(
      */
     @Synchronized
     fun showStatus(text: String) {
-        if (active == Source.AA) return
+        if (active == Source.AA || text == placeholderText) return
         placeholderText = text
         link.showPlaceholder(text)
         log("BRIDGE заглушка: '$text'", true)
@@ -366,6 +374,8 @@ class AaBridgeCore(
         huMazda20622111 = false                // STATISTIC_INFO придёт заново в этой сессии
         huVwCns2Delphi = false                 // STATISTIC_INFO придёт заново в этой сессии
         vrReply = false
+        touchDecimator.reset()
+        touchDecimationLogged = 1
         touchPacer.reset()
         touchPacerLogged = false
         h295TouchAt = NEVER
@@ -373,6 +383,7 @@ class AaBridgeCore(
         h295LastTouchAt = NEVER
         mediaRateLogged = MEDIA_RATE
         mediaChunkLogged = CarlifeAudio.MAX_CHUNK
+        voiceChunkLogged = CarlifeAudio.MAX_CHUNK
         resampler?.reset()
         if (aaVideoSeen) placeholderText = TEXT_WAIT_FRAME
         meta.onAttach()
@@ -392,6 +403,12 @@ class AaBridgeCore(
         // остальные ГУ (Mazda G6S по воздуху, задний ход) - как было, через IDR от AA.
         val resume = AIR_WARM_RESUME_ENABLED && huVwBt1420 && link.isAir && carlifeStarted && carlifePaused &&
             transcodeEnabled && transcoder != null && gotIdr && active == Source.AA
+        // START после PAUSE - та же живая сессия: отложенный TTS STOP шлём сразу, иначе resetAudio его съест,
+        // ГУ так и держит канал подсказок открытым и глушит музыку до следующей подсказки (h482, ix35 HSAE).
+        if (carlifeStarted && carlifePaused && ttsStopTimer.pending) {
+            log("BRIDGE CarLife START после PAUSE: отложенный TTS STOP шлю сразу", true)
+            stopAudio(CarlifeAudio.CH_TTS)
+        }
         carlifeStarted = true
         carlifePaused = false
         if (warm) log("BRIDGE CarLife START без PAUSE: звук не трогаю, INIT не повторяю", true)
@@ -686,6 +703,17 @@ class AaBridgeCore(
      * [VideoMode.mapTouch] (без margin-ов 1:1). Один палец уходит в AA так же, как до мультитача (id 0, action_index 0).
      */
     fun onCarlifeTouch(action: Int, x: Int, y: Int, px: Int = 0, py: Int = 0) {
+        val every = touchDecimationProvider().every
+        if (every != touchDecimationLogged) {
+            touchDecimationLogged = every
+            log("BRIDGE тач: прореживание MOVE ${if (every > 1) "×$every" else "выкл"} (настройка)", true)
+        }
+        touchDecimator.onTouch(action, x, y, px, py, every)
+        onHuTouch(action and 0xFF)                                            // вне touchLock: вложенных блокировок нет
+    }
+
+    /** Выход прореживателя: на Delphi через пейсер пачек, на остальных ГУ сразу в AA. */
+    private fun routeTouch(action: Int, x: Int, y: Int, px: Int, py: Int) {
         if (huVwCns2Delphi) {
             touchPacer.onTouch(action, x, y, px, py)
             if (touchPacer.bursts == 1 && !touchPacerLogged) {
@@ -695,7 +723,6 @@ class AaBridgeCore(
         } else {
             dispatchTouch(action, x, y, px, py)
         }
-        onHuTouch(action and 0xFF)                                            // вне touchLock: вложенных блокировок нет
     }
 
     /**
@@ -971,7 +998,8 @@ class AaBridgeCore(
             audioInited[ch] = true
             log("BRIDGE CarLife ${chName(ch)} INIT ${rate}Гц ${channels}к 16бит (0x%08x)".format(CarlifeAudio.initType(ch)), true)
             if (ch == CarlifeAudio.CH_TTS) {
-                if (huVw20082120) sendTtsPreroll()
+                val prerollMs = ttsPrerollProvider().ms ?: if (huVw20082120) TTS_PREROLL_MS else 0
+                if (prerollMs > 0) sendTtsPreroll(prerollMs)
                 ttsPackets = 0
                 mediaGuard = false
                 mediaReleaseTimer.cancel()
@@ -1007,7 +1035,11 @@ class AaBridgeCore(
                 if (out.isEmpty()) return
             }
         }
-        val chunkMax = if (ch == CarlifeAudio.CH_MEDIA) mediaChunkProvider().bytes ?: CarlifeAudio.MAX_CHUNK else CarlifeAudio.MAX_CHUNK
+        val chunkMax = when (ch) {
+            CarlifeAudio.CH_MEDIA -> mediaChunkProvider().bytes ?: CarlifeAudio.MAX_CHUNK
+            CarlifeAudio.CH_TTS -> voiceChunkMax()
+            else -> CarlifeAudio.MAX_CHUNK
+        }
         if (ch == CarlifeAudio.CH_MEDIA && chunkMax != mediaChunkLogged) {
             mediaChunkLogged = chunkMax
             log("BRIDGE музыка: пакеты по $chunkMax Б (настройка)", true)
@@ -1071,9 +1103,10 @@ class AaBridgeCore(
             ttsPackets = 0
             log("BRIDGE CarLife VR INIT 16000Гц 1к 16бит (0x%08x): речь AA ch$chan в голосовой сессии".format(CarlifeAudio.VR_INIT), true)
         }
+        val chunkMax = voiceChunkMax()
         var off = 0
         while (off < pcm.size) {
-            val n = minOf(CarlifeAudio.MAX_CHUNK, pcm.size - off)
+            val n = minOf(chunkMax, pcm.size - off)
             val chunk = if (off == 0 && n == pcm.size) pcm else pcm.copyOfRange(off, off + n)
             if (!link.sendAudio(CarlifeAudio.CH_VR, CarlifeAudio.VR_DATA, chunk)) audioDropped++ else audioBytes += n
             off += n
@@ -1148,24 +1181,39 @@ class AaBridgeCore(
         musicStatus(0)
     }
 
+    /** Размер пакета речи, который задан явно или выбирается по ГУ; null = как отдаёт AA (Авто на остальных ГУ). */
+    private fun voiceChunkOverride(): Int? = voiceChunkProvider().bytes ?: if (huVwCns2Delphi) VOICE_CHUNK_DELPHI else null
+
+    /** Размер пакета речи (VR-ответ и TTS) для текущей отправки; смену значения пишет в лог один раз. */
+    private fun voiceChunkMax(): Int {
+        val size = voiceChunkOverride() ?: CarlifeAudio.MAX_CHUNK
+        if (size != voiceChunkLogged) {
+            voiceChunkLogged = size
+            log("BRIDGE голос: пакеты по $size Б (${if (voiceChunkProvider().bytes != null) "настройка" else "авто ГУ"})", true)
+        }
+        return size
+    }
+
     /**
      * Тишина сразу после TTS_INIT (VW CNS3 20082122, h222: шипение в начале подсказки). Baidu копит фразу
      * и шлёт её пачкой по 4096 Б быстрее реального времени (NaviTTSController.splitAndSendTTSData), у ГУ
      * есть запас; AA отдаёт речь в реальном времени с первого пакета, запаса нет. Нули дают ГУ открыть
-     * тракт на тишине и держат буфер на TTS_PREROLL_MS впереди до конца фразы.
+     * тракт на тишине и держат буфер на [ms] впереди до конца фразы. Куски нулей режутся размером пакета
+     * голоса, если он задан (настройка или авто-1024 на Delphi), иначе TTS_PREROLL_CHUNK.
      */
-    private fun sendTtsPreroll() {
-        val zeros = ByteArray(TTS_PREROLL_BYTES)
+    private fun sendTtsPreroll(ms: Int) {
+        val zeros = ByteArray((ms * TTS_BYTES_PER_SEC / 1000) and 1.inv())
+        val chunkMax = voiceChunkOverride() ?: TTS_PREROLL_CHUNK
         var off = 0
         while (off < zeros.size) {
-            val n = minOf(TTS_PREROLL_CHUNK, zeros.size - off)
+            val n = minOf(chunkMax, zeros.size - off)
             if (!link.sendAudio(CarlifeAudio.CH_TTS, CarlifeAudio.TTS_DATA, zeros.copyOfRange(off, off + n))) {
-                log("BRIDGE TTS пре-ролл: очередь полна, отправлено ${off * 1000 / TTS_BYTES_PER_SEC} из $TTS_PREROLL_MS мс", true)
+                log("BRIDGE TTS пре-ролл: очередь полна, отправлено ${off * 1000 / TTS_BYTES_PER_SEC} из $ms мс", true)
                 return
             }
             off += n
         }
-        log("BRIDGE TTS пре-ролл $TTS_PREROLL_MS мс тишины (${zeros.size} Б) после INIT", true)
+        log("BRIDGE TTS пре-ролл $ms мс тишины (${zeros.size} Б) после INIT", true)
     }
 
     /** Фактический TTS_STOP (таймер debounce); после него MEDIA-пакеты ждут ещё MEDIA_AFTER_TTS_MS. */
@@ -1707,11 +1755,15 @@ class AaBridgeCore(
         const val MEDIA_AFTER_TTS_MS = 300L
         const val VOICE_EXIT_DELAY_MS = 500L
         private const val TTS_DIAG_PACKETS = 3
-        /** Пре-ролл тишины TTS на VW 20082120/20082122/20082134 (h222); 16 кГц моно 16 бит, куски как у Baidu. */
+        /**
+         * Пре-ролл тишины TTS по умолчанию (Авто) на VW 20082120/20082122/20082134 (h222); 16 кГц моно 16 бит, куски как у Baidu.
+         * 400 мс взяты без измерений (шипение начала подсказки на CNS3), длительность подбирается настройкой [TtsPreroll].
+         */
         const val TTS_PREROLL_MS = 400
         private const val TTS_BYTES_PER_SEC = 16000 * 2
-        const val TTS_PREROLL_BYTES = TTS_PREROLL_MS * TTS_BYTES_PER_SEC / 1000
         private const val TTS_PREROLL_CHUNK = 4096
+        /** Авто-размер пакета речи на VW CNS2 Delphi (h425): заикание ответа ассистента ушло при MAX_CHUNK/10; AA отдаёт речь по 2048 Б. */
+        private const val VOICE_CHUNK_DELPHI = 1024
 
         /** Android KEYCODE_SEARCH: в AA запускает голосового ассистента. */
         const val KEYCODE_SEARCH = 84
@@ -1748,13 +1800,10 @@ class AaBridgeCore(
             0x07 to -1,     // SELECTOR_PREVIOUS -> против часовой
         )
 
+        const val TEXT_CONNECTING = "Подключаю Android Auto..."
         const val TEXT_START_SERVER = "Запустите сервер ГУ в Android Auto"
         const val TEXT_WAIT_FRAME = "Android Auto: жду кадр..."
-        const val TEXT_AA_LOST = "Android Auto отключился, перезапустите сервер ГУ"
-        const val TEXT_STARTING_SERVER = "Запускаю сервер ГУ..."
-        const val TEXT_RESTARTING_SERVER = "Android Auto отключился, перезапускаю сервер ГУ..."
-        const val TEXT_UNLOCK_PHONE = "Разблокируйте телефон"
-        const val TEXT_AA_CONSENT = "Завершите настройку Android Auto на телефоне"
+        const val TEXT_AA_LOST = "Android Auto отключился, переподключаю..."
         const val DESAY_MANUFACTURER = "Desay SV Automotive"
         const val DESAY_G6S_MODEL = "G6S"
         const val DESAY_G6S_CHANNEL = "20622116"          // STATISTIC_INFO.channel у Mazda CX-5; Vezel - 20832125, другая Mazda - 21520001
@@ -1798,22 +1847,9 @@ class AaBridgeCore(
     }
 }
 
-/** Момент, когда коннектор просит подготовить сервер ГУ (автозапуск). */
-enum class ServerPhase {
-    /** До первой попытки подключения хоста. */
-    FIRST,
-
-    /** AA-сессия закончилась: сервер одноразовый, нужен новый. */
-    AFTER_SESSION,
-
-    /** Сервер недоступен несколько попыток подряд. */
-    RETRY,
-}
-
 /**
  * Держит AA-сессию моста: подключается к серверу ГУ, при отказе (connection refused) повторяет раз в
- * 3 с, при завершении сессии сообщает ядру и переподключается. Сервер ГУ перезапускает пользователь или
- * serverPrep (автозапуск): блокирующий вызов на нити коннектора, возвращается, когда сервер готов или время вышло.
+ * 3 с, при завершении сессии сообщает ядру и переподключается. Сервер ГУ включает и перезапускает пользователь.
  */
 class AaConnector(
     private val core: AaBridgeCore,
@@ -1821,7 +1857,7 @@ class AaConnector(
     private val log: (String, Boolean) -> Unit,
     private val options: () -> AapOptions = { AapOptions() },
     private val retryMs: Long = 3000,
-    private val serverPrep: ((ServerPhase) -> Unit)? = null,
+    private val failures: ServerFailures = AaState.serverFailures,
     private val sessionFactory: (AaVideoSink, AapOptions, (String, Boolean) -> Unit, (String, Boolean) -> Unit) -> AapSession =
         { sink, o, lg, end -> AapSession(creds, sink, o, lg, onEnd = end) },
 ) : AaLifecycle {
@@ -1858,32 +1894,20 @@ class AaConnector(
     @Volatile var bareEofs = 0
         private set
 
-    /** После BARE_EOF_SUSPEND голых EOF подряд автозапуск не трогает сервер до удачной сессии. */
-    @Volatile var prepSuspended = false
-        private set
-
     private fun bareEofBackoffMs(n: Int): Long =
         if (n <= 0) retryMs else minOf(retryMs shl minOf(n - 1, 4), BARE_EOF_BACKOFF_MAX_MS).coerceAtLeast(retryMs)
 
-    private fun prep(phase: ServerPhase) {
-        val p = serverPrep ?: return
-        if (prepSuspended && phase != ServerPhase.FIRST) {
-            log("BRIDGE автозапуск сервера ($phase) пропущен: приостановлен после $bareEofs голых EOF подряд", true)
-            return
-        }
+    private fun loop() {
+        failures.reset()      // отказы прошлой поездки в эту не переносим
         try {
-            p(phase)
-        } catch (e: Throwable) {
-            log("BRIDGE автозапуск сервера ($phase) упал: ${e.javaClass.simpleName}: ${e.message}", true)
+            connectLoop()
+        } finally {
+            failures.reset()
         }
     }
 
-    private fun loop() {
+    private fun connectLoop() {
         var unavailableLogged = false
-        var refusals = 0
-        var lastRetryPrepAt = Long.MIN_VALUE / 4
-        prep(ServerPhase.FIRST)
-        if (stopping) return
         // решение о звуке зависит от FEATURE_CONFIG ГУ (BT-режим): ждём его до 2.5 с перед первым подключением
         if (core.usbAudioEnabled && core.expectFeatureConfig) {
             var waited = 0
@@ -1894,51 +1918,58 @@ class AaConnector(
             log("BRIDGE FEATURE_CONFIG ${if (core.featureConfigSeen) "получен" else "не пришёл за $waited мс"}, звук по USB: ${core.audioViaUsb}", true)
         }
         while (!stopping) {
+            // ручная проба сервера (AaServerCheck, кнопка в «Для разработчиков») не должна держать сервер 5277, когда подключаемся мы
+            AaServerCheck.beforeBridgeConnect()
+            if (stopping) break      // Стоп мог прийти за время ожидания: подключаться уже нельзя, сессию на handshake не оборвать штатно
             val ended = CountDownLatch(1)
+            var endReason = ""
             core.onAaConnecting()
             attempts++
-            val s = sessionFactory(core, options(), log) { _, _ -> ended.countDown() }
+            val s = sessionFactory(core, options(), log) { reason, _ ->
+                endReason = reason
+                ended.countDown()
+            }
             current = s
             core.peer = s
             s.start()
+            var establishedNoted = false
             while (!ended.await(500, TimeUnit.MILLISECONDS)) {
                 if (stopping) s.requestStop("мост остановлен")
                 core.tick()
+                // пассивная диагностика для главного экрана: сессия установилась - сервер жив, прежние отказы не в счёт
+                if (s.established) {
+                    if (!establishedNoted) failures.onEstablished()
+                    establishedNoted = true
+                } else if (s.connected) {
+                    failures.onTcpAccepted()
+                }
             }
             core.peer = null
             current = null
+            when {
+                s.established -> if (!establishedNoted) failures.onEstablished()
+                !s.connected && endReason.startsWith(REFUSED_REASON) -> failures.onRefused()
+                s.connected && endReason.startsWith(AapSession.NO_VERSION_RESPONSE_REASON) -> failures.onNoVersionResponse()
+                else -> failures.reset()
+            }
+            // на ГУ «Запустите сервер ГУ» только когда он правда не отвечает; короткий отказ после ByeBye - «Подключаю»
+            if (failures.needsStart()) core.showStatus(AaBridgeCore.TEXT_START_SERVER)
             if (!s.connected) {
-                refusals++
                 if (!unavailableLogged) {
                     log("BRIDGE сервер ГУ Android Auto недоступен (connection refused), повторяю каждые ${retryMs / 1000.0} с", true)
                     unavailableLogged = true
                 }
                 AaState.status = "мост: жду сервер ГУ AA"
-                // автозапуск мог упереться в блокировку экрана: пока сервера нет, периодически просим повтор
-                val nowMs = System.nanoTime() / 1_000_000
-                if (serverPrep != null && !stopping && refusals >= 2 && nowMs - lastRetryPrepAt >= RETRY_PREP_MS) {
-                    lastRetryPrepAt = nowMs
-                    prep(ServerPhase.RETRY)
-                }
             } else {
                 unavailableLogged = false
-                refusals = 0
                 log("BRIDGE AA-сессия завершена (established=${s.established}, video=${s.videoStarted})", true)
                 AaState.status = "мост: AA отключился"
                 core.onAaEnded(s.established)
                 if (s.established) {
                     bareEofs = 0
-                    if (prepSuspended) log("BRIDGE автозапуск сервера ГУ снова включён: сессия AA установилась", true)
-                    prepSuspended = false
-                    if (!stopping) prep(ServerPhase.AFTER_SESSION)
                 } else {
-                    // сервер принял TCP и сразу закрыл: он жив, перезапуск его не лечит, а петля
-                    // Stop+Start выкидывает AA на экран снова и снова (h224). Ждём дольше, после N подряд - без автозапуска.
+                    // сервер принял TCP и сразу закрыл (h224): он жив, частые повторы лишь выкидывают AA на экран. Ждём дольше.
                     bareEofs++
-                    if (bareEofs >= BARE_EOF_SUSPEND && !prepSuspended) {
-                        prepSuspended = true
-                        log("BRIDGE AA закрыл $bareEofs подключения подряд до установления сессии: автозапуск сервера ГУ приостановлен до первой удачной сессии", true)
-                    }
                 }
             }
             var left = if (s.connected && !s.established) bareEofBackoffMs(bareEofs) else retryMs
@@ -1950,13 +1981,10 @@ class AaConnector(
     }
 
     companion object {
-        /** Не чаще раза в 5 с просить автозапуск повторить (он сам пропустит, если повторять нечего). */
-        private const val RETRY_PREP_MS = 5_000L
-
-        /** Сколько голых EOF подряд (connect+EOF без сессии) до приостановки автозапуска. */
-        const val BARE_EOF_SUSPEND = 3
-
         /** Потолок паузы между подключениями после голых EOF: 3, 6, 12, 24, 30 с. */
         const val BARE_EOF_BACKOFF_MAX_MS = 30_000L
+
+        /** Причина конца сессии при ECONNREFUSED (другие сбои connect - таймаут, EPERM - отказом сервера не считаем). */
+        private const val REFUSED_REASON = AapSession.UNAVAILABLE_REASON + "ConnectException"
     }
 }

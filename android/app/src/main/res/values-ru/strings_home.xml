@@ -4,25 +4,30 @@
     <string name="home_title_no_bridge">Мост не запущен</string>
     <string name="home_title_reconnecting">Восстанавливаю связь</string>
     <string name="home_title_ok">Всё работает</string>
-    <string name="home_title_off">Сервер не запущен</string>
+    <string name="home_title_off">Запустите сервер ГУ</string>
     <string name="home_title_connecting">Подключаюсь</string>
-    <string name="home_title_lost">Связь потеряна</string>
+    <string name="home_title_parked">Машина отключена</string>
+    <string name="home_title_server_down">Сервер ГУ не отвечает</string>
     <string name="home_title_ready">Готов к поездке</string>
-    <string name="home_title_aa_consent">Настройте Android Auto</string>
 
     <!-- Главный экран: подзаголовки -->
     <string name="home_err_no_cert">Нет сертификата head unit: положите cert.pem и key.pem в app/src/main/assets/aa/jvc/ (см. README)</string>
-    <string name="home_sub_start_chain">Запускайте перед каждой поездкой: после сессии сервер выключается.</string>
+    <string name="home_sub_start_chain">Включите один раз: дальше сервер работает в фоне, и для подключения телефон можно не разблокировать.</string>
     <string name="home_sub_reconnecting">USB отключился. Сессия Android Auto ждёт до %1$d с.</string>
     <string name="home_sub_ok">Android Auto на экране машины. Телефон можно убрать.</string>
     <string name="home_sub_ok_wifi">Android Auto на экране машины по Wi-Fi, без кабеля. Телефон можно убрать.</string>
     <string name="home_sub_refused">Кабель подключён, но сервер ГУ не отвечает. %1$s</string>
-    <string name="home_sub_aa_dropped">Android Auto отключился, перезапускаю сервер ГУ.</string>
+    <string name="home_sub_aa_dropped">Android Auto отключился. Снова включите сервер ГУ.</string>
     <string name="home_sub_cable_ok">Кабель подключён. Жду Android Auto.</string>
-    <string name="home_sub_lost">Обрыв дольше %1$d с. Перезапустите сервер ГУ и переподключите кабель.</string>
-    <string name="home_sub_aa_consent">На телефоне открыт мастер Android Auto. Нажмите «Продолжить», затем «ОК» и выдайте все разрешения. Пока мастер не пройден, Android Auto обрывает связь.</string>
+    <string name="home_sub_parked">Сервер ГУ остался работать в фоне. В следующей поездке просто подключите кабель.</string>
+    <string name="home_sub_server_down">Android закрыл сервер ГУ. Включите его снова: Android Auto → ⋮ → «Вкл. сервер головного устр-ва».</string>
     <string name="home_sub_ready">Подключите телефон к магнитоле кабелем.</string>
-    <string name="home_sub_ready_auto">Подключите телефон к магнитоле кабелем. Сервер ГУ запущу сам.</string>
+
+    <!-- Главный экран: как запустить сервер ГУ (жирное - то, что нажать) -->
+    <string name="home_chain_label">Как запустить сервер ГУ</string>
+    <string name="home_chain_1">Нажмите <b>«Открыть Android Auto»</b></string>
+    <string name="home_chain_2">Три точки <b>⋮</b> вверху справа</string>
+    <string name="home_chain_3"><b>«Вкл. сервер головного устр-ва»</b></string>
 
     <!-- Главный экран: названия этапов -->
     <string name="home_stage_server">Сервер ГУ</string>
@@ -38,23 +43,18 @@
     <string name="home_stage_working">работает</string>
     <string name="home_stage_connected">подключён</string>
     <string name="home_stage_off">выключен</string>
-    <string name="home_stage_not_started">не запущен</string>
+    <string name="home_stage_not_started">запустите</string>
     <string name="home_stage_connecting">подключаюсь</string>
     <string name="home_stage_handshake">рукопожатие</string>
-    <string name="home_stage_closed">закрыт</string>
-    <string name="home_stage_disconnected">отключён</string>
+    <string name="home_stage_hu_parked">отключена</string>
+    <string name="home_stage_no_answer">не отвечает</string>
     <string name="home_stage_started">запущен</string>
-    <string name="home_stage_auto">запущу сам</string>
     <string name="home_stage_wait_cable">ждём кабель</string>
-    <string name="home_stage_aa_consent">ждёт настройки</string>
 
     <!-- Главный экран: элементы -->
     <string name="home_settings">Настройки</string>
-    <string name="home_btn_start">Запустить сервер ГУ</string>
-    <string name="home_btn_restart">Перезапустить сервер ГУ</string>
     <string name="home_btn_stop">Остановить</string>
     <string name="home_btn_open_aa">Открыть настройки AA</string>
-    <string name="home_btn_send_log">Отправить лог разработчикам</string>
     <string name="home_grace_waiting">Жду переподключения</string>
     <string name="home_grace_left">ещё %1$d с</string>
 
@@ -65,36 +65,30 @@
     <string name="notif_video">Видео</string>
     <string name="notif_server_off">Сервер ГУ не запущен</string>
     <string name="notif_cable_waiting">Кабель подключён · жду Android Auto</string>
-    <string name="notif_restart_title">Перезапустите сервер ГУ</string>
-    <string name="notif_lost">Связь потеряна дольше %1$d с</string>
+    <string name="notif_parked">Сервер ГУ работает в фоне</string>
+    <string name="notif_server_down">Android закрыл сервер ГУ · включите его снова</string>
     <string name="notif_server_started">Сервер ГУ запущен</string>
-    <string name="notif_wait_cable">Жду кабель</string>
-    <string name="notif_aa_consent">Завершите настройку Android Auto на телефоне</string>
 
     <!-- Иллюстрации онбординга (нарисованные макеты системного UI) -->
-    <string name="mock_aa_title">Настройки Android Auto</string>
-    <string name="mock_aa_notifications">Уведомления</string>
-    <string name="mock_aa_cars">Подключённые автомобили</string>
-    <string name="mock_aa_version">Сведения о версиях</string>
-    <string name="mock_aadev_title">Настройки разработчика</string>
-    <string name="mock_aadev_resolution">Разрешение видео</string>
+    <string name="mock_aa_version">Версия</string>
+    <string name="mock_aadev_title">Для разработчиков</string>
     <string name="mock_aadev_unknown">Неизвестные источники</string>
-    <string name="mock_a11y_title">Специальные возможности</string>
-    <string name="mock_a11y_downloaded">Загруженные службы</string>
+    <string name="mock_menu_help">Справка/отзыв</string>
+    <string name="mock_menu_start">Вкл. сервер головного устр-ва</string>
+    <string name="mock_menu_exit">Выйти из режима разработчика</string>
     <string name="mock_notif_now">Headswap · сейчас</string>
-    <string name="mock_notif_hint">Статус в шторке, даже с погашенным экраном</string>
-    <string name="mock_bg_title">Headswap · сведения о приложении</string>
-    <string name="mock_bg_battery">Батарея: без ограничений</string>
+    <string name="mock_bg_activity">Контроль активности</string>
+    <string name="mock_bg_no_limits">Нет ограничений</string>
+    <string name="mock_bg_no_limits_sub">Контроль активности не будет ограничивать работу приложений</string>
     <string name="mock_bg_autostart">Автозапуск</string>
-    <string name="mock_bg_saver">Контроль активности: нет ограничений</string>
-    <string name="mock_mic_question">Разрешить Headswap записывать аудио?</string>
+    <string name="mock_mic_question">Разрешить приложению Headswap записывать аудио?</string>
     <string name="mock_mic_while_using">При использовании приложения</string>
-    <string name="mock_bt_title">Bluetooth · сопряжённые устройства</string>
-    <string name="mock_bt_headunit">Магнитола · звонки и аудио</string>
-    <string name="mock_bt_headphones">Наушники</string>
-    <string name="mock_loc_title">Местоположение</string>
-    <string name="mock_loc_use">Использовать геолокацию</string>
-    <string name="mock_loc_maps">Карты: разрешено</string>
+    <string name="mock_mic_once">Только в этот раз</string>
+    <string name="mock_mic_deny">Запретить</string>
+    <string name="mock_bt_headunit">Магнитола</string>
+    <string name="mock_bt_connected">Подключено</string>
+    <string name="mock_loc_use">Включить геолокацию</string>
+    <string name="mock_loc_use_sub">Приложения с этим разрешением могут получать доступ к данным о вашем местоположении.</string>
     <string name="mock_usb_question">Открыть «Headswap» для работы с USB-аксессуаром?</string>
     <string name="mock_usb_default">Использовать по умолчанию</string>
     <string name="mock_cancel">Отмена</string>

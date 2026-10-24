@@ -31,6 +31,21 @@ class AaPrefs(ctx: Context) {
         get() = MediaChunk.parse(sp.getString("mediaChunk", MediaChunk.DEFAULT.name))
         set(v) = sp.edit().putString("mediaChunk", v.name).apply()
 
+    /** Размер пакета речи в CarLife (имя VoiceChunk, по умолчанию Авто; эксперимент, не входит в пресеты авто). Мост читает на каждый пакет. */
+    var voiceChunk: VoiceChunk
+        get() = VoiceChunk.parse(sp.getString("voiceChunk", VoiceChunk.DEFAULT.name))
+        set(v) = sp.edit().putString("voiceChunk", v.name).apply()
+
+    /** Пре-ролл тишины перед подсказкой TTS (имя TtsPreroll, по умолчанию Авто; эксперимент, не входит в пресеты авто). Мост читает на каждый TTS INIT. */
+    var ttsPreroll: TtsPreroll
+        get() = TtsPreroll.parse(sp.getString("ttsPreroll", TtsPreroll.DEFAULT.name))
+        set(v) = sp.edit().putString("ttsPreroll", v.name).apply()
+
+    /** Прореживание MOVE тача (имя TouchDecimation, по умолчанию Выкл; эксперимент, не входит в пресеты авто). Мост читает на каждое событие. */
+    var touchDecimation: TouchDecimation
+        get() = TouchDecimation.parse(sp.getString("touchDecimation", TouchDecimation.DEFAULT.name))
+        set(v) = sp.edit().putString("touchDecimation", v.name).apply()
+
     /** Видео моста:перекодирование (по умолчанию) или passthrough H.264 AA как есть. */
     var transcode: Boolean
         get() = sp.getBoolean("transcode", true)
@@ -109,11 +124,6 @@ class AaPrefs(ctx: Context) {
             .apply()
     }
 
-    /** Автозапуск сервера ГУ (USB подключён / сессия AA закончилась); работает, только если включена служба спецвозможностей. */
-    var autoServer: Boolean
-        get() = sp.getBoolean("autoServer", true)
-        set(v) = sp.edit().putBoolean("autoServer", v).apply()
-
     /** Источник звука для микрофона AA: машина / телефон / авто (ГУ, при молчании 2 с - телефон). */
     var micMode: MicMode
         get() = MicMode.parse(sp.getString("micMode", MicMode.AUTO.key))
@@ -150,6 +160,11 @@ class AaPrefs(ctx: Context) {
     var progressSeconds: Boolean
         get() = sp.getBoolean("progressSeconds", false)
         set(v) = sp.edit().putBoolean("progressSeconds", v).apply()
+
+    /** Хоть раз установилась настоящая AA-сессия: сервер ГУ у пользователя работал (для «Сервер ГУ не отвечает», а не «Запустите сервер ГУ»). */
+    var serverWorked: Boolean
+        get() = sp.getBoolean("serverWorked", false)
+        set(v) = sp.edit().putBoolean("serverWorked", v).apply()
 
     /** Предупреждение про видео в движении в разделе «Приложения для магнитолы» уже показано (один раз). */
     var appsWarningShown: Boolean
@@ -205,6 +220,9 @@ object AaState {
 
     /** Ошибка настройки, из-за которой мост не стартует (например, нет сертификата head unit); null = всё в порядке. */
     @Volatile var setupError: String? = null
+
+    /** Отказы сервера ГУ при настоящих подключениях моста: источник состояния «Сервер ГУ не отвечает» на главном экране. */
+    val serverFailures = ServerFailures()
 
     fun reset() {
         frames.set(0)

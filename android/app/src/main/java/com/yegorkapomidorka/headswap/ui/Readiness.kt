@@ -14,7 +14,6 @@ import android.provider.Settings
 import com.yegorkapomidorka.headswap.AppLog
 import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.aa.AaPrefs
-import com.yegorkapomidorka.headswap.autosrv.AutoServer
 
 /** Всё, что надо включить перед поездкой: порядок, тексты, автоопределение «уже сделано». Общее для онбординга и чеклиста. */
 enum class StepId(val key: String) {
@@ -32,11 +31,15 @@ enum class StepId(val key: String) {
     CAR("car"),
 }
 
-/** Тексты шага - id строковых ресурсов (hint/extra могут отсутствовать); в строку превращает UI через ctx.getString, тело - через [bodyText]. */
+/**
+ * Тексты шага - id ресурсов (hint/extra могут отсутствовать). Тело шага - либо пронумерованный список (string-array [list]),
+ * либо абзац ([body], шаг выбора машины). В строки превращает UI: ctx.getString, список - через [listItems].
+ */
 class StepInfo(
     val id: StepId,
     val title: Int,
-    val body: Int,
+    val list: Int?,
+    val body: Int?,
     val hint: Int?,
     val primary: Int,
     val extra: Int?,
@@ -44,68 +47,53 @@ class StepInfo(
     /** Короткое название для чеклиста. */
     val short: Int,
 ) {
-    /** Тело шага: в тексте службы автозапуска подставляется её название из настроек спецвозможностей. */
-    fun bodyText(ctx: Context): String =
-        if (id == StepId.AUTOSTART) ctx.getString(body, ctx.getString(R.string.autosrv_label)) else ctx.getString(body)
+    /** Пункты списка; на шаге фона пункты про «Автозапуск» (3-4) есть только на Xiaomi. */
+    fun listItems(ctx: Context, xiaomi: Boolean = Readiness.isXiaomi()): List<String> {
+        val all = list?.let { ctx.resources.getStringArray(it).toList() } ?: return emptyList()
+        return if (id == StepId.BACKGROUND && !xiaomi) all.take(2) else all
+    }
 }
 
 object Readiness {
     val STEPS: List<StepInfo> = listOf(
         StepInfo(
-            StepId.AA_DEV, R.string.step_aa_dev_title,
-            R.string.step_aa_dev_body,
-            R.string.step_aa_dev_hint,
+            StepId.AA_DEV, R.string.step_aa_dev_title, R.array.step_aa_dev_list, null, null,
             R.string.step_aa_dev_primary, null, R.string.onb_already_done, R.string.step_aa_dev_short,
         ),
         StepInfo(
-            StepId.AA_UNKNOWN, R.string.step_aa_unknown_title,
-            R.string.step_aa_unknown_body,
-            null,
+            StepId.AA_UNKNOWN, R.string.step_aa_unknown_title, R.array.step_aa_unknown_list, null, R.string.step_aa_unknown_hint,
             R.string.step_aa_unknown_primary, null, R.string.onb_already_done, R.string.step_aa_unknown_short,
         ),
         StepInfo(
-            StepId.AUTOSTART, R.string.step_autostart_title,
-            R.string.step_autostart_body,
-            R.string.step_autostart_hint,
-            R.string.step_autostart_primary, R.string.step_autostart_extra, R.string.onb_skip, R.string.step_autostart_title,
+            StepId.AUTOSTART, R.string.step_autostart_title, R.array.step_autostart_list, null, R.string.step_autostart_hint,
+            R.string.step_autostart_primary, null, R.string.onb_got_it, R.string.step_autostart_short,
         ),
         StepInfo(
-            StepId.NOTIF, R.string.step_notif_title,
-            R.string.step_notif_body,
-            null, R.string.onb_allow, null, R.string.onb_later, R.string.step_notif_title,
+            StepId.NOTIF, R.string.step_notif_title, R.array.step_notif_list, null, R.string.step_notif_hint,
+            R.string.onb_allow, null, R.string.onb_later, R.string.step_notif_short,
         ),
         StepInfo(
-            StepId.BACKGROUND, R.string.step_background_title,
-            R.string.step_background_body,
-            R.string.step_background_hint,
-            R.string.step_background_primary, R.string.step_background_extra, R.string.onb_already_done, R.string.step_background_title,
+            StepId.BACKGROUND, R.string.step_background_title, R.array.step_background_list, null, null,
+            R.string.step_background_primary, R.string.step_background_extra, R.string.onb_already_done, R.string.step_background_short,
         ),
         StepInfo(
-            StepId.MIC, R.string.step_mic_title,
-            R.string.step_mic_body,
-            null, R.string.onb_allow, null, R.string.onb_later, R.string.step_mic_title,
+            StepId.MIC, R.string.step_mic_title, R.array.step_mic_list, null, R.string.step_mic_hint,
+            R.string.onb_allow, null, R.string.onb_later, R.string.step_mic_short,
         ),
         StepInfo(
-            StepId.BLUETOOTH, R.string.step_bluetooth_title,
-            R.string.step_bluetooth_body,
-            null, R.string.step_bluetooth_primary, null, R.string.onb_already_done, R.string.step_bluetooth_title,
+            StepId.BLUETOOTH, R.string.step_bluetooth_title, R.array.step_bluetooth_list, null, R.string.step_bluetooth_hint,
+            R.string.step_bluetooth_primary, null, R.string.onb_already_done, R.string.step_bluetooth_short,
         ),
         StepInfo(
-            StepId.LOCATION, R.string.step_location_title,
-            R.string.step_location_body,
-            R.string.step_location_hint,
-            R.string.step_location_primary, null, R.string.onb_already_done, R.string.step_location_title,
+            StepId.LOCATION, R.string.step_location_title, R.array.step_location_list, null, R.string.step_location_hint,
+            R.string.step_location_primary, null, R.string.onb_already_done, R.string.step_location_short,
         ),
         StepInfo(
-            StepId.FIRST, R.string.step_first_title,
-            R.string.step_first_body,
-            R.string.step_first_hint,
-            R.string.step_first_primary, null, R.string.onb_back, R.string.step_first_title,
+            StepId.FIRST, R.string.step_first_title, R.array.step_first_list, null, R.string.step_first_hint,
+            R.string.step_first_primary, null, R.string.onb_back, R.string.step_first_short,
         ),
         StepInfo(
-            StepId.CAR, R.string.step_car_title,
-            R.string.step_car_body,
-            null,
+            StepId.CAR, R.string.step_car_title, null, R.string.step_car_body, null,
             R.string.car_apply, null, R.string.onb_skip, R.string.step_car_short,
         ),
     )
@@ -119,7 +107,6 @@ object Readiness {
 
     /** true/false - определено автоматически; null - определить нельзя (только ручная отметка «Уже сделано»). */
     fun auto(ctx: Context, id: StepId): Boolean? = when (id) {
-        StepId.AUTOSTART -> AutoServer.isConnected
         StepId.NOTIF -> ctx.getSystemService(NotificationManager::class.java).areNotificationsEnabled() &&
             (Build.VERSION.SDK_INT < 33 || ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
         StepId.MIC -> ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED

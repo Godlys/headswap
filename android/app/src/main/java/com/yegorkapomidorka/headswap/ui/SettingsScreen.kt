@@ -46,7 +46,6 @@ import com.yegorkapomidorka.headswap.aa.FpsSetting
 import com.yegorkapomidorka.headswap.aa.MicMode
 import com.yegorkapomidorka.headswap.aa.MusicRate
 import com.yegorkapomidorka.headswap.aa.VideoMode
-import com.yegorkapomidorka.headswap.autosrv.AutoServer
 import com.yegorkapomidorka.headswap.link.car.CarNetwork
 import com.yegorkapomidorka.headswap.link.car.CarPairing
 import com.yegorkapomidorka.headswap.link.car.CarProfile
@@ -250,12 +249,7 @@ class SettingsScreen(host: MainActivity) : Screen(host) {
             set(SettingsSection.SOUND, listOfNotNull(if (aa.usbAudio) c.getString(R.string.set_usb_audio_title) else null, eq, mic).joinToString(" · "))
         }
 
-        if (aa.autoServer && !AutoServer.isConnected) {
-            set(SettingsSection.HEADUNIT, c.getString(if (AutoServer.isListed(c)) R.string.set_svc_not_connected else R.string.set_svc_off), R.color.warn)
-        } else {
-            val auto = c.getString(if (aa.autoServer) R.string.set_sum_on else R.string.set_sum_off)
-            set(SettingsSection.HEADUNIT, c.getString(R.string.set_sum_headunit, aa.certSet.uppercase(), auto))
-        }
+        set(SettingsSection.HEADUNIT, c.getString(R.string.set_sum_headunit, aa.certSet.uppercase()))
 
         set(SettingsSection.APPS, c.getString(R.string.set_sum_apps, HuApps.detect(c).installed.size))
 
@@ -375,8 +369,6 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     private var eqEntryRow: View? = null
     /** Списки «Установлено на телефоне» и «Рекомендуем»: пересобираются при каждом возврате на экран. */
     private var appsHost: LinearLayout? = null
-    private var svcStatus: TextView? = null
-    private var svcButton: TextView? = null
     private var updStatus: TextView? = null
     private var updButton: TextView? = null
     private var wlStatus: TextView? = null
@@ -412,7 +404,6 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     }
 
     override fun onShow() {
-        refreshService()
         refreshMic()
         refreshEq()
         refreshEqEntry()
@@ -423,7 +414,6 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     }
 
     override fun tick() {
-        refreshService()
         refreshUpdate()
         refreshWireless()
     }
@@ -611,7 +601,11 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         if (!carBtGranted()) ask += Manifest.permission.BLUETOOTH_CONNECT
         // ветка A: вход в Wi-Fi Direct-группу ГУ; без него беспровод стартует, но только веткой B
         val p2p = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES else Manifest.permission.ACCESS_FINE_LOCATION
-        if (ctx.checkSelfPermission(p2p) != PackageManager.PERMISSION_GRANTED) ask += p2p
+        if (ctx.checkSelfPermission(p2p) != PackageManager.PERMISSION_GRANTED) {
+            ask += p2p
+            // Android 12 молча отклоняет FINE без COARSE в том же запросе
+            if (p2p == Manifest.permission.ACCESS_FINE_LOCATION) ask += Manifest.permission.ACCESS_COARSE_LOCATION
+        }
         if (ask.isNotEmpty()) {
             wlAwaitingPermission = true
             host.requestPermissions(ask.toTypedArray(), REQ_LOCAL_NETWORK)
@@ -1044,8 +1038,6 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         val c = ctx
         body.addView(c.sectionTitle(c.getString(R.string.set_cert)))
         body.addView(certCard())
-        body.addView(c.sectionTitle(c.getString(R.string.set_autostart)))
-        body.addView(autostartCard())
         body.addView(c.sectionTitle(c.getString(R.string.set_car_make)))
         val value = c.text("", 13f, 400, c.clr(R.color.on2))
         makeValue = value
@@ -1099,47 +1091,6 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         card.addView(seg.view, lp(MATCH, WRAP))
         card.addView(c.text(c.getString(R.string.set_cert_hint), 14f, 400, c.clr(R.color.on2)).apply { pad(c, 6, 0, 6, 0) })
         return card
-    }
-
-    private fun autostartCard(): View {
-        val c = ctx
-        val card = c.vbox().apply { background = c.shape(c.clr(R.color.surf), 20) }
-        card.addView(
-            ToggleRow(c, c.getString(R.string.set_autostart), c.getString(R.string.set_autostart_sub), aa.autoServer, 72, false, 17f, 14f) { aa.autoServer = it }.view,
-            lp(MATCH, WRAP),
-        )
-        card.addView(c.divider())
-        val row = c.hbox(12).apply { pad(c, 16, 10, 12, 10); minimumHeight = c.dp(64) }
-        val status = c.text("", 14f, 400, c.clr(R.color.on2))
-        val button = c.text(c.getString(R.string.set_autostart_enable), 15f, 600, c.clr(R.color.acc)).apply {
-            gravity = Gravity.CENTER
-            pad(c, 14, 0, 14, 0)
-            background = c.rippleBg(null, 20)
-            isClickable = true
-            setOnClickListener { Actions.enableServiceDialog(c) }
-        }
-        svcStatus = status
-        svcButton = button
-        row.addView(status, lp(0, WRAP, 1f))
-        row.addView(button, c.lpDp(WRAP, 44))
-        card.addView(row, lp(MATCH, WRAP))
-        refreshService()
-        return card
-    }
-
-    private fun refreshService() {
-        val status = svcStatus ?: return
-        val c = ctx
-        val connected = AutoServer.isConnected
-        status.text = c.getString(
-            when {
-                connected -> R.string.set_svc_connected
-                AutoServer.isListed(c) -> R.string.set_svc_not_connected
-                else -> R.string.set_svc_off
-            },
-        )
-        status.setTextColor(c.clr(if (connected) R.color.ok else R.color.warn))
-        svcButton?.visibility = if (connected) View.GONE else View.VISIBLE
     }
 
     // --- приложения для магнитолы ---

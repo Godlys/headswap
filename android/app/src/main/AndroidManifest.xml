@@ -31,6 +31,8 @@
         android:name="android.permission.NEARBY_WIFI_DEVICES"
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="32" />
+    <!-- Android 12: запрос одной FINE без COARSE система молча отклоняет -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="32" />
     <!-- привязка машины через CompanionDeviceManager: исключения на запуск foreground-сервиса и работу в фоне; обычные разрешения -->
     <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
     <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
@@ -42,7 +44,7 @@
     <!-- обновление из приложения: установка скачанного с GitHub APK через PackageInstaller -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
-    <!-- автозапуск сервера ГУ читает подписи меню из ресурсов самого Android Auto (на языке AA); без queries на API 30+ пакет не виден -->
+    <!-- без queries на API 30+ пакет Android Auto не виден (проверка установки, запуск настроек) -->
     <queries>
         <package android:name="com.google.android.projection.gearhead" />
         <!-- раздел «Приложения для магнитолы»: статус установки и запуск каталога (Fermata Auto, ParkedTube, AABrowser) -->
@@ -119,19 +121,5 @@
             android:name=".BridgeService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|microphone" />
-
-        <!-- Автозапуск сервера ГУ Android Auto: включается пользователем в спецвозможностях -->
-        <service
-            android:name=".autosrv.AutoServerService"
-            android:exported="false"
-            android:label="@string/autosrv_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/autosrv_config" />
-        </service>
     </application>
 </manifest>

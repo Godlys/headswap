@@ -19,6 +19,12 @@
 
     <string name="dev_section_music_chunk">Размер пакета музыки (эксперимент)</string>
     <string name="dev_music_chunk_note">Мельче — меньше буфер на ГУ, но больше пакетов по USB. Если звук заикается, верните «Как отдаёт Android Auto»</string>
+    <string name="dev_section_voice_chunk">Размер пакета голоса (эксперимент)</string>
+    <string name="dev_voice_chunk_note">Речь ассистента и подсказки навигатора. Авто: 1024 Б на VW CNS2 Delphi, иначе как отдаёт AA</string>
+    <string name="dev_section_tts_preroll">Тишина перед подсказкой (эксперимент)</string>
+    <string name="dev_tts_preroll_note">Нули после начала подсказки, ГУ успевает открыть звук. Авто: 400 мс на VW</string>
+    <string name="dev_section_touch_decimation">Прореживание тача (эксперимент)</string>
+    <string name="dev_touch_decimation_note">Пропускать каждый второй MOVE: ГУ шлёт до ~70 событий в секунду, видео до 30 к/с. Последняя точка перед отпусканием пальца не теряется.</string>
 
 
     <string name="dev_section_video">Видео (с переподключения)</string>
@@ -50,9 +56,15 @@
     <string name="dev_section_actions">Действия</string>
     <string name="dev_action_scan">Сканировать</string>
     <string name="dev_action_stop_bridge">Стоп моста</string>
-    <string name="dev_action_restart_server">Перезапуск сервера ГУ</string>
     <string name="dev_action_aa_settings">Настройки AA</string>
-    <string name="dev_action_enable_autostart">Включить автозапуск сервера</string>
+    <string name="dev_action_check_server">Проверить сервер ГУ</string>
+    <string name="dev_check_server_alive">Сервер ГУ отвечает</string>
+    <string name="dev_check_server_refused">Сервер ГУ отказывает в подключении</string>
+    <string name="dev_check_server_hung">Сервер ГУ не отвечает на рукопожатие</string>
+    <string name="dev_check_server_error">Ошибка: %1$s</string>
+    <string name="dev_check_server_bridge">Мост работает: проверка сбила бы текущую сессию. Сначала остановите мост.</string>
+    <string name="dev_check_server_usb">Подключён USB-аксессуар (машина): проверка сбила бы подключение. Отключите кабель.</string>
+    <string name="dev_check_server_running">Проверка уже идёт</string>
 
     <string name="dev_section_status">Статус</string>
     <string name="dev_section_log">Лог</string>

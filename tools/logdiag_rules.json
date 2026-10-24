@@ -14,10 +14,6 @@
     "aa_no_version": "AA нет VERSION_RESPONSE",
     "aa_established": "AA сессия установлена",
     "aa_phone_eof": "AA телефон закрыл соединение",
-    "autosrv_no_items": "в меню нет пунктов сервера",
-    "autosrv_no_window": "окно Android Auto не появилось",
-    "autosrv_consent": "AUTOSRV итог: CONSENT",
-    "autosrv_locked": "AUTOSRV итог: LOCKED",
     "certs_missing": "нет сертификата head unit",
     "wifi_wait": "сервис: \\S+, слушаю 6 портов",
     "tcp_timeout0": "WL tcp timeout ready=0/6",
@@ -147,18 +143,19 @@
       "category": "user_setup",
       "score": 85,
       "all": [["m.aa_refused", ">=", 3], ["m.aa_tcp", "==", 0]],
-      "evidence": ["aa_refused", "autosrv_no_items"],
-      "advice": "Машина подключилась, но Android Auto на телефоне не принимает соединение (порт 5277 закрыт). Включите в Android Auto режим разработчика (Настройки Android Auto → 10 раз нажать на «Версия»), затем в меню ⋮ выберите «Запустить сервер ГУ». Проще всего — пройти заново онбординг Headswap.",
-      "advice_en": "The car connected, but Android Auto on the phone doesn't accept the connection (port 5277 is closed). Enable developer settings in Android Auto (Android Auto settings → tap \"Version\" 10 times), then in the ⋮ menu choose \"Start head unit server\". The easiest way is to go through the Headswap onboarding again.",
-      "what": "Магнитола подключилась, но Android Auto на телефоне не принимает соединение.",
-      "what_en": "The car connected, but Android Auto on the phone doesn't accept the connection.",
+      "evidence": ["aa_refused"],
+      "advice": "Машина подключилась, но сервер ГУ в Android Auto не запущен (порт 5277 закрыт). Вероятные причины: сервер ещё ни разу не включали; Android закрыл Android Auto в фоне из-за экономии батареи; Android Auto обновился или телефон перезагружался. Включите сервер вручную: откройте Android Auto → ⋮ вверху справа → «Вкл. сервер головного устр-ва», затем переподключите кабель. Если в меню нет этого пункта — включите режим разработчика: 10 раз нажмите на строку «Версия» в настройках Android Auto.",
+      "advice_en": "The car connected, but the head unit server in Android Auto is not running (port 5277 is closed). Likely causes: the server has never been started; Android closed Android Auto in the background to save battery; Android Auto was updated or the phone was restarted. Start the server manually: open Android Auto → ⋮ at the top right → \"Start head unit server\", then replug the cable. If the menu has no such item, enable developer mode: tap the \"Version\" row in Android Auto settings 10 times.",
+      "what": "Машина подключилась, но сервер ГУ в Android Auto не запущен.",
+      "what_en": "The car connected, but the head unit server in Android Auto is not running.",
       "steps": [
-        {"text": "Откройте настройки Android Auto", "text_en": "Open Android Auto settings", "action": "open_aa"},
-        {"text": "10 раз нажмите на строку «Версия» — включится режим разработчика", "text_en": "Tap the \"Version\" row 10 times to enable developer mode"},
-        {"text": "В меню ⋮ выберите «Запустить сервер ГУ»", "text_en": "In the ⋮ menu choose \"Start head unit server\""},
-        {"text": "Переподключите кабель", "text_en": "Replug the cable"}
+        {"text": "Откройте Android Auto", "text_en": "Open Android Auto", "action": "open_aa"},
+        {"text": "Нажмите ⋮ вверху справа и выберите «Вкл. сервер головного устр-ва»", "text_en": "Tap ⋮ at the top right and choose \"Start head unit server\""},
+        {"text": "Переподключите кабель", "text_en": "Replug the cable"},
+        {"text": "Нет такого пункта — 10 раз нажмите на строку «Версия» в настройках Android Auto", "text_en": "No such item - tap the \"Version\" row in Android Auto settings 10 times"}
       ],
-      "boost": [[["m.autosrv_no_items", ">=", 1], 10]]
+      "ask": "Включали ли сервер ГУ в Android Auto после установки или обновления?",
+      "ask_en": "Did you start the head unit server in Android Auto after installing or updating it?"
     },
     {
       "id": "aa_server_off_partial",
@@ -169,32 +166,13 @@
       "score": 45,
       "all": [["m.aa_refused", ">=", 20], ["m.aa_tcp", ">=", 1], ["frames_max", "<", 30]],
       "evidence": ["aa_refused"],
-      "advice": "Android Auto то принимает, то отклоняет соединение. Проверьте, что «Сервер ГУ» запущен в меню разработчика Android Auto, и снимите для Android Auto и Headswap ограничения батареи (Настройки → Приложения → Батарея → «Без ограничений»).",
-      "advice_en": "Android Auto sometimes accepts the connection and sometimes refuses it. Check that \"Head unit server\" is running in the Android Auto developer settings, and remove battery restrictions for Android Auto and Headswap (Settings → Apps → Battery → \"Unrestricted\").",
+      "advice": "Android Auto то принимает, то отклоняет соединение. Причина обычно в том, что Android закрывает Android Auto в фоне: снимите для Android Auto и Headswap ограничения батареи (Настройки → Приложения → Батарея → «Без ограничений») и проверьте, что сервер включён: Android Auto → ⋮ → «Вкл. сервер головного устр-ва».",
+      "advice_en": "Android Auto sometimes accepts the connection and sometimes refuses it. Usually Android is closing Android Auto in the background: remove battery restrictions for Android Auto and Headswap (Settings → Apps → Battery → \"Unrestricted\") and check that the server is on: Android Auto → ⋮ → \"Start head unit server\".",
       "what": "Android Auto то принимает соединение, то отклоняет его.",
       "what_en": "Android Auto sometimes accepts the connection and sometimes refuses it.",
       "steps": [
-        {"text": "Проверьте, что «Сервер ГУ» запущен в меню разработчика Android Auto", "text_en": "Check that \"Head unit server\" is running in the Android Auto developer settings", "action": "open_aa"},
-        {"text": "Для Headswap и Android Auto выберите в настройках батареи «Без ограничений»", "text_en": "Set Headswap and Android Auto to \"Unrestricted\" in battery settings", "action": "battery"}
-      ]
-    },
-    {
-      "id": "aa_dev_menu_missing",
-      "title": "В меню Android Auto нет пунктов сервера ГУ",
-      "title_en": "The Android Auto menu has no head unit server items",
-      "phase": "first_connect",
-      "category": "user_setup",
-      "score": 60,
-      "all": [["m.autosrv_no_items", ">=", 2], ["frames_max", "<", 30]],
-      "evidence": ["autosrv_no_items"],
-      "advice": "Автозапуск не нашёл в меню ⋮ Android Auto пункт «Запустить сервер ГУ»: скорее всего, не включён режим разработчика. Настройки Android Auto → 10 раз нажмите на строку «Версия» → подтвердите, затем подключите машину снова.",
-      "advice_en": "Autostart didn't find the \"Start head unit server\" item in the Android Auto ⋮ menu: most likely developer settings are not enabled. Android Auto settings → tap the \"Version\" row 10 times → confirm, then connect the car again.",
-      "what": "В меню ⋮ Android Auto нет пункта «Запустить сервер ГУ» — скорее всего, не включён режим разработчика.",
-      "what_en": "The Android Auto ⋮ menu has no \"Start head unit server\" item - developer mode is probably off.",
-      "steps": [
-        {"text": "Откройте настройки Android Auto", "text_en": "Open Android Auto settings", "action": "open_aa"},
-        {"text": "10 раз нажмите на строку «Версия» и подтвердите", "text_en": "Tap the \"Version\" row 10 times and confirm"},
-        {"text": "Подключите машину снова", "text_en": "Connect the car again"}
+        {"text": "Для Headswap и Android Auto выберите в настройках батареи «Без ограничений» — иначе Android закрывает Android Auto в фоне", "text_en": "Set Headswap and Android Auto to \"Unrestricted\" in battery settings, otherwise Android closes Android Auto in the background", "action": "battery"},
+        {"text": "Проверьте, что в Android Auto (⋮) включён пункт «Вкл. сервер головного устр-ва»", "text_en": "Check that \"Start head unit server\" is switched on in Android Auto (⋮)", "action": "open_aa"}
       ]
     },
     {
@@ -257,60 +235,6 @@
         {"text": "Обновите Сервисы Google Play и Android Auto", "text_en": "Update Google Play services and Android Auto"}
       ],
       "suppresses": ["hu_silent"]
-    },
-    {
-      "id": "aa_consent",
-      "title": "Android Auto ждёт подтверждения на телефоне",
-      "title_en": "Android Auto is waiting for confirmation on the phone",
-      "phase": "first_connect",
-      "category": "user_setup",
-      "score": 55,
-      "all": [["m.autosrv_consent", ">=", 1], ["frames_max", "<", 30]],
-      "evidence": ["autosrv_consent"],
-      "advice": "На телефоне открыт экран согласия/разрешений Android Auto. Разблокируйте телефон, примите все запросы Android Auto один раз, затем переподключите машину.",
-      "advice_en": "The Android Auto consent/permissions screen is open on the phone. Unlock the phone, accept all Android Auto prompts once, then reconnect the car.",
-      "what": "На телефоне открыт экран согласия или разрешений Android Auto.",
-      "what_en": "The Android Auto consent/permissions screen is open on the phone.",
-      "steps": [
-        {"text": "Разблокируйте телефон и примите все запросы Android Auto", "text_en": "Unlock the phone and accept all Android Auto prompts"},
-        {"text": "Переподключите машину", "text_en": "Reconnect the car"}
-      ]
-    },
-    {
-      "id": "aa_bg_start_blocked",
-      "title": "Система не даёт Headswap запускать Android Auto в фоне",
-      "title_en": "The system won't let Headswap start Android Auto in the background",
-      "phase": "first_connect",
-      "category": "phone_limit",
-      "score": 45,
-      "all": [["m.autosrv_no_window", ">=", 3], ["frames_max", "<", 30]],
-      "evidence": ["autosrv_no_window"],
-      "advice": "Окно Android Auto не открывается из фона. Дайте Headswap разрешения «Отображение поверх других приложений» и «Запуск в фоне»/«Автозапуск» (Xiaomi, vivo, OPPO, Honor), либо запускайте сервер ГУ вручную в меню разработчика Android Auto.",
-      "advice_en": "The Android Auto window can't be opened from the background. Give Headswap the \"Display over other apps\" and \"Run in background\"/\"Autostart\" permissions (Xiaomi, vivo, OPPO, Honor), or start the head unit server manually in the Android Auto developer settings.",
-      "what": "Окно Android Auto не открывается из фона.",
-      "what_en": "The Android Auto window can't be opened from the background.",
-      "steps": [
-        {"text": "Дайте Headswap разрешение «Отображение поверх других приложений»", "text_en": "Give Headswap the \"Display over other apps\" permission", "action": "app_settings"},
-        {"text": "Разрешите запуск в фоне и автозапуск (Xiaomi, vivo, OPPO, Honor)", "text_en": "Allow running in the background and autostart (Xiaomi, vivo, OPPO, Honor)", "action": "autostart"},
-        {"text": "Или запустите сервер ГУ вручную в меню разработчика Android Auto", "text_en": "Or start the head unit server manually in the Android Auto developer settings", "action": "open_aa"}
-      ]
-    },
-    {
-      "id": "phone_locked",
-      "title": "Телефон был заблокирован при подключении",
-      "title_en": "The phone was locked when connecting",
-      "phase": "first_connect",
-      "category": "user_setup",
-      "score": 35,
-      "all": [["m.autosrv_locked", ">=", 3], ["frames_max", "<", 30]],
-      "evidence": ["autosrv_locked"],
-      "advice": "Автозапуск сервера Android Auto не работает на заблокированном экране. Разблокируйте телефон при первом подключении в поездке.",
-      "advice_en": "Android Auto server autostart doesn't work on a locked screen. Unlock the phone the first time you connect on a trip.",
-      "what": "Автозапуск сервера Android Auto не работает на заблокированном экране.",
-      "what_en": "Android Auto server autostart doesn't work on a locked screen.",
-      "steps": [
-        {"text": "Разблокируйте телефон при первом подключении в поездке", "text_en": "Unlock the phone the first time you connect on a trip"}
-      ]
     },
     {
       "id": "build_without_certs",

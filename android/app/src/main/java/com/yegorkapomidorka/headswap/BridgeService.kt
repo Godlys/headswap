@@ -31,11 +31,7 @@ import com.yegorkapomidorka.headswap.aa.EqLive
 import com.yegorkapomidorka.headswap.aa.MetaRelay
 import com.yegorkapomidorka.headswap.aa.MicMode
 import com.yegorkapomidorka.headswap.aa.PhoneMicCapture
-import com.yegorkapomidorka.headswap.aa.ServerPhase
 import com.yegorkapomidorka.headswap.aa.VideoGeometry
-import com.yegorkapomidorka.headswap.autosrv.AutoServer
-import com.yegorkapomidorka.headswap.autosrv.AutoServerPolicy
-import com.yegorkapomidorka.headswap.autosrv.Trigger
 import com.yegorkapomidorka.headswap.link.CarTransport
 import com.yegorkapomidorka.headswap.link.LinkSetupException
 import com.yegorkapomidorka.headswap.link.StreamTransport
@@ -83,7 +79,7 @@ class BridgeService : Service() {
     @Volatile private var pendingTcp6: Tcp6Listener? = null
     /** Идёт подъём tcp6/беспровода (от старта до 6/6 или отказа); сервис в это время не гасим. Только главная нить. */
     private var linkWaiting = false
-    /** Беспровод (бета, ветка B) включён пользователем: после обрыва снова ждём машину. Пишет главная нить, читает и коннектор (автозапуск сервера AA). */
+    /** Беспровод (бета, ветка B) включён пользователем: после обрыва снова ждём машину. Пишет главная нить, читает и коннектор. */
     @Volatile private var wifiBMode = false
     /**
      * Авторежим: выбранная машина рядом по Bluetooth (ACL_CONNECTED), ожидание по Wi-Fi держим, пока она рядом.
@@ -146,8 +142,6 @@ class BridgeService : Service() {
             onWifi = { on -> main.post { onP2pWifi(on) } },
         )
     }
-    /** Автозапуск пропущен из-за неподключённой службы спецвозможностей: RETRY запустит его, когда она появится. */
-    @Volatile private var serverStartPending = false
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "bridge-grace").also { it.isDaemon = true } }
 
     private val detachReceiver = object : BroadcastReceiver() {
@@ -789,16 +783,15 @@ class BridgeService : Service() {
 
         // AA-сессия к серверу ГУ на 127.0.0.1:5277 живёт на уровне сервиса (BridgeHost), а не этой USB-сессии
         var h = host
-        // режим фиксируется на подключение; тёплая AA с другой геометрией не годится (SDR уже ушёл), её закрываем
+        // режим фиксируется на подключение (SDR уже ушёл). Сервер ГУ одноразовый, а перезапустить его теперь некому
+        // (службы спецвозможностей нет), поэтому живую AA с другой геометрией или DPI не закрываем: работаем со старым режимом
         val chosenGeometry = aaPrefs.videoGeometry
         val wantMode = chosenGeometry.effective(aaPrefs.transcode)
         val wantDensity = aaPrefs.aaDensity
         if (h != null && !h.isDead && h.core.videoMode != wantMode) {
-            AppLog.i("BRIDGE: видео-режим сменился (${h.core.videoMode.label} -> ${wantMode.label}), тёплую AA закрываю и поднимаю заново")
-            h.shutdown("смена видео-режима")
+            AppLog.i("BRIDGE: видео-режим/DPI сменился (${h.core.videoMode.label} -> ${wantMode.label}), применится после перезапуска сервера ГУ")
         } else if (h != null && !h.isDead && h.core.densityOverride != wantDensity) {
-            AppLog.i("BRIDGE: DPI AA сменился (${h.core.densityOverride} -> $wantDensity, 0 = авто), тёплую AA закрываю и поднимаю заново")
-            h.shutdown("смена DPI AA")
+            AppLog.i("BRIDGE: видео-режим/DPI сменился (DPI ${h.core.densityOverride} -> $wantDensity, 0 = авто), применится после перезапуска сервера ГУ")
         }
         if (h == null || h.isDead) {
             h = createHost(aaPrefs, chosenGeometry, wantMode, wantDensity, previous = h)
@@ -814,10 +807,11 @@ class BridgeService : Service() {
             AppLog.i("BRIDGE: AA-хост уже есть, переиспользую (grace=${h.isInGrace})")
         }
         // на воздухе перекодирование обязательно: в passthrough битрейт не регулируется. Режим хоста не трогаем
-        // (без перекодирования он уже R720, его можно перекодировать), хост не пересоздаём: сервер AA одноразовый
-        val transcode = aaPrefs.transcode || transport.caps == TransportCaps.TCP6
+        // (без перекодирования он уже R720, его можно перекодировать), хост не пересоздаём: сервер AA одноразовый.
+        // Старый режим живого хоста с кропом (WIDE*, R1024) в passthrough не живёт: перекодирование держим включённым
+        val transcode = aaPrefs.transcode || transport.caps == TransportCaps.TCP6 || h.core.videoMode.needsTranscode
         if (h.core.transcodeEnabled != transcode) {
-            AppLog.i("BRIDGE видео: ${if (transcode) "воздух, перекодирование включаю принудительно" else "кабель, возвращаю passthrough по настройке"}")
+            AppLog.i("BRIDGE видео: ${if (transcode) "перекодирование включаю принудительно (воздух или режим хоста ${h.core.videoMode.label})" else "кабель, возвращаю passthrough по настройке"}")
             h.core.transcodeEnabled = transcode
         }
         if (wakeLock == null) {
@@ -849,6 +843,9 @@ class BridgeService : Service() {
             core.micModeProvider = { aaPrefs.micMode }
             core.musicRateProvider = { aaPrefs.musicRate }
             core.mediaChunkProvider = { aaPrefs.mediaChunk }
+            core.voiceChunkProvider = { aaPrefs.voiceChunk }
+            core.ttsPrerollProvider = { aaPrefs.ttsPreroll }
+            core.touchDecimationProvider = { aaPrefs.touchDecimation }
             core.phoneMic = PhoneMicCapture(applicationContext)
             core.usbAudioEnabled = aaPrefs.usbAudio
             EqLive.settings = aaPrefs.eq
@@ -861,7 +858,6 @@ class BridgeService : Service() {
             val conn = AaConnector(
                 core, loaded.creds, log,
                 options = { AapOptions(sdProvider = { mode.sdOptions(fullAudio = core.audioViaUsb, densityOverride = densityOverride, carMake = aaPrefs.carMake) }) },
-                serverPrep = { phase -> prepareServer(core, phase) },
             )
             AppLog.i("BRIDGE звук по USB: ${if (aaPrefs.usbAudio) "включён (решение по FEATURE_CONFIG ГУ)" else "выключен в UI"}")
             AppLog.i("BRIDGE: AA cert=${loaded.creds.certSet}, grace=${BridgeHost.GRACE_MS} мс")
@@ -905,47 +901,6 @@ class BridgeService : Service() {
             AppLog.e("сервис: foreground-тип с microphone не дали, остаюсь на connectedDevice", e)
             startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         }
-    }
-
-    /**
-     * Автозапуск сервера ГУ AA на нити коннектора: до первой попытки подключения (USB подключён), после конца
-     * AA-сессии и после блокировки экрана. Ждём окончания не дольше AutoServerPolicy.waitMs, дальше коннектор идёт как обычно.
-     */
-    private fun prepareServer(core: AaBridgeCore, phase: ServerPhase) {
-        val trigger = when (phase) {
-            ServerPhase.FIRST -> Trigger.USB_ATTACH
-            ServerPhase.AFTER_SESSION -> Trigger.AFTER_SESSION
-            ServerPhase.RETRY -> Trigger.RETRY
-        }
-        val autoPref = AaPrefs(this).autoServer
-        // после старта процесса служба спецвозможностей подключается позже сервиса: даём ей время
-        if (trigger != Trigger.RETRY && autoPref && !AutoServer.isConnected && AutoServer.isListed(this)) {
-            AutoServer.log("жду подключения службы спецвозможностей (${trigger.label})")
-            AutoServer.awaitService(SERVICE_WAIT_MS)
-        }
-        val skip = AutoServerPolicy.skipReason(
-            trigger, autoPref, AutoServer.isConnected,
-            // беспровод: пока ждём машину по Wi-Fi или она подключена, сервер перезапускать есть для кого
-            usbAlive = core.hasCarlifeLink || wifiBMode, warmAaSession = false, lastLocked = AutoServer.lastLocked,
-            startPending = serverStartPending, consentHold = AutoServer.consentPending(),
-        )
-        if (skip != null) {
-            if (skip == AutoServerPolicy.CONSENT_SKIP) core.showStatus(AaBridgeCore.TEXT_AA_CONSENT)
-            if (trigger != Trigger.RETRY && !AutoServer.isConnected) serverStartPending = true
-            // RETRY вызывается каждые несколько секунд и почти всегда пропускается: молча
-            if (trigger != Trigger.RETRY) AutoServer.log("пропуск (${trigger.label}): $skip")
-            return
-        }
-        serverStartPending = false
-        core.showStatus(AutoServerPolicy.runningText(trigger))
-        val run = AutoServer.start(trigger)
-        val out = AutoServer.await(run, AutoServerPolicy.waitMs(trigger))
-        if (out == null) {
-            AutoServer.log("автоматизация ещё идёт после ${AutoServerPolicy.waitMs(trigger) / 1000} с, подключаюсь как обычно")
-            return
-        }
-        AutoServer.log("итог для коннектора (${trigger.label}): $out")
-        AutoServerPolicy.resultText(trigger, out.result)?.let { core.showStatus(it) }
     }
 
     /** Старт не удался: если жив AA-хост (идёт grace), сервис не гасим, иначе finish. */
@@ -1049,8 +1004,6 @@ class BridgeService : Service() {
         /** Сервис создан и не уничтожен (один процесс): ресиверу ACL незачем будить пустой сервис ради отбоя. */
         @Volatile var alive = false
             private set
-        /** Сколько автозапуск ждёт подключения включённой службы спецвозможностей. */
-        private const val SERVICE_WAIT_MS = 3_000L
         /** debug tcp6: сколько ждать все 6 сокетов ГУ. */
         private const val TCP6_WAIT_MS = 60_000L
         /** Ветка B: сколько маячить и ждать ГУ (человек включает хотспот и открывает CarLife на ГУ). */

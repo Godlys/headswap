@@ -2,10 +2,6 @@
 <resources>
     <!-- ui/Actions.kt -->
     <string name="act_open_aa_failed">Can\'t open Android Auto settings: %1$s</string>
-    <string name="act_service_off">Accessibility service is off</string>
-    <string name="act_autostart_off">Auto-start service is off: start the head unit server in Android Auto manually</string>
-    <string name="act_enable_title">Head unit server auto-start</string>
-    <string name="act_enable_message">Accessibility settings will open. Find “%1$s” (Installed apps / Downloaded apps) and turn it on. The service sees only Android Auto windows.\n\nIf the item is gray (“restricted settings”): Settings → Apps → Headswap → ⋮ → “Allow restricted settings”, then come back here.</string>
     <string name="act_open">Open</string>
     <string name="act_cancel">Cancel</string>
 

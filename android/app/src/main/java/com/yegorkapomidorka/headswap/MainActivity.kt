@@ -13,7 +13,6 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.WindowInsets
-import android.view.WindowManager
 import android.widget.FrameLayout
 import com.yegorkapomidorka.headswap.aa.AaCreds
 import com.yegorkapomidorka.headswap.aa.AaProbe
@@ -30,6 +29,7 @@ import com.yegorkapomidorka.headswap.ui.SettingsSection
 import com.yegorkapomidorka.headswap.ui.SettingsSectionScreen
 import com.yegorkapomidorka.headswap.ui.StepId
 import com.yegorkapomidorka.headswap.ui.UiPrefs
+import com.yegorkapomidorka.headswap.ui.UpgradeNotice
 import com.yegorkapomidorka.headswap.update.Updater
 
 /**
@@ -67,7 +67,6 @@ class MainActivity : Activity() {
         if (AppTheme.medium) setTheme(R.style.Theme_Headswap_Medium)
         super.onCreate(savedInstanceState)
         AppLog.init(this)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         root = FrameLayout(this)
         if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
         root.setOnApplyWindowInsetsListener { v, ins ->
@@ -87,7 +86,20 @@ class MainActivity : Activity() {
         restoreScreens(savedInstanceState)
         val hadCmd = intent?.getStringExtra(EXTRA_CMD) != null
         val fromUsb = intent?.action == UsbManager.ACTION_USB_ACCESSORY_ATTACHED
-        if (savedInstanceState == null && !hadCmd && !fromUsb && !UiPrefs(this).onboardingDone) showOnboarding()
+        if (savedInstanceState == null && !hadCmd && !fromUsb) {
+            val prefs = UiPrefs(this)
+            when (UpgradeNotice.onLaunch(prefs.onboardingDone, prefs.a11yNoticeShown)) {
+                UpgradeNotice.Launch.ONBOARDING -> {
+                    showOnboarding()
+                    prefs.a11yNoticeShown = true         // новичок узнает всё из онбординга, окно ему не нужно
+                }
+                UpgradeNotice.Launch.NOTICE -> {
+                    prefs.a11yNoticeShown = true         // одного показа достаточно, даже если смахнули
+                    UpgradeNotice.show(this)
+                }
+                UpgradeNotice.Launch.NONE -> {}
+            }
+        }
         handleIntent(intent, "старт activity")
         if (savedInstanceState == null && !hadCmd) {
             Thread({ AaCreds.selfTest(this) }, "aa-selftest").start()
@@ -236,14 +248,6 @@ class MainActivity : Activity() {
                 // автостарт беспровода без Bluetooth машины: то же, что ACL_CONNECTED / ACL_DISCONNECTED выбранной машины
                 "car_auto" -> startForegroundService(Intent(this, BridgeService::class.java).setAction(BridgeService.ACTION_WIFI_B_AUTO))
                 "car_auto_off" -> startForegroundService(Intent(this, BridgeService::class.java).setAction(BridgeService.ACTION_WIFI_B_AUTO_OFF))
-                "aa_server_restart" -> {
-                    val delay = intent.getIntExtra("delay_s", 0)
-                    if (delay > 0) {
-                        AppLog.i("AUTOSRV: перезапуск сервера через $delay с")
-                        handler.postDelayed({ Actions.restartServer(this, fromCmd = true) }, delay * 1000L)
-                    } else Actions.restartServer(this, fromCmd = true)
-                }
-                "front" -> {}                                  // возврат из автозапуска сервера: только вывести окно вперёд
                 "mic_test" -> Actions.micTest(this)
                 "transcode_test" -> Actions.transcodeTest(this, intent.getStringExtra("opts") ?: "")
                 "screen_main" -> toHome()
@@ -261,11 +265,12 @@ class MainActivity : Activity() {
                 }
                 "checklist" -> { toHome(); showOnboarding(checklist = true) }
                 "update_check" -> Updater.check(this, manual = true)      // проверить релиз на GitHub сейчас, не дожидаясь интервала
+                "a11y_notice" -> UpgradeNotice.show(this)      // окно «Отказ от спецвозможностей» принудительно, флаг не трогает
                 "theme" -> {                                   // --es mode system|light|medium|dark
                     AppTheme.set(this, intent.getStringExtra("mode") ?: AppTheme.SYSTEM)
                     recreate()
                 }
-                else -> AppLog.i("неизвестная команда '$cmd' (есть aa_selftest, aa_probe, net_probe, net_perm, mic_test, transcode_test, open_aa, aa_server_restart, car_auto, car_auto_off)")
+                else -> AppLog.i("неизвестная команда '$cmd' (есть aa_selftest, aa_probe, net_probe, net_perm, mic_test, transcode_test, open_aa, car_auto, car_auto_off, a11y_notice)")
             }
             if (intent.hasExtra("scroll_y")) current()?.scrollTo(intent.getIntExtra("scroll_y", 0))     // отладка: снимки нижней части экрана
             return

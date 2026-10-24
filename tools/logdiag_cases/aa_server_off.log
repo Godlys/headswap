@@ -8,5 +8,4 @@
 09:00:13.000 AA сервер 127.0.0.1:5277 недоступен: ConnectException: ECONNREFUSED (Connection refused)
 09:00:16.000 AA сервер 127.0.0.1:5277 недоступен: ConnectException: ECONNREFUSED (Connection refused)
 09:00:19.000 AA сервер 127.0.0.1:5277 недоступен: ConnectException: ECONNREFUSED (Connection refused)
-09:00:20.000 AUTOSRV проверка.1: в меню нет пунктов сервера (попытка 1); тексты: []
 09:00:22.000 AA сервер 127.0.0.1:5277 недоступен: ConnectException: ECONNREFUSED (Connection refused)

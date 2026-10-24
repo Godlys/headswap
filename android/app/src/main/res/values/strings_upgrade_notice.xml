@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One-time window after updating to 2.6.0: accessibility service removed, head unit server is started by hand -->
+<resources>
+    <string name="upg_title">No more accessibility service!!!</string>
+    <string name="upg_lead">Headswap no longer asks for accessibility and no longer restarts the head unit server automatically.</string>
+    <string name="upg_pros">Pros</string>
+    <string name="upg_pro_1">No need to unlock the phone to connect</string>
+    <string name="upg_pro_2">No need to allow risky accessibility settings</string>
+    <string name="upg_pro_3">The AA server barely uses battery in the background</string>
+    <string name="upg_cons">Cons</string>
+    <string name="upg_con_1">You start the head unit server by hand, once</string>
+    <string name="upg_con_2">If Android closes it, say once a week, start it again</string>
+    <string name="upg_con_3">The notification stays in the shade, you can <b>just</b> swipe it away</string>
+    <string name="upg_notif_when">27 min</string>
+    <string name="upg_notif_text">Head unit server is running</string>
+    <string name="upg_ok">Got it</string>
+</resources>

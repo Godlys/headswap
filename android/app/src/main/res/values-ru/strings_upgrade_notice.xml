@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Одноразовое окно после обновления до 2.6.0: службы спецвозможностей нет, сервер ГУ включают вручную -->
+<resources>
+    <string name="upg_title">Отказ от спецвозможностей!!!</string>
+    <string name="upg_lead">Headswap больше не просит спецвозможности и не перезапускает сервер ГУ автоматически.</string>
+    <string name="upg_pros">Плюсы</string>
+    <string name="upg_pro_1">Для подключения телефон не нужно разблокировать</string>
+    <string name="upg_pro_2">Не нужно разрешать опасные настройки спецвозможностей</string>
+    <string name="upg_pro_3">Сервер AA в фоне почти не тратит батарею</string>
+    <string name="upg_cons">Минусы</string>
+    <string name="upg_con_1">Сервер ГУ нужно включить вручную, один раз</string>
+    <string name="upg_con_2">Если Android его закроет, например раз в неделю, включить снова</string>
+    <string name="upg_con_3">Уведомление висит в шторке, его можно <b>просто</b> смахнуть</string>
+    <string name="upg_notif_when">27 мин.</string>
+    <string name="upg_notif_text">Сервер головного устройства запущен</string>
+    <string name="upg_ok">Понятно</string>
+</resources>
