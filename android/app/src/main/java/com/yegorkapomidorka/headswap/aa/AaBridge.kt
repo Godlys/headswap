@@ -1857,6 +1857,7 @@ class AaConnector(
         while (!stopping) {
             // проба живости сервера (AaServerCheck) не должна держать сервер 5277, когда подключаемся мы
             AaServerCheck.beforeBridgeConnect()
+            if (stopping) break      // Стоп мог прийти за время ожидания: подключаться уже нельзя, сессию на handshake не оборвать штатно
             val ended = CountDownLatch(1)
             core.onAaConnecting()
             attempts++

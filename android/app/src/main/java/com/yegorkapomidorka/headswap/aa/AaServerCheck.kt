@@ -73,7 +73,8 @@ class AaSessionProbe(
         val session = AapSession(
             creds, NoSink, AapOptions(host = host, port = port, sdProvider = sd),
             log = { line, _ ->
-                log("SRVCHECK | $line", false)
+                // "AA " -> "aa ": LogDiag/logdiag.py ищут маркеры моста ("AA TCP подключено", "AA сервер ... недоступен") подстрокой по всей строке
+                log("SRVCHECK | " + (if (line.startsWith("AA ")) "aa " + line.substring(3) else line), false)
                 // телефон спросил возможности ГУ: это последний шаг, дальше штатное закрытие. Ответ на SDR
                 // лог-хук опережает (dispatch логирует до onControl), но в очереди он встанет раньше ByeBye
                 if ("RX CONTROL(0) SERVICE_DISCOVERY_REQUEST" in line) ref.get()?.requestStop("проба: SDR получен")
@@ -390,7 +391,7 @@ object AaServerCheck {
             val c = ServerCheckController(
                 probe = AaSessionProbe(
                     loadCreds = { AaCreds.load(app, AaPrefs(app).certSet).creds },
-                    sd = { VideoMode.DEFAULT.sdOptions(fullAudio = false) },
+                    sd = { VideoMode.DEFAULT.sdOptions(fullAudio = false, carMake = AaPrefs(app).carMake) },
                     log = { line, ui -> AppLog.i(line, ui) },
                 ),
                 busy = { CarLifeState.running || usb.accessoryList?.isNotEmpty() == true },

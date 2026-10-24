@@ -294,6 +294,9 @@ class AaServerCheckTest {
             assertNull("ошибка телефона: ${phone.error}\n" + logs.joinToString("\n"), phone.error)
             assertTrue("HU не закрыл сокет штатно (EOF)", phone.sawEof && !phone.reset)
             assertTrue(logs.any { it.contains("SRVCHECK сессия: connected=true established=true закрытие чистое=true") })
+            // строки сессии пробы не должны совпасть с маркерами моста в LogDiag ("AA TCP подключено" и т.п.)
+            assertTrue(logs.any { it.contains("SRVCHECK | aa TCP подключено") })
+            assertFalse(logs.any { it.contains("AA TCP подключено") || it.contains("AA сессия установлена") })
         }
     }
 
