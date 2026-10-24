@@ -8,7 +8,6 @@
     <string name="home_title_connecting">Подключаюсь</string>
     <string name="home_title_lost">Связь потеряна</string>
     <string name="home_title_ready">Готов к поездке</string>
-    <string name="home_title_aa_consent">Настройте Android Auto</string>
 
     <!-- Главный экран: подзаголовки -->
     <string name="home_err_no_cert">Нет сертификата head unit: положите cert.pem и key.pem в app/src/main/assets/aa/jvc/ (см. README)</string>
@@ -20,9 +19,7 @@
     <string name="home_sub_aa_dropped">Android Auto отключился, перезапускаю сервер ГУ.</string>
     <string name="home_sub_cable_ok">Кабель подключён. Жду Android Auto.</string>
     <string name="home_sub_lost">Обрыв дольше %1$d с. Перезапустите сервер ГУ и переподключите кабель.</string>
-    <string name="home_sub_aa_consent">На телефоне открыт мастер Android Auto. Нажмите «Продолжить», затем «ОК» и выдайте все разрешения. Пока мастер не пройден, Android Auto обрывает связь.</string>
     <string name="home_sub_ready">Подключите телефон к магнитоле кабелем.</string>
-    <string name="home_sub_ready_auto">Подключите телефон к магнитоле кабелем. Сервер ГУ запущу сам.</string>
 
     <!-- Главный экран: названия этапов -->
     <string name="home_stage_server">Сервер ГУ</string>
@@ -44,9 +41,7 @@
     <string name="home_stage_closed">закрыт</string>
     <string name="home_stage_disconnected">отключён</string>
     <string name="home_stage_started">запущен</string>
-    <string name="home_stage_auto">запущу сам</string>
     <string name="home_stage_wait_cable">ждём кабель</string>
-    <string name="home_stage_aa_consent">ждёт настройки</string>
 
     <!-- Главный экран: элементы -->
     <string name="home_settings">Настройки</string>
@@ -68,8 +63,6 @@
     <string name="notif_restart_title">Перезапустите сервер ГУ</string>
     <string name="notif_lost">Связь потеряна дольше %1$d с</string>
     <string name="notif_server_started">Сервер ГУ запущен</string>
-    <string name="notif_wait_cable">Жду кабель</string>
-    <string name="notif_aa_consent">Завершите настройку Android Auto на телефоне</string>
 
     <!-- Иллюстрации онбординга (нарисованные макеты системного UI) -->
     <string name="mock_aa_title">Настройки Android Auto</string>
@@ -79,8 +72,6 @@
     <string name="mock_aadev_title">Настройки разработчика</string>
     <string name="mock_aadev_resolution">Разрешение видео</string>
     <string name="mock_aadev_unknown">Неизвестные источники</string>
-    <string name="mock_a11y_title">Специальные возможности</string>
-    <string name="mock_a11y_downloaded">Загруженные службы</string>
     <string name="mock_notif_now">Headswap · сейчас</string>
     <string name="mock_notif_hint">Статус в шторке, даже с погашенным экраном</string>
     <string name="mock_bg_title">Headswap · сведения о приложении</string>

@@ -51,11 +51,9 @@
     <string name="dev_section_actions">Actions</string>
     <string name="dev_action_scan">Scan</string>
     <string name="dev_action_stop_bridge">Stop bridge</string>
-    <string name="dev_action_restart_server">Restart head unit server</string>
     <string name="dev_action_aa_settings">Android Auto settings</string>
     <string name="dev_action_aa_selftest" translatable="false">AA selftest</string>
     <string name="dev_action_mic_test" translatable="false">Mic test</string>
-    <string name="dev_action_enable_autostart">Enable server autostart</string>
 
     <string name="dev_section_status">Status</string>
     <string name="dev_section_log">Log</string>

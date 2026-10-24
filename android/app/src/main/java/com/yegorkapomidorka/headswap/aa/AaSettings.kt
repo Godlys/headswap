@@ -109,11 +109,6 @@ class AaPrefs(ctx: Context) {
             .apply()
     }
 
-    /** Автозапуск сервера ГУ (USB подключён / сессия AA закончилась); работает, только если включена служба спецвозможностей. */
-    var autoServer: Boolean
-        get() = sp.getBoolean("autoServer", true)
-        set(v) = sp.edit().putBoolean("autoServer", v).apply()
-
     /** Источник звука для микрофона AA: машина / телефон / авто (ГУ, при молчании 2 с - телефон). */
     var micMode: MicMode
         get() = MicMode.parse(sp.getString("micMode", MicMode.AUTO.key))

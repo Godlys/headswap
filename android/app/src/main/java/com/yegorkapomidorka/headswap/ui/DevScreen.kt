@@ -30,7 +30,6 @@ import com.yegorkapomidorka.headswap.aa.AaState
 import com.yegorkapomidorka.headswap.aa.CustomResError
 import com.yegorkapomidorka.headswap.aa.CustomVideoMode
 import com.yegorkapomidorka.headswap.aa.MediaChunk
-import com.yegorkapomidorka.headswap.autosrv.AutoServer
 
 /** «Для разработчиков» (Dev.dc.html): отладочные флажки, кнопки, статус и живой лог (последние ~200 строк). */
 class DevScreen(host: MainActivity) : Screen(host) {
@@ -39,7 +38,6 @@ class DevScreen(host: MainActivity) : Screen(host) {
     private lateinit var logView: TextView
     private lateinit var logScroll: ScrollView
     private lateinit var logMeta: TextView
-    private lateinit var enableSvc: View
     private var lastLog = ""
     private var customDetail: View? = null
     private var customDivider: View? = null
@@ -112,7 +110,6 @@ class DevScreen(host: MainActivity) : Screen(host) {
         val actions = listOf(
             c.getString(R.string.dev_action_scan) to { Actions.scan(c, "кнопка") },
             c.getString(R.string.dev_action_stop_bridge) to { Actions.stopBridge(c) },
-            c.getString(R.string.dev_action_restart_server) to { Actions.restartServer(c) },
             c.getString(R.string.dev_action_aa_settings) to { Actions.openAaSettings(c) },
             c.getString(R.string.dev_action_aa_selftest) to { Actions.aaSelftest(c) },
             c.getString(R.string.dev_action_mic_test) to { Actions.micTest(c) },
@@ -125,8 +122,6 @@ class DevScreen(host: MainActivity) : Screen(host) {
             if (pair.size == 1) r.addView(View(c), lp(0, c.dp(52), 1f))
             body.addView(r, lp(MATCH, WRAP))
         }
-        enableSvc = c.tonalButton(c.getString(R.string.dev_action_enable_autostart)).apply { setOnClickListener { Actions.enableServiceDialog(c) } }
-        body.addView(enableSvc, lp(MATCH, c.dp(52)))
 
         body.addView(c.sectionTitle(c.getString(R.string.dev_section_status)))
         statusView = c.text("", 12f, 400, c.clr(R.color.on), monospace = true).apply {
@@ -398,8 +393,7 @@ class DevScreen(host: MainActivity) : Screen(host) {
 
     override fun tick() {
         val c = ctx
-        statusView.text = CarLifeState.summary() + "\n" + AaState.summary() + "\n" + AutoServer.summary(c)
-        enableSvc.visibility = if (AutoServer.isConnected) View.GONE else View.VISIBLE
+        statusView.text = CarLifeState.summary() + "\n" + AaState.summary()
         val lines = AppLog.lastLines()
         val joined = lines.joinToString("\n")
         if (joined == lastLog) return

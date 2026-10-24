@@ -50,9 +50,7 @@
     <string name="dev_section_actions">Действия</string>
     <string name="dev_action_scan">Сканировать</string>
     <string name="dev_action_stop_bridge">Стоп моста</string>
-    <string name="dev_action_restart_server">Перезапуск сервера ГУ</string>
     <string name="dev_action_aa_settings">Настройки AA</string>
-    <string name="dev_action_enable_autostart">Включить автозапуск сервера</string>
 
     <string name="dev_section_status">Статус</string>
     <string name="dev_section_log">Лог</string>

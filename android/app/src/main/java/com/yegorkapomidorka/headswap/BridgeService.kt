@@ -31,11 +31,7 @@ import com.yegorkapomidorka.headswap.aa.EqLive
 import com.yegorkapomidorka.headswap.aa.MetaRelay
 import com.yegorkapomidorka.headswap.aa.MicMode
 import com.yegorkapomidorka.headswap.aa.PhoneMicCapture
-import com.yegorkapomidorka.headswap.aa.ServerPhase
 import com.yegorkapomidorka.headswap.aa.VideoGeometry
-import com.yegorkapomidorka.headswap.autosrv.AutoServer
-import com.yegorkapomidorka.headswap.autosrv.AutoServerPolicy
-import com.yegorkapomidorka.headswap.autosrv.Trigger
 import com.yegorkapomidorka.headswap.link.CarTransport
 import com.yegorkapomidorka.headswap.link.LinkSetupException
 import com.yegorkapomidorka.headswap.link.StreamTransport
@@ -146,8 +142,6 @@ class BridgeService : Service() {
             onWifi = { on -> main.post { onP2pWifi(on) } },
         )
     }
-    /** Автозапуск пропущен из-за неподключённой службы спецвозможностей: RETRY запустит его, когда она появится. */
-    @Volatile private var serverStartPending = false
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "bridge-grace").also { it.isDaemon = true } }
 
     private val detachReceiver = object : BroadcastReceiver() {
@@ -858,7 +852,6 @@ class BridgeService : Service() {
             val conn = AaConnector(
                 core, loaded.creds, log,
                 options = { AapOptions(sdProvider = { mode.sdOptions(fullAudio = core.audioViaUsb, densityOverride = densityOverride, carMake = aaPrefs.carMake) }) },
-                serverPrep = { phase -> prepareServer(core, phase) },
             )
             AppLog.i("BRIDGE звук по USB: ${if (aaPrefs.usbAudio) "включён (решение по FEATURE_CONFIG ГУ)" else "выключен в UI"}")
             AppLog.i("BRIDGE: AA cert=${loaded.creds.certSet}, grace=${BridgeHost.GRACE_MS} мс")
@@ -902,47 +895,6 @@ class BridgeService : Service() {
             AppLog.e("сервис: foreground-тип с microphone не дали, остаюсь на connectedDevice", e)
             startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         }
-    }
-
-    /**
-     * Автозапуск сервера ГУ AA на нити коннектора: до первой попытки подключения (USB подключён), после конца
-     * AA-сессии и после блокировки экрана. Ждём окончания не дольше AutoServerPolicy.waitMs, дальше коннектор идёт как обычно.
-     */
-    private fun prepareServer(core: AaBridgeCore, phase: ServerPhase) {
-        val trigger = when (phase) {
-            ServerPhase.FIRST -> Trigger.USB_ATTACH
-            ServerPhase.AFTER_SESSION -> Trigger.AFTER_SESSION
-            ServerPhase.RETRY -> Trigger.RETRY
-        }
-        val autoPref = AaPrefs(this).autoServer
-        // после старта процесса служба спецвозможностей подключается позже сервиса: даём ей время
-        if (trigger != Trigger.RETRY && autoPref && !AutoServer.isConnected && AutoServer.isListed(this)) {
-            AutoServer.log("жду подключения службы спецвозможностей (${trigger.label})")
-            AutoServer.awaitService(SERVICE_WAIT_MS)
-        }
-        val skip = AutoServerPolicy.skipReason(
-            trigger, autoPref, AutoServer.isConnected,
-            // беспровод: пока ждём машину по Wi-Fi или она подключена, сервер перезапускать есть для кого
-            usbAlive = core.hasCarlifeLink || wifiBMode, warmAaSession = false, lastLocked = AutoServer.lastLocked,
-            startPending = serverStartPending, consentHold = AutoServer.consentPending(),
-        )
-        if (skip != null) {
-            if (skip == AutoServerPolicy.CONSENT_SKIP) core.showStatus(AaBridgeCore.TEXT_AA_CONSENT)
-            if (trigger != Trigger.RETRY && !AutoServer.isConnected) serverStartPending = true
-            // RETRY вызывается каждые несколько секунд и почти всегда пропускается: молча
-            if (trigger != Trigger.RETRY) AutoServer.log("пропуск (${trigger.label}): $skip")
-            return
-        }
-        serverStartPending = false
-        core.showStatus(AutoServerPolicy.runningText(trigger))
-        val run = AutoServer.start(trigger)
-        val out = AutoServer.await(run, AutoServerPolicy.waitMs(trigger))
-        if (out == null) {
-            AutoServer.log("автоматизация ещё идёт после ${AutoServerPolicy.waitMs(trigger) / 1000} с, подключаюсь как обычно")
-            return
-        }
-        AutoServer.log("итог для коннектора (${trigger.label}): $out")
-        AutoServerPolicy.resultText(trigger, out.result)?.let { core.showStatus(it) }
     }
 
     /** Старт не удался: если жив AA-хост (идёт grace), сервис не гасим, иначе finish. */
@@ -1046,8 +998,6 @@ class BridgeService : Service() {
         /** Сервис создан и не уничтожен (один процесс): ресиверу ACL незачем будить пустой сервис ради отбоя. */
         @Volatile var alive = false
             private set
-        /** Сколько автозапуск ждёт подключения включённой службы спецвозможностей. */
-        private const val SERVICE_WAIT_MS = 3_000L
         /** debug tcp6: сколько ждать все 6 сокетов ГУ. */
         private const val TCP6_WAIT_MS = 60_000L
         /** Ветка B: сколько маячить и ждать ГУ (человек включает хотспот и открывает CarLife на ГУ). */

@@ -14,7 +14,6 @@ import android.provider.Settings
 import com.yegorkapomidorka.headswap.AppLog
 import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.aa.AaPrefs
-import com.yegorkapomidorka.headswap.autosrv.AutoServer
 
 /** Всё, что надо включить перед поездкой: порядок, тексты, автоопределение «уже сделано». Общее для онбординга и чеклиста. */
 enum class StepId(val key: String) {
@@ -44,9 +43,7 @@ class StepInfo(
     /** Короткое название для чеклиста. */
     val short: Int,
 ) {
-    /** Тело шага: в тексте службы автозапуска подставляется её название из настроек спецвозможностей. */
-    fun bodyText(ctx: Context): String =
-        if (id == StepId.AUTOSTART) ctx.getString(body, ctx.getString(R.string.autosrv_label)) else ctx.getString(body)
+    fun bodyText(ctx: Context): String = ctx.getString(body)
 }
 
 object Readiness {
@@ -67,7 +64,7 @@ object Readiness {
             StepId.AUTOSTART, R.string.step_autostart_title,
             R.string.step_autostart_body,
             R.string.step_autostart_hint,
-            R.string.step_autostart_primary, R.string.step_autostart_extra, R.string.onb_skip, R.string.step_autostart_title,
+            R.string.step_autostart_primary, null, R.string.onb_skip, R.string.step_autostart_title,
         ),
         StepInfo(
             StepId.NOTIF, R.string.step_notif_title,
@@ -119,7 +116,6 @@ object Readiness {
 
     /** true/false - определено автоматически; null - определить нельзя (только ручная отметка «Уже сделано»). */
     fun auto(ctx: Context, id: StepId): Boolean? = when (id) {
-        StepId.AUTOSTART -> AutoServer.isConnected
         StepId.NOTIF -> ctx.getSystemService(NotificationManager::class.java).areNotificationsEnabled() &&
             (Build.VERSION.SDK_INT < 33 || ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
         StepId.MIC -> ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED

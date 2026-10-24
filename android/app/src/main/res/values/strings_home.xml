@@ -8,7 +8,6 @@
     <string name="home_title_connecting">Connecting</string>
     <string name="home_title_lost">Connection lost</string>
     <string name="home_title_ready">Ready for the trip</string>
-    <string name="home_title_aa_consent">Set up Android Auto</string>
 
     <!-- Home screen: hero subtitles -->
     <string name="home_err_no_cert">No head unit certificate in the app build.</string>
@@ -20,9 +19,7 @@
     <string name="home_sub_aa_dropped">Android Auto disconnected. Restarting the head unit server.</string>
     <string name="home_sub_cable_ok">USB cable connected. Waiting for Android Auto.</string>
     <string name="home_sub_lost">Connection was lost for more than %1$d s. Restart the head unit server and reconnect the USB cable.</string>
-    <string name="home_sub_aa_consent">The Android Auto setup wizard is open on the phone. Tap \"Continue\", then \"OK\" and grant all permissions. Until the wizard is finished, Android Auto drops the connection.</string>
     <string name="home_sub_ready">Connect the phone to the head unit with a USB cable.</string>
-    <string name="home_sub_ready_auto">Connect the phone to the head unit with a USB cable. I will start the head unit server myself.</string>
 
     <!-- Home screen: stage labels -->
     <string name="home_stage_server">Head unit server</string>
@@ -45,9 +42,7 @@
     <string name="home_stage_closed">closed</string>
     <string name="home_stage_disconnected">disconnected</string>
     <string name="home_stage_started">started</string>
-    <string name="home_stage_auto">will start by itself</string>
     <string name="home_stage_wait_cable">waiting for cable</string>
-    <string name="home_stage_aa_consent">waiting for setup</string>
 
     <!-- Home screen: widgets -->
     <string name="home_settings">Settings</string>
@@ -69,8 +64,6 @@
     <string name="notif_restart_title">Restart the head unit server</string>
     <string name="notif_lost">Connection lost for more than %1$d s</string>
     <string name="notif_server_started">Head unit server started</string>
-    <string name="notif_wait_cable">Waiting for cable</string>
-    <string name="notif_aa_consent">Finish the Android Auto setup on the phone</string>
 
     <!-- Onboarding mock screens (drawn illustrations of system UI) -->
     <string name="mock_aa_title">Android Auto settings</string>
@@ -80,8 +73,6 @@
     <string name="mock_aadev_title">Developer settings</string>
     <string name="mock_aadev_resolution">Video resolution</string>
     <string name="mock_aadev_unknown">Unknown sources</string>
-    <string name="mock_a11y_title">Accessibility</string>
-    <string name="mock_a11y_downloaded">Downloaded apps</string>
     <string name="mock_notif_now">Headswap · now</string>
     <string name="mock_notif_hint">Status in the notification shade, even with the screen off</string>
     <string name="mock_bg_title">Headswap · App info</string>

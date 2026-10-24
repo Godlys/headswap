@@ -233,7 +233,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         if (done && s.id != StepId.FIRST) { next(); return }
         when (s.id) {
             StepId.AA_DEV, StepId.AA_UNKNOWN -> Actions.openAaSettings(c)
-            StepId.AUTOSTART -> Actions.openAccessibilitySettings(c)
+            StepId.AUTOSTART -> Actions.startServerFromUi(c)
             StepId.NOTIF -> requestNotifications()
             StepId.BACKGROUND -> if (!Readiness.batteryOk(c)) Readiness.requestIgnoreBattery(c) else Readiness.openXiaomiAutostart(c)
             StepId.MIC -> requestMic()
@@ -247,7 +247,6 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
     private fun onExtra(s: StepInfo) {
         try {
             when (s.id) {
-                StepId.AUTOSTART -> Readiness.appDetails(ctx)
                 StepId.BACKGROUND -> Readiness.openXiaomiAutostart(ctx)
                 else -> {}
             }
@@ -260,7 +259,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         if (done && s.id != StepId.FIRST) { stepBack(); return }
         when (s.id) {
             StepId.FIRST -> stepBack()
-            StepId.AA_DEV, StepId.AA_UNKNOWN, StepId.BACKGROUND, StepId.BLUETOOTH, StepId.LOCATION -> { ui.setManualDone(s.id.key, true); next() }
+            StepId.AA_DEV, StepId.AA_UNKNOWN, StepId.AUTOSTART, StepId.BACKGROUND, StepId.BLUETOOTH, StepId.LOCATION -> { ui.setManualDone(s.id.key, true); next() }
             else -> next()
         }
     }

@@ -8,8 +8,6 @@ import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.aa.AaCreds
 import com.yegorkapomidorka.headswap.aa.AaPrefs
 import com.yegorkapomidorka.headswap.aa.AaState
-import com.yegorkapomidorka.headswap.autosrv.AutoResult
-import com.yegorkapomidorka.headswap.autosrv.AutoServer
 
 /** Сводка состояния для главного экрана и уведомления. Чистая логика без Android: считается из Inputs. */
 enum class Phase { OFF, WAITING, CONNECTED, RECONNECTING, ERROR }
@@ -48,8 +46,6 @@ class Inputs(
     val protocolKnown: Boolean,
     /** Сервер ГУ AA запущен (по нашему запуску), пока сессии нет. */
     val serverUp: Boolean,
-    /** Автозапуск включён и служба спецвозможностей подключена: сервер поднимется сам при подключении кабеля. */
-    val autoReady: Boolean,
     /** Предыдущая сессия оборвалась не по кнопке «Стоп». */
     val lost: Boolean,
     val graceLeftS: Int,
@@ -59,8 +55,6 @@ class Inputs(
     val setupError: UiText? = null,
     /** Размер видео на ГУ («1280×720»): фактический режим сессии. */
     val videoRes: String = "1280×720",
-    /** На телефоне висит мастер первой настройки Android Auto (согласие/разрешения): пока не пройден, AA рвёт связь. */
-    val aaConsent: Boolean = false,
     /** Сессия идёт по Wi-Fi: CarLife и звук идут к ГУ по воздуху, кабеля нет. */
     val wireless: Boolean = false,
 )
@@ -90,17 +84,6 @@ object HomeLogic {
                 ),
                 logLink = true,
                 notifTitle = UiText.res(R.string.home_title_no_bridge), notifText = i.setupError,
-            )
-            i.aaConsent && i.bridgeRunning -> state(
-                Phase.WAITING, Tone.WARN, HeroIcon.ALERT, UiText.res(R.string.home_title_aa_consent),
-                UiText.res(R.string.home_sub_aa_consent),
-                listOf(
-                    StageState.DONE to UiText.res(R.string.home_stage_working), StageState.DONE to CARLIFE,
-                    StageState.ACTIVE to UiText.res(R.string.home_stage_aa_consent),
-                    StageState.PEND to NONE, StageState.PEND to NONE,
-                ),
-                outline = OutlineAction.OPEN_AA,
-                notifText = UiText.res(R.string.notif_aa_consent),
             )
             reconnecting -> {
                 val left = i.graceLeftS.coerceAtLeast(0)
@@ -169,16 +152,16 @@ object HomeLogic {
                 primary = PrimaryAction.RESTART_SERVER, logLink = true,
                 notifTitle = UiText.res(R.string.notif_restart_title), notifText = UiText.res(R.string.notif_lost, total),
             )
-            i.serverUp || i.autoReady -> state(
+            i.serverUp -> state(
                 Phase.WAITING, Tone.PRI, HeroIcon.PLUG, UiText.res(R.string.home_title_ready),
-                UiText.res(if (i.serverUp) R.string.home_sub_ready else R.string.home_sub_ready_auto),
+                UiText.res(R.string.home_sub_ready),
                 listOf(
-                    StageState.DONE to UiText.res(if (i.serverUp) R.string.home_stage_started else R.string.home_stage_auto),
+                    StageState.DONE to UiText.res(R.string.home_stage_started),
                     StageState.ACTIVE to UiText.res(R.string.home_stage_wait_cable),
                     StageState.PEND to NONE, StageState.PEND to NONE, StageState.PEND to NONE,
                 ),
                 outline = OutlineAction.OPEN_AA,
-                notifText = UiText.res(if (i.serverUp) R.string.notif_server_started else R.string.notif_wait_cable),
+                notifText = UiText.res(R.string.notif_server_started),
             )
             else -> state(
                 Phase.OFF, Tone.WARN, HeroIcon.POWER, UiText.res(R.string.home_title_off), TEXT_START_CHAIN,
@@ -205,7 +188,7 @@ object HomeLogic {
 }
 
 /**
- * Наблюдаемая сводка (только чтение из CarLifeState/AaState/AutoServer + то, что сама знает UI-часть):
+ * Наблюдаемая сводка (только чтение из CarLifeState/AaState + то, что сама знает UI-часть):
  * собирает Inputs и помнит переходы (оборвалась ли сессия, когда подключились, до какого момента держится grace).
  * Вызывается с главной нити: экраном и тикером уведомления.
  */
@@ -215,7 +198,6 @@ object HeadswapStatus {
     private var userStopped = false
     private var lost = false
     private var serverUp = false
-    private var lastOutcome: Any? = null
     private var graceDeadline = 0L
     private var graceTotalS = 0
     var connectedSince = 0L
@@ -272,12 +254,6 @@ object HeadswapStatus {
         }
         prevRunning = running
 
-        val last = AutoServer.last
-        if (last !== lastOutcome) {
-            lastOutcome = last
-            if (last?.result == AutoResult.OK && !running) serverUp = true
-        }
-
         val aaPrefs = AaPrefs(ctx)
         val left = if (graceDeadline > 0) ((graceDeadline - now + 999) / 1000).toInt() else -1
         return Inputs(
@@ -285,7 +261,6 @@ object HeadswapStatus {
             aaStatus = st,
             protocolKnown = CarLifeState.protocol != "-",
             serverUp = serverUp,
-            autoReady = aaPrefs.autoServer && AutoServer.isConnected,
             lost = lost,
             graceLeftS = left,
             graceTotalS = graceTotalS,
@@ -293,7 +268,6 @@ object HeadswapStatus {
             // известный текст нет-сертификата подменяем ресурсом, остальные ошибки показываем как есть
             setupError = AaState.setupError?.let { if (it == AaCreds.MISSING_TEXT) UiText.res(R.string.home_err_no_cert) else UiText.raw(it) },
             videoRes = (CarLifeState.videoMode ?: aaPrefs.videoGeometry.effective(aaPrefs.transcode)).outLabel,
-            aaConsent = AutoServer.consentPending(),
             wireless = CarLifeState.wirelessSession,
         )
     }

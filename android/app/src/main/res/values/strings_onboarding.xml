@@ -12,11 +12,10 @@
     <string name="step_aa_unknown_primary">Open Android Auto settings</string>
     <string name="step_aa_unknown_short">Unknown sources</string>
 
-    <string name="step_autostart_title">Auto-start head unit server</string>
-    <string name="step_autostart_body">Turn on the accessibility service “%1$s”. It starts the head unit server by itself when you plug in the USB cable. The service sees only Android Auto windows.</string>
-    <string name="step_autostart_hint">If the item is grayed out: Settings → Apps → Headswap → ⋮ → “Allow restricted settings”. Without the service you must start the server by hand before every trip: Android Auto → ⋮ → “Start head unit server”.</string>
-    <string name="step_autostart_primary">Open Accessibility</string>
-    <string name="step_autostart_extra">Allow restricted settings</string>
+    <string name="step_autostart_title">Start the head unit server</string>
+    <string name="step_autostart_body">Open Android Auto, tap ⋮ at the top right and choose “Start head unit server”.</string>
+    <string name="step_autostart_hint">You only need to turn it on once: the head unit server keeps running in the background, Headswap does not turn it off. If Android closes it on its own, turn it on again from the Android Auto settings. There is no auto-start through accessibility any more, so the head unit server has to be started by hand.</string>
+    <string name="step_autostart_primary">Open Android Auto</string>
 
     <string name="step_notif_title">Notifications</string>
     <string name="step_notif_body">Headswap shows its status in the notification shade, and the system keeps the bridge running while the screen is off.</string>

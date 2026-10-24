@@ -11,11 +11,10 @@
     <string name="step_aa_unknown_primary">Открыть настройки Android Auto</string>
     <string name="step_aa_unknown_short">Неизвестные источники</string>
 
-    <string name="step_autostart_title">Автозапуск сервера ГУ</string>
-    <string name="step_autostart_body">Включите службу спецвозможностей «%1$s»: она сама запускает сервер ГУ при подключении кабеля. Служба видит только окна Android Auto.</string>
-    <string name="step_autostart_hint">Если пункт серый: Настройки → Приложения → Headswap → ⋮ → «Разрешить ограниченные настройки». Без службы сервер придётся запускать вручную перед каждой поездкой: Android Auto → ⋮ → «Вкл. сервер головного устр-ва».</string>
-    <string name="step_autostart_primary">Открыть спецвозможности</string>
-    <string name="step_autostart_extra">Разрешить ограниченные настройки</string>
+    <string name="step_autostart_title">Запустите сервер ГУ</string>
+    <string name="step_autostart_body">Откройте Android Auto, нажмите ⋮ вверху справа и выберите «Вкл. сервер головного устр-ва».</string>
+    <string name="step_autostart_hint">Достаточно включить один раз: сервер ГУ остаётся работать в фоне, Headswap его не выключает. Если Android всё же закроет его сам, включите снова, открыв настройки AA. Автозапуска через спецвозможности больше нет, теперь нужно включать сервер ГУ вручную.</string>
+    <string name="step_autostart_primary">Открыть Android Auto</string>
 
     <string name="step_notif_title">Уведомления</string>
     <string name="step_notif_body">Покажу статус в шторке, и система не выгрузит мост, пока экран погашен.</string>

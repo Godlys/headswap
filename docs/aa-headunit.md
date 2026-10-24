@@ -33,7 +33,7 @@
 - Никакого интента/компонента Gearhead для запуска проекции не требуется: приложение делает `Socket.connect(127.0.0.1:5277, timeout 5000)` (`HUR/connection/projection/SocketProjectionConnection.kt:174-177`), loopback не привязывается к сети (`LoopbackBindPolicy.kt:19-33`, `SocketProjectionConnection.kt:75`) **[П]**. Нужен только `INTERNET` (`AndroidManifest.xml:66`).
 - Сервер AA не говорит на AAP сам: "это прокси, не AAP-сервер: принимает сокет, передаёт его своему car service по binder и ждёт без таймаута. Accept-цикл последовательный: пока одно соединение висит, все следующие стоят в backlog, не обслуживаются и не закрываются" (`HUR/connection/UnresponsivePeerPolicy.kt:6-11`) **[П]**. Следствия: (а) одно соединение на жизнь сервера, нельзя "пробовать и закрывать"; (б) если прошлая сессия оборвалась без чистого закрытия, сервер глохнет (`HUR/connection/TeardownGuard.kt:6`, `HUR/connection/wifi/LinkLossTeardownPolicy.kt:20`) и лечится только Stop/Start сервера руками, а иногда Force stop AA (`HUR/aap/AapTransport.kt:1041-1050`) **[П]**.
 - Сервер привязан к loopback (README: "or on the same device (Self-Mode)"); также достижим по Wi-Fi IP телефона для внешних ГУ (README, wiki). **[П]**
-- Запустить сервер программно из стороннего приложения headunit-revived не умеет: на ветке 5277 приложение просто показывает тост "запустите Headunit Server в Developer Settings" и открывает `com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity` (`SelfLauncherV17_4.kt:17-25`, `SelfLauncherManager.kt:73-94`) **[П]**. Автозапуск сервера в нашем приложении сделан через службу спецвозможностей, см. п.10.
+- Запустить сервер программно из стороннего приложения headunit-revived не умеет: на ветке 5277 приложение просто показывает тост "запустите Headunit Server в Developer Settings" и открывает `com.google.android.projection.gearhead.companion.settings.DefaultSettingsActivity` (`SelfLauncherV17_4.kt:17-25`, `SelfLauncherManager.kt:73-94`) **[П]**. Автозапуск через службу спецвозможностей в нашем приложении был и убран (см. п.10), сервер включает пользователь.
 
 ### 1.3 Ветка LEGACY (AA < 17.4, нами не используется)
 
@@ -316,9 +316,9 @@ HU предъявляет клиентский сертификат: публи�
 
 ---
 
-## 10. Автозапуск сервера ГУ (2026-10-07)
+## 10. Автозапуск сервера ГУ (2026-10-07, убран 2026-10-24)
 
-Реализовано в `android/.../autosrv/` (AccessibilityService `AutoServerService`, конфиг `res/xml/autosrv_config.xml`, только пакет gearhead, `canRetrieveWindowContent`, клики `performAction(ACTION_CLICK)`). Лог с префиксом `AUTOSRV`. Названия пунктов меню в AA 17.7 (ресурсы `menu_action_developer_head_unit_network_server[_stop]`) **[П]**:
+Служба спецвозможностей (`autosrv/`, AccessibilityService) нажимала пункты меню AA сама. Убрана: сервер ГУ теперь включает пользователь (⋮ -> «Вкл. сервер головного устр-ва»), приложение лишь открывает настройки AA. Заодно приложение само не закрывает живую AA-сессию (смена видео-режима и DPI применяется после перезапуска сервера): сервер одноразовый, перезапустить его некому. Ниже описание того, как служба работала, и названия пунктов меню. Названия пунктов меню в AA 17.7 (ресурсы `menu_action_developer_head_unit_network_server[_stop]`) **[П]**:
 
 | | en | ru |
 |---|---|---|
@@ -328,7 +328,7 @@ HU предъявляет клиентский сертификат: публи�
 
 Настройки AA в 17.7 открываются как `Material3SettingsActivity` (редирект с `DefaultSettingsActivity`), у тулбара `ImageView desc='Ещё' clickable=true` **[П]**.
 
-Сценарий (`ServerAutomation`, проверен JVM-тестами на поддельном экране): экран включён и без keyguard -> `startActivity(DefaultSettingsActivity, NEW_TASK|CLEAR_TASK)` -> «Ещё» -> если есть «Остановить»: нажать, подождать, снова «Ещё», дождаться «Запустить» (до 5 попыток), нажать -> проверка (меню снова, там должен быть «Остановить») -> возврат в приложение (`MainActivity` с `cmd=front`). Триггеры (`Trigger`): кнопка / `--es cmd aa_server_restart [--ei delay_s N]`, USB_ATTACH (до первой попытки `AaConnector`, ждём до 8 с, потом коннектор как обычно), AFTER_SESSION (AA-сессия кончилась, USB жив, ждём до 12 с), RETRY (прошлая попытка упёрлась в блокировку, пока сервера нет). Заблокированный телефон: на ГУ заглушка «Разблокируйте телефон».
+Сценарий службы (`ServerAutomation`, удалена; проверен JVM-тестами на поддельном экране): экран включён и без keyguard -> `startActivity(DefaultSettingsActivity, NEW_TASK|CLEAR_TASK)` -> «Ещё» -> если есть «Остановить»: нажать, подождать, снова «Ещё», дождаться «Запустить» (до 5 попыток), нажать -> проверка (меню снова, там должен быть «Остановить») -> возврат в приложение (`MainActivity` с `cmd=front`). Триггеры (`Trigger`): кнопка / `--es cmd aa_server_restart [--ei delay_s N]`, USB_ATTACH (до первой попытки `AaConnector`, ждём до 8 с, потом коннектор как обычно), AFTER_SESSION (AA-сессия кончилась, USB жив, ждём до 12 с), RETRY (прошлая попытка упёрлась в блокировку, пока сервера нет). Заблокированный телефон: на ГУ заглушка «Разблокируйте телефон».
 
 Включить службу: Настройки -> Спецвозможности. На этом телефоне (HyperOS, Android 16) `adb shell settings put secure enabled_accessibility_services ...` и `pm grant ... WRITE_SECURE_SETTINGS` дают `SecurityException: must have WRITE_SECURE_SETTINGS` (нужен тумблер «USB-отладка (настройки безопасности)») **[П]**; включать руками. Для sideload-приложения пункт может быть серым: Настройки -> Приложения -> Headswap -> ⋮ -> «Разрешить ограниченные настройки» **[Д]**.
 

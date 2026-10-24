@@ -30,11 +30,11 @@ object Mocks {
             )
         }
         StepId.AUTOSTART -> ctx.vbox(10).apply {
-            addView(ctx.label(ctx.getString(R.string.mock_a11y_title)))
+            addView(ctx.label(ctx.getString(R.string.mock_aa_title)))
             addView(
                 ctx.list(
-                    ctx.row(ctx.getString(R.string.mock_a11y_downloaded)),
-                    ctx.row(ctx.getString(R.string.autosrv_label), hi = true, h = 64, trailing = ctx.fakeSwitch()),
+                    ctx.row(ctx.getString(R.string.mock_aa_cars)),
+                    ctx.row(ctx.getString(R.string.step_autostart_primary), hi = true, h = 56),
                 ),
             )
         }
