@@ -433,7 +433,7 @@ class AaBridgeCoreTest {
         c.onCarlifeTouch(2, 13, 13)
         c.onCarlifeTouch(2, 14, 14)
         assertEquals(listOf(Triple(0, 10, 10), Triple(2, 11, 11)), peer.touches.toList())
-        timers.advance(TouchBurstPacer.DEFAULT_STEP_MS)
+        timers.advance(TouchBurstPacer.DEFAULT_INTERVAL_MS / 4)  // пачка из 4: шаг = интервал / 4
         assertEquals(Triple(2, 12, 12), peer.touches.last())
         assertEquals(3, peer.touches.size)                    // остальные ещё в очереди
         c.onCarlifeTouch(1, 14, 14)                           // UP: сначала очередь, потом UP
@@ -951,6 +951,82 @@ class AaBridgeAudioTest {
     }
 
     @Test
+    fun ttsPrerollSettingSendsZerosOnAnyHuAndAutoSkipsNonVw() {
+        core.ttsPrerollProvider = { TtsPreroll.MS100 }
+        core.onHuStatistic("20622116")                                   // не VW
+        core.onCarlifeStart()
+        core.onAudioData(SPEECH, pcm(640), 1)
+        val tts = link.audio.filter { it.chan == 4 }
+        assertEquals(listOf(0x40001, 0x40003, 0x40003), tts.map { it.type })
+        assertEquals(3200, tts[1].payload.size)                          // 100 мс 16 кГц моно, одним куском (< 4096)
+        assertTrue(tts[1].payload.all { it == 0.toByte() })
+        assertEquals(1, logs.count { it.contains("пре-ролл 100 мс тишины (3200 Б)") })
+        // Авто на не-VW: пре-ролла нет
+        val link2 = FakeLink()
+        val c2 = AaBridgeCore({ _, _ -> }, audioSchedule = timers::schedule).also { it.attach(link2) }
+        c2.ttsPrerollProvider = { TtsPreroll.AUTO }
+        c2.onCarlifeStart()
+        c2.onAudioData(SPEECH, pcm(640), 1)
+        assertEquals(listOf(0x40001, 0x40003), link2.audio.map { it.type })
+    }
+
+    @Test
+    fun ttsPrerollOffSkipsPrerollOnVw() {
+        core.ttsPrerollProvider = { TtsPreroll.MS0 }
+        core.onHuStatistic("20082122")
+        core.onCarlifeStart()
+        core.onAudioData(SPEECH, pcm(640), 1)
+        assertEquals(listOf(0x40001, 0x40003), link.audio.map { it.type })
+    }
+
+    @Test
+    fun voiceChunkAutoOnDelphiSplitsVrSpeechIntoKib() {
+        core.onHuStatistic("20082114")
+        core.micModeProvider = { MicMode.CAR }
+        core.onCarlifeStart()
+        core.onVoiceSession(1)
+        val s = pcm(2048, 3)
+        core.onAudioData(SPEECH, s, 1)
+        val data = link.audio.filter { it.type == 0x50003 }
+        assertEquals(listOf(1024, 1024), data.map { it.payload.size })
+        assertArrayEquals(s, data.flatMap { it.payload.toList() }.toByteArray())
+        assertEquals(1, logs.count { it.contains("BRIDGE голос: пакеты по 1024 Б (авто ГУ)") })
+    }
+
+    @Test
+    fun voiceChunkSettingSplitsTtsOnNonDelphi() {
+        core.voiceChunkProvider = { VoiceChunk.B512 }
+        core.onCarlifeStart()
+        val s = pcm(2048, 4)
+        core.onAudioData(SPEECH, s, 1)
+        assertEquals(0x40001, link.audio[0].type)
+        val data = link.audio.drop(1)
+        assertEquals(List(4) { 0x40003 }, data.map { it.type })
+        assertEquals(List(4) { 512 }, data.map { it.payload.size })
+        assertArrayEquals(s, data.flatMap { it.payload.toList() }.toByteArray())
+        assertEquals(1, logs.count { it.contains("BRIDGE голос: пакеты по 512 Б (настройка)") })
+    }
+
+    @Test
+    fun voiceChunkAutoOnOtherHuKeepsAaPacketWhole() {
+        core.onCarlifeStart()
+        core.onAudioData(SPEECH, pcm(2048), 1)
+        assertEquals(listOf(0x40001, 0x40003), link.audio.map { it.type })
+        assertEquals(2048, link.audio[1].payload.size)
+        assertEquals(0, logs.count { it.contains("BRIDGE голос") })
+    }
+
+    @Test
+    fun voiceChunkSizesPrerollZerosWhenSet() {
+        core.voiceChunkProvider = { VoiceChunk.B1024 }
+        core.onHuStatistic("20082122")                                   // VW CNS3, Авто пре-ролл 400 мс = 12800 Б
+        core.onCarlifeStart()
+        core.onAudioData(SPEECH, pcm(640), 1)
+        val pre = link.audio.filter { it.chan == 4 }.drop(1).dropLast(1)
+        assertEquals(List(12) { 1024 } + 512, pre.map { it.payload.size })
+    }
+
+    @Test
     fun ttsStartStopStartWithinOneSecondGivesOneInitAndNoStopBetween() {
         core.onCarlifeStart()
         core.onAudioStart(SPEECH)
@@ -1044,9 +1120,10 @@ class AaBridgeAudioTest {
         core.onAudioData(SPEECH, s, 2)
         core.onAudioStop(SPEECH)
         val vr = link.audio.filter { it.chan == 5 }
-        assertEquals(listOf(0x50002, 0x50003, 0x50003, 0x50004), vr.map { it.type })
+        assertEquals(listOf(0x50002, 0x50003, 0x50003, 0x50003, 0x50003, 0x50004), vr.map { it.type })
         assertEquals("08807d10011810", hexs(vr[0].payload))             // {16000, 1, 16}
-        assertArrayEquals(s, vr[1].payload)
+        assertArrayEquals(s.copyOfRange(0, 1024), vr[1].payload)        // Авто на Delphi: пакеты по 1024 Б
+        assertArrayEquals(s.copyOfRange(1024, 2048), vr[2].payload)
         assertTrue(link.audio.none { it.chan == 4 })
         assertTrue("VR=0 не раньше выхода из голоса", "M4=0" !in link.events)
         core.onVoiceSession(2)

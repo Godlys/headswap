@@ -30,6 +30,8 @@ import com.yegorkapomidorka.headswap.aa.AaState
 import com.yegorkapomidorka.headswap.aa.CustomResError
 import com.yegorkapomidorka.headswap.aa.CustomVideoMode
 import com.yegorkapomidorka.headswap.aa.MediaChunk
+import com.yegorkapomidorka.headswap.aa.TtsPreroll
+import com.yegorkapomidorka.headswap.aa.VoiceChunk
 import com.yegorkapomidorka.headswap.autosrv.AutoServer
 
 /** «Для разработчиков» (Dev.dc.html): отладочные флажки, кнопки, статус и живой лог (последние ~200 строк). */
@@ -53,6 +55,8 @@ class DevScreen(host: MainActivity) : Screen(host) {
     private val customVals = arrayOfNulls<TextView>(4)
     private var customUpdating = false
     private val chunkRows = LinkedHashMap<MediaChunk, RadioRow>()
+    private val voiceChunkRows = LinkedHashMap<VoiceChunk, RadioRow>()
+    private val ttsPrerollRows = LinkedHashMap<TtsPreroll, RadioRow>()
 
     /** AVC-энкодеры телефона (null = список получить не удалось, тогда размер не проверяем). Список не меняется, считаем один раз. */
     private val avcEncoders: List<MediaCodecInfo.VideoCapabilities>? by lazy {
@@ -104,6 +108,30 @@ class DevScreen(host: MainActivity) : Screen(host) {
             lp(WRAP, WRAP).margins(c, 8, 2, 8, 0),
         )
         refreshMediaChunk()
+
+        body.addView(c.sectionTitle(c.getString(R.string.dev_section_voice_chunk)))
+        for (m in VoiceChunk.values()) {
+            val row = RadioRow(c, c.getString(m.titleRes), "") { setVoiceChunk(m) }
+            voiceChunkRows[m] = row
+            body.addView(row.view, lp(MATCH, WRAP))
+        }
+        body.addView(
+            c.text(c.getString(R.string.dev_voice_chunk_note), 13f, 400, c.clr(R.color.on2)),
+            lp(WRAP, WRAP).margins(c, 8, 2, 8, 0),
+        )
+        refreshVoiceChunk()
+
+        body.addView(c.sectionTitle(c.getString(R.string.dev_section_tts_preroll)))
+        for (m in TtsPreroll.values()) {
+            val row = RadioRow(c, c.getString(m.titleRes), "") { setTtsPreroll(m) }
+            ttsPrerollRows[m] = row
+            body.addView(row.view, lp(MATCH, WRAP))
+        }
+        body.addView(
+            c.text(c.getString(R.string.dev_tts_preroll_note), 13f, 400, c.clr(R.color.on2)),
+            lp(WRAP, WRAP).margins(c, 8, 2, 8, 0),
+        )
+        refreshTtsPreroll()
 
         body.addView(c.sectionTitle(c.getString(R.string.dev_section_video)))
         body.addView(customResCard())
@@ -204,6 +232,24 @@ class DevScreen(host: MainActivity) : Screen(host) {
 
     private fun refreshMediaChunk() {
         for ((m, row) in chunkRows) row.setSelected(aa.mediaChunk == m)
+    }
+
+    private fun setVoiceChunk(m: VoiceChunk) {
+        aa.voiceChunk = m
+        refreshVoiceChunk()
+    }
+
+    private fun refreshVoiceChunk() {
+        for ((m, row) in voiceChunkRows) row.setSelected(aa.voiceChunk == m)
+    }
+
+    private fun setTtsPreroll(m: TtsPreroll) {
+        aa.ttsPreroll = m
+        refreshTtsPreroll()
+    }
+
+    private fun refreshTtsPreroll() {
+        for ((m, row) in ttsPrerollRows) row.setSelected(aa.ttsPreroll == m)
     }
 
     private fun row(title: String, sub: String, checked: Boolean, onChange: (Boolean) -> Unit) =

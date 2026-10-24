@@ -160,6 +160,19 @@
     <string name="mchunk_2048">2048 Б</string>
     <string name="mchunk_1024">1024 Б</string>
 
+    <!-- Размер пакета голоса (VoiceChunk) -->
+    <string name="vchunk_auto">Авто</string>
+    <string name="vchunk_2048">2048 Б</string>
+    <string name="vchunk_1024">1024 Б</string>
+    <string name="vchunk_512">512 Б</string>
+
+    <!-- Тишина перед подсказкой (TtsPreroll) -->
+    <string name="tpreroll_auto">Авто</string>
+    <string name="tpreroll_0">Нет</string>
+    <string name="tpreroll_100">100 мс</string>
+    <string name="tpreroll_200">200 мс</string>
+    <string name="tpreroll_400">400 мс</string>
+
     <!-- Frame rate (FpsSetting) -->
     <string name="fps_auto_title">Авто</string>
     <string name="fps_auto_sub">Как просит ГУ</string>

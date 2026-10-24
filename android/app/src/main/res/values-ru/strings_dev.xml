@@ -19,6 +19,10 @@
 
     <string name="dev_section_music_chunk">Размер пакета музыки (эксперимент)</string>
     <string name="dev_music_chunk_note">Мельче — меньше буфер на ГУ, но больше пакетов по USB. Если звук заикается, верните «Как отдаёт Android Auto»</string>
+    <string name="dev_section_voice_chunk">Размер пакета голоса (эксперимент)</string>
+    <string name="dev_voice_chunk_note">Речь ассистента и подсказки навигатора. Авто: 1024 Б на VW CNS2 Delphi, иначе как отдаёт AA</string>
+    <string name="dev_section_tts_preroll">Тишина перед подсказкой (эксперимент)</string>
+    <string name="dev_tts_preroll_note">Нули после начала подсказки, ГУ успевает открыть звук. Авто: 400 мс на VW</string>
 
 
     <string name="dev_section_video">Видео (с переподключения)</string>
