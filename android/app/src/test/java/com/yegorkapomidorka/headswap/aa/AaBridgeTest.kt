@@ -559,6 +559,29 @@ class AaBridgeCoreTest {
     }
 
     @Test
+    fun seekKeysAnswerCall() {
+        val peer = FakePeer()
+        core.peer = peer
+        var call = PhoneCall.RINGING
+        core.phoneCallProvider = { call }
+        core.onCarlifeHardKey(16)                             // чужое ГУ: перемотка как была
+        core.onCarlifeHardKey(0)                              // чужое ГУ: keycode 0 игнор
+        assertEquals(listOf(87), peer.keys.toList())
+        peer.keys.clear()
+        core.onHuStatistic("20082114")                        // VW CNS2 Delphi (Дмитрий)
+        core.onCarlifeHardKey(16)                             // звонит: вперёд = принять
+        core.onCarlifeHardKey(15)                             // звонит: назад = отклонить
+        call = PhoneCall.ACTIVE
+        core.onCarlifeHardKey(16)                             // разговор: вперёд глотаем
+        core.onCarlifeHardKey(15)                             // разговор: назад = положить трубку
+        call = PhoneCall.IDLE
+        core.onCarlifeHardKey(16)                             // без звонка снова перемотка
+        core.onCarlifeHardKey(0)                              // удержание перемотки = пауза/плей
+        assertEquals(listOf(5, 6, 6, 87, 85), peer.keys.toList())
+        assertTrue(logs.any { it.contains("руль keycode=16 -> AA KEYCODE 5 (звонок RINGING)") })
+    }
+
+    @Test
     fun selectorKnobToRotary() {
         val peer = FakePeer()
         core.peer = peer
