@@ -51,6 +51,11 @@ class UiPrefs(ctx: Context) {
         get() = sp.getBoolean("onboardingDone", false)
         set(v) = sp.edit().putBoolean("onboardingDone", v).apply()
 
+    /** Окно «Отказ от спецвозможностей» (2.6.0) уже показывали или оно не нужно (новичок прошёл онбординг). */
+    var a11yNoticeShown: Boolean
+        get() = sp.getBoolean("a11yNoticeShown", false)
+        set(v) = sp.edit().putBoolean("a11yNoticeShown", v).apply()
+
     /** Тема интерфейса: system / light / medium / dark (см. AppTheme). */
     var theme: String
         get() = sp.getString("theme", "system") ?: "system"
