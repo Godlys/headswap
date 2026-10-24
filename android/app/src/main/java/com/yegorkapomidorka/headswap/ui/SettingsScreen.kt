@@ -601,7 +601,11 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         if (!carBtGranted()) ask += Manifest.permission.BLUETOOTH_CONNECT
         // ветка A: вход в Wi-Fi Direct-группу ГУ; без него беспровод стартует, но только веткой B
         val p2p = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES else Manifest.permission.ACCESS_FINE_LOCATION
-        if (ctx.checkSelfPermission(p2p) != PackageManager.PERMISSION_GRANTED) ask += p2p
+        if (ctx.checkSelfPermission(p2p) != PackageManager.PERMISSION_GRANTED) {
+            ask += p2p
+            // Android 12 молча отклоняет FINE без COARSE в том же запросе
+            if (p2p == Manifest.permission.ACCESS_FINE_LOCATION) ask += Manifest.permission.ACCESS_COARSE_LOCATION
+        }
         if (ask.isNotEmpty()) {
             wlAwaitingPermission = true
             host.requestPermissions(ask.toTypedArray(), REQ_LOCAL_NETWORK)

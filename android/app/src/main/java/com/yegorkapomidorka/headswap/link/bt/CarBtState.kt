@@ -2,6 +2,7 @@ package com.yegorkapomidorka.headswap.link.bt
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
@@ -31,7 +32,7 @@ object CarBtState {
         if (adapter == null || !granted || !adapter.isEnabled) return done(false)
         try {
             if (mac == null) {      // адрес не нужен: прокси не поднимаем
-                return done(PROFILES.any { adapter.getProfileConnectionState(it) == BluetoothProfile.STATE_CONNECTED })
+                return done(PROFILES.any { adapter.getProfileConnectionState(it) == BluetoothAdapter.STATE_CONNECTED })
             }
         } catch (_: SecurityException) {
             return done(false)

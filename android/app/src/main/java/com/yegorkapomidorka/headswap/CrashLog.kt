@@ -1,5 +1,6 @@
 package com.yegorkapomidorka.headswap
 
+import android.annotation.TargetApi
 import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Context
@@ -76,6 +77,7 @@ object CrashLog {
     }
 
     /** ANR - текстовый дамп потоков; нативный краш - tombstone в protobuf (SDK 31+), из него берём печатные строки. */
+    @TargetApi(30)
     private fun dumpTrace(x: ApplicationExitInfo) {
         val bytes = try {
             x.traceInputStream?.use { s ->
