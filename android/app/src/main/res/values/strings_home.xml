@@ -4,22 +4,28 @@
     <string name="home_title_no_bridge">Bridge not started</string>
     <string name="home_title_reconnecting">Restoring connection</string>
     <string name="home_title_ok">All working</string>
-    <string name="home_title_off">Server not started</string>
+    <string name="home_title_off">Start the head unit server</string>
     <string name="home_title_connecting">Connecting</string>
     <string name="home_title_lost">Connection lost</string>
     <string name="home_title_ready">Ready for the trip</string>
 
     <!-- Home screen: hero subtitles -->
     <string name="home_err_no_cert">No head unit certificate in the app build.</string>
-    <string name="home_sub_start_chain">Start it before every trip: the server turns off after a session.</string>
+    <string name="home_sub_start_chain">Turn it on once: after that the server keeps running in the background, and you do not need to unlock the phone to connect.</string>
     <string name="home_sub_reconnecting">USB disconnected. The Android Auto session waits up to %1$d s.</string>
     <string name="home_sub_ok">Android Auto is on the car screen. You can put the phone away.</string>
     <string name="home_sub_ok_wifi">Android Auto is on the car screen over Wi-Fi, no cable. You can put the phone away.</string>
     <string name="home_sub_refused">USB cable connected, but the head unit server does not answer. %1$s</string>
-    <string name="home_sub_aa_dropped">Android Auto disconnected. Restarting the head unit server.</string>
+    <string name="home_sub_aa_dropped">Android Auto disconnected. Turn the head unit server on again.</string>
     <string name="home_sub_cable_ok">USB cable connected. Waiting for Android Auto.</string>
-    <string name="home_sub_lost">Connection was lost for more than %1$d s. Restart the head unit server and reconnect the USB cable.</string>
+    <string name="home_sub_lost">Connection was lost for more than %1$d s. Turn the head unit server on again: Android Auto → ⋮ → “Start head unit server”, then reconnect the USB cable.</string>
     <string name="home_sub_ready">Connect the phone to the head unit with a USB cable.</string>
+
+    <!-- Home screen: how to start the head unit server (bold = what to tap) -->
+    <string name="home_chain_label">How to start the head unit server</string>
+    <string name="home_chain_1">Tap <b>“Open Android Auto”</b></string>
+    <string name="home_chain_2">Three dots <b>⋮</b> at the top right</string>
+    <string name="home_chain_3"><b>“Start head unit server”</b></string>
 
     <!-- Home screen: stage labels -->
     <string name="home_stage_server">Head unit server</string>
@@ -36,7 +42,7 @@
     <string name="home_stage_working">working</string>
     <string name="home_stage_connected">connected</string>
     <string name="home_stage_off">off</string>
-    <string name="home_stage_not_started">not started</string>
+    <string name="home_stage_not_started">start it</string>
     <string name="home_stage_connecting">connecting</string>
     <string name="home_stage_handshake">handshake</string>
     <string name="home_stage_closed">closed</string>
@@ -46,8 +52,6 @@
 
     <!-- Home screen: widgets -->
     <string name="home_settings">Settings</string>
-    <string name="home_btn_start">Start head unit server</string>
-    <string name="home_btn_restart">Restart head unit server</string>
     <string name="home_btn_stop">Stop</string>
     <string name="home_btn_open_aa">Open Android Auto settings</string>
     <string name="home_btn_send_log">Send log to developers</string>

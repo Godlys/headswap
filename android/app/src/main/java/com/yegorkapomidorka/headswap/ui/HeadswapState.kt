@@ -121,7 +121,7 @@ object HomeLogic {
                 ),
             )
             refused -> state(
-                Phase.OFF, Tone.WARN, HeroIcon.POWER, UiText.res(R.string.home_title_off),
+                Phase.OFF, Tone.PRI, HeroIcon.POWER, UiText.res(R.string.home_title_off),
                 UiText.res(R.string.home_sub_refused, TEXT_START_CHAIN),
                 listOf(
                     StageState.TODO to UiText.res(R.string.home_stage_not_started), StageState.DONE to CARLIFE, StageState.PEND to NONE,
@@ -164,7 +164,7 @@ object HomeLogic {
                 notifText = UiText.res(R.string.notif_server_started),
             )
             else -> state(
-                Phase.OFF, Tone.WARN, HeroIcon.POWER, UiText.res(R.string.home_title_off), TEXT_START_CHAIN,
+                Phase.OFF, Tone.PRI, HeroIcon.POWER, UiText.res(R.string.home_title_off), TEXT_START_CHAIN,
                 listOf(
                     StageState.TODO to UiText.res(R.string.home_stage_not_started), StageState.PEND to NONE, StageState.PEND to NONE,
                     StageState.PEND to NONE, StageState.PEND to NONE,

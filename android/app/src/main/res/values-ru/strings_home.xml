@@ -4,22 +4,28 @@
     <string name="home_title_no_bridge">Мост не запущен</string>
     <string name="home_title_reconnecting">Восстанавливаю связь</string>
     <string name="home_title_ok">Всё работает</string>
-    <string name="home_title_off">Сервер не запущен</string>
+    <string name="home_title_off">Запустите сервер ГУ</string>
     <string name="home_title_connecting">Подключаюсь</string>
     <string name="home_title_lost">Связь потеряна</string>
     <string name="home_title_ready">Готов к поездке</string>
 
     <!-- Главный экран: подзаголовки -->
     <string name="home_err_no_cert">Нет сертификата head unit: положите cert.pem и key.pem в app/src/main/assets/aa/jvc/ (см. README)</string>
-    <string name="home_sub_start_chain">Запускайте перед каждой поездкой: после сессии сервер выключается.</string>
+    <string name="home_sub_start_chain">Включите один раз: дальше сервер работает в фоне, и для подключения телефон можно не разблокировать.</string>
     <string name="home_sub_reconnecting">USB отключился. Сессия Android Auto ждёт до %1$d с.</string>
     <string name="home_sub_ok">Android Auto на экране машины. Телефон можно убрать.</string>
     <string name="home_sub_ok_wifi">Android Auto на экране машины по Wi-Fi, без кабеля. Телефон можно убрать.</string>
     <string name="home_sub_refused">Кабель подключён, но сервер ГУ не отвечает. %1$s</string>
-    <string name="home_sub_aa_dropped">Android Auto отключился, перезапускаю сервер ГУ.</string>
+    <string name="home_sub_aa_dropped">Android Auto отключился. Снова включите сервер ГУ.</string>
     <string name="home_sub_cable_ok">Кабель подключён. Жду Android Auto.</string>
-    <string name="home_sub_lost">Обрыв дольше %1$d с. Перезапустите сервер ГУ и переподключите кабель.</string>
+    <string name="home_sub_lost">Обрыв дольше %1$d с. Снова включите сервер ГУ: Android Auto → ⋮ → «Вкл. сервер головного устр-ва», затем переподключите кабель.</string>
     <string name="home_sub_ready">Подключите телефон к магнитоле кабелем.</string>
+
+    <!-- Главный экран: как запустить сервер ГУ (жирное - то, что нажать) -->
+    <string name="home_chain_label">Как запустить сервер ГУ</string>
+    <string name="home_chain_1">Нажмите <b>«Открыть Android Auto»</b></string>
+    <string name="home_chain_2">Три точки <b>⋮</b> вверху справа</string>
+    <string name="home_chain_3"><b>«Вкл. сервер головного устр-ва»</b></string>
 
     <!-- Главный экран: названия этапов -->
     <string name="home_stage_server">Сервер ГУ</string>
@@ -35,7 +41,7 @@
     <string name="home_stage_working">работает</string>
     <string name="home_stage_connected">подключён</string>
     <string name="home_stage_off">выключен</string>
-    <string name="home_stage_not_started">не запущен</string>
+    <string name="home_stage_not_started">запустите</string>
     <string name="home_stage_connecting">подключаюсь</string>
     <string name="home_stage_handshake">рукопожатие</string>
     <string name="home_stage_closed">закрыт</string>
@@ -45,8 +51,6 @@
 
     <!-- Главный экран: элементы -->
     <string name="home_settings">Настройки</string>
-    <string name="home_btn_start">Запустить сервер ГУ</string>
-    <string name="home_btn_restart">Перезапустить сервер ГУ</string>
     <string name="home_btn_stop">Остановить</string>
     <string name="home_btn_open_aa">Открыть настройки AA</string>
     <string name="home_btn_send_log">Отправить лог разработчикам</string>

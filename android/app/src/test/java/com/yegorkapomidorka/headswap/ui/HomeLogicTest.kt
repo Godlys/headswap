@@ -33,6 +33,11 @@ class HomeLogicTest {
         assertEquals(Phase.OFF, s.phase)
         assertEquals(PrimaryAction.START_SERVER, s.primary)
         assertEquals(StageState.TODO, s.stages[0].second.first)
+        // сервер ГУ включает пользователь: янтарный тон (не warn), заголовок-призыв и блок из трёх пунктов
+        assertEquals(Tone.PRI, s.tone)
+        assertEquals(UiText.res(R.string.home_title_off), s.title)
+        assertEquals(UiText.res(R.string.home_sub_start_chain), s.sub)
+        assertEquals(true, s.showChain)
     }
 
     @Test
@@ -91,6 +96,8 @@ class HomeLogicTest {
     fun cableButServerRefusesIsOff() {
         val s = HomeLogic.compute(inp(running = true, status = "мост: жду сервер ГУ AA", protocol = true))
         assertEquals(Phase.OFF, s.phase)
+        assertEquals(Tone.PRI, s.tone)
+        assertEquals(true, s.showChain)
         assertEquals(StageState.DONE, s.stages[1].second.first)
     }
 
