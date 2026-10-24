@@ -260,6 +260,13 @@ class ServerFailures(private val now: () -> Long = { System.nanoTime() / 1_000_0
         worked = true
     }
 
+    /**
+     * Пора просить пользователя включить сервер (текст заглушки на ГУ): зависания подряд, отказ у сервера, который
+     * в этом процессе ещё не работал, или отказ дольше [START_HINT_REFUSED_MS] у работавшего (как HomeLogic.REFUSED_DOWN_MS).
+     */
+    fun needsStart(): Boolean =
+        versionHangs >= START_HINT_HANGS || (refusedSince != NONE && (!worked || refusedForMs >= START_HINT_REFUSED_MS))
+
     /** Любой другой исход (голый EOF, TLS и т.п.), начало и конец цикла коннектора. */
     fun reset() {
         refusedSince = NONE
@@ -268,6 +275,8 @@ class ServerFailures(private val now: () -> Long = { System.nanoTime() / 1_000_0
 
     private companion object {
         const val NONE = Long.MIN_VALUE
+        const val START_HINT_REFUSED_MS = 15_000L
+        const val START_HINT_HANGS = 2
     }
 }
 

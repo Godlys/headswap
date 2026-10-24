@@ -107,7 +107,7 @@ class AaBridgeCore(
     private var aaVideoSeen = false
     private var gotIdr = false
     private var active = Source.PLACEHOLDER
-    private var placeholderText = TEXT_START_SERVER
+    private var placeholderText = TEXT_CONNECTING
     private var waitSince = 0L
     private var lastKeyframeRequest = NEVER
     private var lastIdrSentMs = NEVER              // когда в CarLife ушёл последний IDR passthrough (h295)
@@ -307,7 +307,7 @@ class AaBridgeCore(
      */
     @Synchronized
     fun showStatus(text: String) {
-        if (active == Source.AA) return
+        if (active == Source.AA || text == placeholderText) return
         placeholderText = text
         link.showPlaceholder(text)
         log("BRIDGE заглушка: '$text'", true)
@@ -1794,9 +1794,10 @@ class AaBridgeCore(
             0x07 to -1,     // SELECTOR_PREVIOUS -> против часовой
         )
 
+        const val TEXT_CONNECTING = "Подключаю Android Auto..."
         const val TEXT_START_SERVER = "Запустите сервер ГУ в Android Auto"
         const val TEXT_WAIT_FRAME = "Android Auto: жду кадр..."
-        const val TEXT_AA_LOST = "Android Auto отключился, перезапустите сервер ГУ"
+        const val TEXT_AA_LOST = "Android Auto отключился, переподключаю..."
         const val DESAY_MANUFACTURER = "Desay SV Automotive"
         const val DESAY_G6S_MODEL = "G6S"
         const val DESAY_G6S_CHANNEL = "20622116"          // STATISTIC_INFO.channel у Mazda CX-5; Vezel - 20832125, другая Mazda - 21520001
@@ -1945,6 +1946,8 @@ class AaConnector(
                 s.connected && endReason.startsWith(AapSession.NO_VERSION_RESPONSE_REASON) -> failures.onNoVersionResponse()
                 else -> failures.reset()
             }
+            // на ГУ «Запустите сервер ГУ» только когда он правда не отвечает; короткий отказ после ByeBye - «Подключаю»
+            if (failures.needsStart()) core.showStatus(AaBridgeCore.TEXT_START_SERVER)
             if (!s.connected) {
                 if (!unavailableLogged) {
                     log("BRIDGE сервер ГУ Android Auto недоступен (connection refused), повторяю каждые ${retryMs / 1000.0} с", true)
