@@ -21,7 +21,6 @@ import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.aa.AaDensity
 import com.yegorkapomidorka.headswap.aa.AaPrefs
 import com.yegorkapomidorka.headswap.aa.AaState
-import com.yegorkapomidorka.headswap.autosrv.AutoServer
 import com.yegorkapomidorka.headswap.link.car.CarProfile
 import com.yegorkapomidorka.headswap.link.car.CarWifi
 import com.yegorkapomidorka.headswap.link.diag.NetProbe
@@ -241,7 +240,6 @@ object LogShare {
             appendLine("  прореживание тача: ${aa.touchDecimation.name}")
             appendLine("  мой автомобиль: ${aa.carPreset?.let { "${it.name}${if (aa.carSettings == it.settings) "" else ", настройки изменены вручную"}" } ?: "не выбрана"}")
             appendLine("  сертификат: ${aa.certSet}")
-            appendLine("  автозапуск сервера ГУ: ${aa.autoServer}")
             appendLine("  микрофон: ${aa.micMode.label}, MODULE_STATUS VR: ${aa.micVrStatus}")
             appendLine("  проверка обновлений: ${upd.enabled}, на GitHub: ${upd.release()?.version ?: "не проверялось"}")
             appendLine("  метаданные: музыка ${aa.metaMusic}, навигация ${aa.metaNavi}, поле 6 NAVI_NEXT_TURN_INFO: ${aa.naviField6}, прогресс в ${if (aa.progressSeconds) "с" else "мс"}")
@@ -249,7 +247,6 @@ object LogShare {
             appendLine("Данные ГУ и состояние")
             appendLine(CarLifeState.summary())
             appendLine(AaState.summary())
-            appendLine(AutoServer.summary(ctx))
             appendLine()
             appendLine("Беспровод")
             appendLine("  бета: ${BuildConfig.WIRELESS_BETA}")

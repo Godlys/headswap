@@ -107,7 +107,7 @@ class AaBridgeCore(
     private var aaVideoSeen = false
     private var gotIdr = false
     private var active = Source.PLACEHOLDER
-    private var placeholderText = TEXT_START_SERVER
+    private var placeholderText = TEXT_CONNECTING
     private var waitSince = 0L
     private var lastKeyframeRequest = NEVER
     private var lastIdrSentMs = NEVER              // когда в CarLife ушёл последний IDR passthrough (h295)
@@ -307,7 +307,7 @@ class AaBridgeCore(
      */
     @Synchronized
     fun showStatus(text: String) {
-        if (active == Source.AA) return
+        if (active == Source.AA || text == placeholderText) return
         placeholderText = text
         link.showPlaceholder(text)
         log("BRIDGE заглушка: '$text'", true)
@@ -1794,13 +1794,10 @@ class AaBridgeCore(
             0x07 to -1,     // SELECTOR_PREVIOUS -> против часовой
         )
 
+        const val TEXT_CONNECTING = "Подключаю Android Auto..."
         const val TEXT_START_SERVER = "Запустите сервер ГУ в Android Auto"
         const val TEXT_WAIT_FRAME = "Android Auto: жду кадр..."
-        const val TEXT_AA_LOST = "Android Auto отключился, перезапустите сервер ГУ"
-        const val TEXT_STARTING_SERVER = "Запускаю сервер ГУ..."
-        const val TEXT_RESTARTING_SERVER = "Android Auto отключился, перезапускаю сервер ГУ..."
-        const val TEXT_UNLOCK_PHONE = "Разблокируйте телефон"
-        const val TEXT_AA_CONSENT = "Завершите настройку Android Auto на телефоне"
+        const val TEXT_AA_LOST = "Android Auto отключился, переподключаю..."
         const val DESAY_MANUFACTURER = "Desay SV Automotive"
         const val DESAY_G6S_MODEL = "G6S"
         const val DESAY_G6S_CHANNEL = "20622116"          // STATISTIC_INFO.channel у Mazda CX-5; Vezel - 20832125, другая Mazda - 21520001
@@ -1844,22 +1841,9 @@ class AaBridgeCore(
     }
 }
 
-/** Момент, когда коннектор просит подготовить сервер ГУ (автозапуск). */
-enum class ServerPhase {
-    /** До первой попытки подключения хоста. */
-    FIRST,
-
-    /** AA-сессия закончилась: сервер одноразовый, нужен новый. */
-    AFTER_SESSION,
-
-    /** Сервер недоступен несколько попыток подряд. */
-    RETRY,
-}
-
 /**
  * Держит AA-сессию моста: подключается к серверу ГУ, при отказе (connection refused) повторяет раз в
- * 3 с, при завершении сессии сообщает ядру и переподключается. Сервер ГУ перезапускает пользователь или
- * serverPrep (автозапуск): блокирующий вызов на нити коннектора, возвращается, когда сервер готов или время вышло.
+ * 3 с, при завершении сессии сообщает ядру и переподключается. Сервер ГУ включает и перезапускает пользователь.
  */
 class AaConnector(
     private val core: AaBridgeCore,
@@ -1867,7 +1851,7 @@ class AaConnector(
     private val log: (String, Boolean) -> Unit,
     private val options: () -> AapOptions = { AapOptions() },
     private val retryMs: Long = 3000,
-    private val serverPrep: ((ServerPhase) -> Unit)? = null,
+    private val failures: ServerFailures = AaState.serverFailures,
     private val sessionFactory: (AaVideoSink, AapOptions, (String, Boolean) -> Unit, (String, Boolean) -> Unit) -> AapSession =
         { sink, o, lg, end -> AapSession(creds, sink, o, lg, onEnd = end) },
 ) : AaLifecycle {
@@ -1904,32 +1888,20 @@ class AaConnector(
     @Volatile var bareEofs = 0
         private set
 
-    /** После BARE_EOF_SUSPEND голых EOF подряд автозапуск не трогает сервер до удачной сессии. */
-    @Volatile var prepSuspended = false
-        private set
-
     private fun bareEofBackoffMs(n: Int): Long =
         if (n <= 0) retryMs else minOf(retryMs shl minOf(n - 1, 4), BARE_EOF_BACKOFF_MAX_MS).coerceAtLeast(retryMs)
 
-    private fun prep(phase: ServerPhase) {
-        val p = serverPrep ?: return
-        if (prepSuspended && phase != ServerPhase.FIRST) {
-            log("BRIDGE автозапуск сервера ($phase) пропущен: приостановлен после $bareEofs голых EOF подряд", true)
-            return
-        }
+    private fun loop() {
+        failures.reset()      // отказы прошлой поездки в эту не переносим
         try {
-            p(phase)
-        } catch (e: Throwable) {
-            log("BRIDGE автозапуск сервера ($phase) упал: ${e.javaClass.simpleName}: ${e.message}", true)
+            connectLoop()
+        } finally {
+            failures.reset()
         }
     }
 
-    private fun loop() {
+    private fun connectLoop() {
         var unavailableLogged = false
-        var refusals = 0
-        var lastRetryPrepAt = Long.MIN_VALUE / 4
-        prep(ServerPhase.FIRST)
-        if (stopping) return
         // решение о звуке зависит от FEATURE_CONFIG ГУ (BT-режим): ждём его до 2.5 с перед первым подключением
         if (core.usbAudioEnabled && core.expectFeatureConfig) {
             var waited = 0
@@ -1940,51 +1912,58 @@ class AaConnector(
             log("BRIDGE FEATURE_CONFIG ${if (core.featureConfigSeen) "получен" else "не пришёл за $waited мс"}, звук по USB: ${core.audioViaUsb}", true)
         }
         while (!stopping) {
+            // ручная проба сервера (AaServerCheck, кнопка в «Для разработчиков») не должна держать сервер 5277, когда подключаемся мы
+            AaServerCheck.beforeBridgeConnect()
+            if (stopping) break      // Стоп мог прийти за время ожидания: подключаться уже нельзя, сессию на handshake не оборвать штатно
             val ended = CountDownLatch(1)
+            var endReason = ""
             core.onAaConnecting()
             attempts++
-            val s = sessionFactory(core, options(), log) { _, _ -> ended.countDown() }
+            val s = sessionFactory(core, options(), log) { reason, _ ->
+                endReason = reason
+                ended.countDown()
+            }
             current = s
             core.peer = s
             s.start()
+            var establishedNoted = false
             while (!ended.await(500, TimeUnit.MILLISECONDS)) {
                 if (stopping) s.requestStop("мост остановлен")
                 core.tick()
+                // пассивная диагностика для главного экрана: сессия установилась - сервер жив, прежние отказы не в счёт
+                if (s.established) {
+                    if (!establishedNoted) failures.onEstablished()
+                    establishedNoted = true
+                } else if (s.connected) {
+                    failures.onTcpAccepted()
+                }
             }
             core.peer = null
             current = null
+            when {
+                s.established -> if (!establishedNoted) failures.onEstablished()
+                !s.connected && endReason.startsWith(REFUSED_REASON) -> failures.onRefused()
+                s.connected && endReason.startsWith(AapSession.NO_VERSION_RESPONSE_REASON) -> failures.onNoVersionResponse()
+                else -> failures.reset()
+            }
+            // на ГУ «Запустите сервер ГУ» только когда он правда не отвечает; короткий отказ после ByeBye - «Подключаю»
+            if (failures.needsStart()) core.showStatus(AaBridgeCore.TEXT_START_SERVER)
             if (!s.connected) {
-                refusals++
                 if (!unavailableLogged) {
                     log("BRIDGE сервер ГУ Android Auto недоступен (connection refused), повторяю каждые ${retryMs / 1000.0} с", true)
                     unavailableLogged = true
                 }
                 AaState.status = "мост: жду сервер ГУ AA"
-                // автозапуск мог упереться в блокировку экрана: пока сервера нет, периодически просим повтор
-                val nowMs = System.nanoTime() / 1_000_000
-                if (serverPrep != null && !stopping && refusals >= 2 && nowMs - lastRetryPrepAt >= RETRY_PREP_MS) {
-                    lastRetryPrepAt = nowMs
-                    prep(ServerPhase.RETRY)
-                }
             } else {
                 unavailableLogged = false
-                refusals = 0
                 log("BRIDGE AA-сессия завершена (established=${s.established}, video=${s.videoStarted})", true)
                 AaState.status = "мост: AA отключился"
                 core.onAaEnded(s.established)
                 if (s.established) {
                     bareEofs = 0
-                    if (prepSuspended) log("BRIDGE автозапуск сервера ГУ снова включён: сессия AA установилась", true)
-                    prepSuspended = false
-                    if (!stopping) prep(ServerPhase.AFTER_SESSION)
                 } else {
-                    // сервер принял TCP и сразу закрыл: он жив, перезапуск его не лечит, а петля
-                    // Stop+Start выкидывает AA на экран снова и снова (h224). Ждём дольше, после N подряд - без автозапуска.
+                    // сервер принял TCP и сразу закрыл (h224): он жив, частые повторы лишь выкидывают AA на экран. Ждём дольше.
                     bareEofs++
-                    if (bareEofs >= BARE_EOF_SUSPEND && !prepSuspended) {
-                        prepSuspended = true
-                        log("BRIDGE AA закрыл $bareEofs подключения подряд до установления сессии: автозапуск сервера ГУ приостановлен до первой удачной сессии", true)
-                    }
                 }
             }
             var left = if (s.connected && !s.established) bareEofBackoffMs(bareEofs) else retryMs
@@ -1996,13 +1975,10 @@ class AaConnector(
     }
 
     companion object {
-        /** Не чаще раза в 5 с просить автозапуск повторить (он сам пропустит, если повторять нечего). */
-        private const val RETRY_PREP_MS = 5_000L
-
-        /** Сколько голых EOF подряд (connect+EOF без сессии) до приостановки автозапуска. */
-        const val BARE_EOF_SUSPEND = 3
-
         /** Потолок паузы между подключениями после голых EOF: 3, 6, 12, 24, 30 с. */
         const val BARE_EOF_BACKOFF_MAX_MS = 30_000L
+
+        /** Причина конца сессии при ECONNREFUSED (другие сбои connect - таймаут, EPERM - отказом сервера не считаем). */
+        private const val REFUSED_REASON = AapSession.UNAVAILABLE_REASON + "ConnectException"
     }
 }

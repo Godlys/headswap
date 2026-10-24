@@ -134,7 +134,7 @@ class AaBridgeCoreTest {
 
     @Test
     fun startsWithPlaceholderAndHidesItOnFirstIdrGluedWithConfig() {
-        assertEquals(listOf(AaBridgeCore.TEXT_START_SERVER), link.texts.toList())
+        assertEquals(listOf(AaBridgeCore.TEXT_CONNECTING), link.texts.toList())
         assertEquals(AaBridgeCore.Source.PLACEHOLDER, core.activeSource)
         core.onCarlifeStart()
         core.onCodecConfig(cfg)
@@ -601,11 +601,11 @@ class AaBridgeCoreTest {
     }
 
     @Test
-    fun refusedConnectionKeepsStartServerText() {
+    fun refusedConnectionKeepsConnectingText() {
         core.onAaConnecting()
         core.onAaEnded(established = false)
-        assertEquals(listOf(AaBridgeCore.TEXT_START_SERVER), link.texts.toList())
-        assertEquals(AaBridgeCore.TEXT_START_SERVER, core.currentPlaceholderText)
+        assertEquals(listOf(AaBridgeCore.TEXT_CONNECTING), link.texts.toList())
+        assertEquals(AaBridgeCore.TEXT_CONNECTING, core.currentPlaceholderText)
     }
 
     @Test
@@ -1349,12 +1349,14 @@ class AaBridgeIntegrationTest {
         val logs = CopyOnWriteArrayList<String>()
         val core = AaBridgeCore({ l, _ -> logs.add(l) }).also { it.attach(link) }
         val creds = AapCerts.load(TestAssets.opener, "jvc")
-        val connector = AaConnector(core, creds, { l, _ -> logs.add(l) }, options = { AapOptions(port = port) }, retryMs = 100)
+        // свой счётчик: общий AaState.serverFailures помнит «сервер работал» из соседних тестов
+        val connector = AaConnector(core, creds, { l, _ -> logs.add(l) }, options = { AapOptions(port = port) }, retryMs = 100, failures = ServerFailures())
         connector.start()
         val t0 = System.currentTimeMillis()
         while (connector.attempts < 4 && System.currentTimeMillis() - t0 < 10_000) Thread.sleep(20)
         assertTrue(connector.attempts >= 4)
-        assertEquals(listOf(AaBridgeCore.TEXT_START_SERVER), link.texts.toList())
+        // сервер в этом процессе ещё не работал: после первого отказа сразу просим включить
+        assertEquals(listOf(AaBridgeCore.TEXT_CONNECTING, AaBridgeCore.TEXT_START_SERVER), link.texts.toList())
         assertEquals(AaBridgeCore.Source.PLACEHOLDER, core.activeSource)
         assertEquals("в логе одна запись про недоступность", 1, logs.count { it.contains("BRIDGE сервер ГУ Android Auto недоступен") })
         val stopped = CountDownLatch(1)

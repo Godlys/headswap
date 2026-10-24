@@ -124,11 +124,6 @@ class AaPrefs(ctx: Context) {
             .apply()
     }
 
-    /** Автозапуск сервера ГУ (USB подключён / сессия AA закончилась); работает, только если включена служба спецвозможностей. */
-    var autoServer: Boolean
-        get() = sp.getBoolean("autoServer", true)
-        set(v) = sp.edit().putBoolean("autoServer", v).apply()
-
     /** Источник звука для микрофона AA: машина / телефон / авто (ГУ, при молчании 2 с - телефон). */
     var micMode: MicMode
         get() = MicMode.parse(sp.getString("micMode", MicMode.AUTO.key))
@@ -165,6 +160,11 @@ class AaPrefs(ctx: Context) {
     var progressSeconds: Boolean
         get() = sp.getBoolean("progressSeconds", false)
         set(v) = sp.edit().putBoolean("progressSeconds", v).apply()
+
+    /** Хоть раз установилась настоящая AA-сессия: сервер ГУ у пользователя работал (для «Сервер ГУ не отвечает», а не «Запустите сервер ГУ»). */
+    var serverWorked: Boolean
+        get() = sp.getBoolean("serverWorked", false)
+        set(v) = sp.edit().putBoolean("serverWorked", v).apply()
 
     /** Предупреждение про видео в движении в разделе «Приложения для магнитолы» уже показано (один раз). */
     var appsWarningShown: Boolean
@@ -220,6 +220,9 @@ object AaState {
 
     /** Ошибка настройки, из-за которой мост не стартует (например, нет сертификата head unit); null = всё в порядке. */
     @Volatile var setupError: String? = null
+
+    /** Отказы сервера ГУ при настоящих подключениях моста: источник состояния «Сервер ГУ не отвечает» на главном экране. */
+    val serverFailures = ServerFailures()
 
     fun reset() {
         frames.set(0)

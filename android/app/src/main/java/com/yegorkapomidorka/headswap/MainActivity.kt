@@ -13,7 +13,6 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.WindowInsets
-import android.view.WindowManager
 import android.widget.FrameLayout
 import com.yegorkapomidorka.headswap.aa.AaCreds
 import com.yegorkapomidorka.headswap.aa.AaProbe
@@ -67,7 +66,6 @@ class MainActivity : Activity() {
         if (AppTheme.medium) setTheme(R.style.Theme_Headswap_Medium)
         super.onCreate(savedInstanceState)
         AppLog.init(this)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         root = FrameLayout(this)
         if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
         root.setOnApplyWindowInsetsListener { v, ins ->
@@ -236,14 +234,6 @@ class MainActivity : Activity() {
                 // автостарт беспровода без Bluetooth машины: то же, что ACL_CONNECTED / ACL_DISCONNECTED выбранной машины
                 "car_auto" -> startForegroundService(Intent(this, BridgeService::class.java).setAction(BridgeService.ACTION_WIFI_B_AUTO))
                 "car_auto_off" -> startForegroundService(Intent(this, BridgeService::class.java).setAction(BridgeService.ACTION_WIFI_B_AUTO_OFF))
-                "aa_server_restart" -> {
-                    val delay = intent.getIntExtra("delay_s", 0)
-                    if (delay > 0) {
-                        AppLog.i("AUTOSRV: перезапуск сервера через $delay с")
-                        handler.postDelayed({ Actions.restartServer(this, fromCmd = true) }, delay * 1000L)
-                    } else Actions.restartServer(this, fromCmd = true)
-                }
-                "front" -> {}                                  // возврат из автозапуска сервера: только вывести окно вперёд
                 "mic_test" -> Actions.micTest(this)
                 "transcode_test" -> Actions.transcodeTest(this, intent.getStringExtra("opts") ?: "")
                 "screen_main" -> toHome()
@@ -265,7 +255,7 @@ class MainActivity : Activity() {
                     AppTheme.set(this, intent.getStringExtra("mode") ?: AppTheme.SYSTEM)
                     recreate()
                 }
-                else -> AppLog.i("неизвестная команда '$cmd' (есть aa_selftest, aa_probe, net_probe, net_perm, mic_test, transcode_test, open_aa, aa_server_restart, car_auto, car_auto_off)")
+                else -> AppLog.i("неизвестная команда '$cmd' (есть aa_selftest, aa_probe, net_probe, net_perm, mic_test, transcode_test, open_aa, car_auto, car_auto_off)")
             }
             if (intent.hasExtra("scroll_y")) current()?.scrollTo(intent.getIntExtra("scroll_y", 0))     // отладка: снимки нижней части экрана
             return

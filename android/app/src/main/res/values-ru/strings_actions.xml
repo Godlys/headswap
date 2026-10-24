@@ -2,10 +2,6 @@
 <resources>
     <!-- ui/Actions.kt -->
     <string name="act_open_aa_failed">Не открыть настройки AA: %1$s</string>
-    <string name="act_service_off">Служба спецвозможностей не включена</string>
-    <string name="act_autostart_off">Служба автозапуска не включена: запустите сервер в Android Auto вручную</string>
-    <string name="act_enable_title">Автозапуск сервера ГУ</string>
-    <string name="act_enable_message">Откроются настройки спецвозможностей. Найдите «%1$s» (Установленные приложения / Загруженные службы) и включите. Служба видит только окна Android Auto.\n\nЕсли пункт серый («ограниченные настройки»): Настройки → Приложения → Headswap → ⋮ → «Разрешить ограниченные настройки», потом снова сюда.</string>
     <string name="act_open">Открыть</string>
     <string name="act_cancel">Отмена</string>
 

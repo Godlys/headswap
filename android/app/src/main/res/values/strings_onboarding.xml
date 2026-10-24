@@ -1,48 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Onboarding steps and readiness checklist. -->
-    <string name="step_aa_dev_title">Android Auto developer mode</string>
-    <string name="step_aa_dev_body">Open Android Auto settings, scroll down and tap “Version” 10 times, then confirm. Without this, there is no “Start head unit server” item.</string>
-    <string name="step_aa_dev_hint">On HyperOS these settings are not in the normal Settings app. Open them with the button below.</string>
+    <!-- Onboarding step: title, numbered list (string-array), hint, buttons; short is the name in the readiness checklist. -->
+    <string name="step_aa_dev_title">Turn on Android Auto developer mode</string>
+    <string-array name="step_aa_dev_list">
+        <item>Tap “Open Android Auto”</item>
+        <item>Scroll all the way down</item>
+        <item>Tap “Version” 10 times and confirm</item>
+    </string-array>
     <string name="step_aa_dev_primary">Open Android Auto</string>
     <string name="step_aa_dev_short">Android Auto developer mode</string>
 
-    <string name="step_aa_unknown_title">Unknown sources in Android Auto</string>
-    <string name="step_aa_unknown_body">To get video, YouTube and a browser on the head unit (Fermata Auto, ParkedTube, AABrowser), turn on in Android Auto: Settings → ⋮ → Developer settings → Unknown sources. Without it, Android Auto will not show apps installed outside Google Play.</string>
-    <string name="step_aa_unknown_primary">Open Android Auto settings</string>
+    <string name="step_aa_unknown_title">Allow installs from unknown sources</string>
+    <string-array name="step_aa_unknown_list">
+        <item>Tap “Open Android Auto”</item>
+        <item>Tap ⋮ and choose “Developer settings”</item>
+        <item>Scroll down to “Unknown sources”</item>
+        <item>Tick the box</item>
+    </string-array>
+    <string name="step_aa_unknown_hint">Without this, Android Auto will not show apps installed outside Google Play.</string>
+    <string name="step_aa_unknown_primary">Open Android Auto</string>
     <string name="step_aa_unknown_short">Unknown sources</string>
 
-    <string name="step_autostart_title">Auto-start head unit server</string>
-    <string name="step_autostart_body">Turn on the accessibility service “%1$s”. It starts the head unit server by itself when you plug in the USB cable. The service sees only Android Auto windows.</string>
-    <string name="step_autostart_hint">If the item is grayed out: Settings → Apps → Headswap → ⋮ → “Allow restricted settings”. Without the service you must start the server by hand before every trip: Android Auto → ⋮ → “Start head unit server”.</string>
-    <string name="step_autostart_primary">Open Accessibility</string>
-    <string name="step_autostart_extra">Allow restricted settings</string>
+    <string name="step_autostart_title">Start the head unit server</string>
+    <string-array name="step_autostart_list">
+        <item>Tap “Open Android Auto”</item>
+        <item>Tap ⋮ at the top right</item>
+        <item>Choose “Start head unit server”</item>
+    </string-array>
+    <string name="step_autostart_hint">You only need to turn it on once: the head unit server keeps running in the background, Headswap does not turn it off. If Android closes it on its own, turn it on again from the Android Auto settings. There is no auto-start through accessibility any more, so the head unit server has to be started by hand.</string>
+    <string name="step_autostart_primary">Open Android Auto</string>
+    <string name="step_autostart_short">Head unit server</string>
 
-    <string name="step_notif_title">Notifications</string>
-    <string name="step_notif_body">Headswap shows its status in the notification shade, and the system keeps the bridge running while the screen is off.</string>
+    <string name="step_notif_title">Turn on notifications</string>
+    <string-array name="step_notif_list">
+        <item>Tap “Allow” at the bottom of the screen</item>
+        <item>Tap “Allow” in the Android window “Allow Headswap to send you notifications?”</item>
+    </string-array>
+    <string name="step_notif_hint">The notification shade shows how the connection is going, and Android will not unload Headswap while the screen is off.</string>
+    <string name="step_notif_short">Notifications</string>
 
-    <string name="step_background_title">Background work</string>
-    <string name="step_background_body">HyperOS kills background apps. Remove the battery limit, or the bridge may disconnect while the screen is off.</string>
-    <string name="step_background_hint">Xiaomi: Settings → Apps → Headswap → turn on “Autostart”, then set battery saver to “No restrictions”.</string>
+    <!-- Items 3-4 (autostart) are shown on Xiaomi only -->
+    <string name="step_background_title">Remove the battery limit</string>
+    <string-array name="step_background_list">
+        <item>Tap “Remove battery limit”</item>
+        <item>Choose “No restrictions”</item>
+        <item>Go back and tap “Autostart”</item>
+        <item>Scroll to Headswap and turn the switch on</item>
+    </string-array>
     <string name="step_background_primary">Remove battery limit</string>
-    <string name="step_background_extra">Autostart and battery saver</string>
+    <string name="step_background_extra">Autostart</string>
+    <string name="step_background_short">Background work</string>
 
-    <string name="step_mic_title">Microphone</string>
-    <string name="step_mic_body">Needed for “Hey Google” and voice input when the car microphone is not available. Headswap then takes your voice from the phone microphone.</string>
+    <string name="step_mic_title">Allow microphone access</string>
+    <string-array name="step_mic_list">
+        <item>Tap “Allow” at the bottom of the screen</item>
+        <item>Tap “While using the app”</item>
+    </string-array>
+    <string name="step_mic_hint">Needed to call the voice assistant.</string>
+    <string name="step_mic_short">Microphone</string>
 
-    <string name="step_bluetooth_title">Bluetooth for calls</string>
-    <string name="step_bluetooth_body">Calls in Android Auto always go through Bluetooth. Pair your phone with the head unit once, as a phone or a headset. Music and navigation go through the USB cable.</string>
+    <string name="step_bluetooth_title">Turn on Bluetooth</string>
+    <string-array name="step_bluetooth_list">
+        <item>Tap “Open Bluetooth”</item>
+        <item>Turn Bluetooth on</item>
+        <item>Connect to the head unit</item>
+    </string-array>
+    <string name="step_bluetooth_hint">Needed for calls: in Android Auto they go only through Bluetooth.</string>
     <string name="step_bluetooth_primary">Open Bluetooth</string>
+    <string name="step_bluetooth_short">Bluetooth for calls</string>
 
-    <string name="step_location_title">Location for Maps</string>
-    <string name="step_location_body">Google Maps and other map apps in Android Auto need location access. Otherwise the car screen shows “location access required”.</string>
-    <string name="step_location_hint">Turn on location and allow it for map apps.</string>
+    <string name="step_location_title">Turn on location</string>
+    <string-array name="step_location_list">
+        <item>Tap “Open location settings”</item>
+        <item>Turn on the “Use location” switch</item>
+    </string-array>
+    <string name="step_location_hint">Without it Google Maps and other map apps in Android Auto say “location access required”.</string>
     <string name="step_location_primary">Open location settings</string>
+    <string name="step_location_short">Location for Maps</string>
 
-    <string name="step_first_title">First connection</string>
-    <string name="step_first_body">Connect the USB cable to the head unit with the phone unlocked. When Android asks “Open Headswap when this USB accessory is connected?”, check “Use by default for this USB accessory” and tap “OK”.</string>
-    <string name="step_first_hint">If the head unit shows a “启动CarLife” screen, tap that button. The phone must be unlocked when you plug it in, or the head unit shows “Unlock your phone”.</string>
+    <string name="step_first_title">On first connection</string>
+    <string-array name="step_first_list">
+        <item>Unlock the phone and plug the cable into the head unit</item>
+        <item>Check “Use by default for this USB accessory”</item>
+        <item>Tap “OK”</item>
+    </string-array>
+    <string name="step_first_hint">If the head unit shows a “启动CarLife” screen, tap that button.</string>
     <string name="step_first_primary">Got it</string>
+    <string name="step_first_short">First connection</string>
 
     <string name="onb_already_done">Already done</string>
     <string name="onb_skip">Skip</string>
@@ -50,8 +94,8 @@
     <string name="onb_later">Later</string>
     <string name="onb_back">Back</string>
     <string name="onb_next">Next</string>
+    <string name="onb_got_it">Got it</string>
     <string name="onb_step_progress">Step %1$d of %2$d</string>
-    <string name="onb_xiaomi_only">Xiaomi / HyperOS only</string>
     <string name="onb_done_chip">Already completed</string>
 
     <string name="onb_checklist_title">Readiness check</string>

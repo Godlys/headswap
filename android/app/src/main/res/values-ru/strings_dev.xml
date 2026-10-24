@@ -56,9 +56,15 @@
     <string name="dev_section_actions">Действия</string>
     <string name="dev_action_scan">Сканировать</string>
     <string name="dev_action_stop_bridge">Стоп моста</string>
-    <string name="dev_action_restart_server">Перезапуск сервера ГУ</string>
     <string name="dev_action_aa_settings">Настройки AA</string>
-    <string name="dev_action_enable_autostart">Включить автозапуск сервера</string>
+    <string name="dev_action_check_server">Проверить сервер ГУ</string>
+    <string name="dev_check_server_alive">Сервер ГУ отвечает</string>
+    <string name="dev_check_server_refused">Сервер ГУ отказывает в подключении</string>
+    <string name="dev_check_server_hung">Сервер ГУ не отвечает на рукопожатие</string>
+    <string name="dev_check_server_error">Ошибка: %1$s</string>
+    <string name="dev_check_server_bridge">Мост работает: проверка сбила бы текущую сессию. Сначала остановите мост.</string>
+    <string name="dev_check_server_usb">Подключён USB-аксессуар (машина): проверка сбила бы подключение. Отключите кабель.</string>
+    <string name="dev_check_server_running">Проверка уже идёт</string>
 
     <string name="dev_section_status">Статус</string>
     <string name="dev_section_log">Лог</string>

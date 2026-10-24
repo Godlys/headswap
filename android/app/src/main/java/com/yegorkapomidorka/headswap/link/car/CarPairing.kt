@@ -107,6 +107,7 @@ object CarPairing {
     }
 
     /** Забыть машину: снять привязку CDM, очистить профиль, выключить триггер. */
+    @SuppressLint("MissingPermission")      // stopObservingDevicePresence: см. observe
     fun forget(ctx: Context) {
         val profile = CarProfile(ctx)
         val mac = profile.btMac
@@ -164,6 +165,7 @@ object CarPairing {
 
     /** Присутствие устройства (31+): запасной путь, основной триггер - ACL. Нужного разрешения может не быть: только лог. */
     @Suppress("DEPRECATION")
+    @SuppressLint("MissingPermission")      // REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE не объявлено намеренно: без него SecurityException, только лог
     private fun observe(ctx: Context, mac: String) {
         if (Build.VERSION.SDK_INT < 31) return
         val cdm = ctx.getSystemService(CompanionDeviceManager::class.java) ?: return

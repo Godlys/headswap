@@ -67,13 +67,6 @@
     <string name="set_car_make_default_short">Без марки</string>
     <string name="set_car_make_note">Логотип марки на кнопке выхода из Android Auto. С выбранной маркой Android Auto скрывает сторонние видеоприложения (Fermata Auto). Применится при следующем подключении.</string>
 
-    <string name="set_autostart">Автозапуск сервера ГУ</string>
-    <string name="set_autostart_sub">При подключении кабеля и после сессии AA</string>
-    <string name="set_autostart_enable">Включить</string>
-    <string name="set_svc_connected">Служба спецвозможностей подключена</string>
-    <string name="set_svc_not_connected">Служба включена, но не подключена</string>
-    <string name="set_svc_off">Служба спецвозможностей выключена</string>
-
     <string name="set_mic">Микрофон</string>
     <string name="mic_car_title">Машина</string>
     <string name="mic_car_sub">Микрофон магнитолы</string>
@@ -116,9 +109,7 @@
     <string name="set_help">Помощь</string>
     <string name="set_sum_appearance">Язык: %1$s · тема: %2$s</string>
     <string name="set_sum_mic">микрофон: %1$s</string>
-    <string name="set_sum_headunit">Сертификат %1$s · автозапуск %2$s</string>
-    <string name="set_sum_on">вкл.</string>
-    <string name="set_sum_off">выкл.</string>
+    <string name="set_sum_headunit">Сертификат %1$s</string>
     <string name="set_footer">Headswap %1$s</string>
 
     <!-- Video modes (VideoMode) -->

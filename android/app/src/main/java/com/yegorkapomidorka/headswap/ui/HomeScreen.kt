@@ -1,6 +1,12 @@
 package com.yegorkapomidorka.headswap.ui
 
 import android.animation.ObjectAnimator
+import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.TextUtils
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -16,14 +22,14 @@ import com.yegorkapomidorka.headswap.MainActivity
 import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.update.Updater
 
-/** Главный экран «Готов к поездке» (Main.dc.html): пять состояний, этапы, кнопки; сверху плашка обновления. */
+/** Главный экран «Готов к поездке» (Main.dc.html): шесть состояний, этапы, кнопки; сверху плашка обновления. */
 class HomeScreen(host: MainActivity) : Screen(host) {
     private val root = ctx.vbox()
     override val view: View get() = root
 
     private val updBox = ctx.vbox()
     private var updKey: String? = null
-    private val heroBox = ctx.vbox(16)
+    private val heroBox = ctx.vbox(14)
     private val stagesBox = ctx.vbox()
     private val footer = ctx.vbox(4)
     private var lastState: HomeState? = null
@@ -159,21 +165,30 @@ class HomeScreen(host: MainActivity) : Screen(host) {
         }
         heroBox.removeAllViews()
         heroBox.background = c.shape(c.clr(bgRes), 28)
-        heroBox.pad(c, 24, 24, 24, 24)
+        heroBox.pad(c, 20, 20, 20, 20)
         val iconRes = when (st.icon) {
             HeroIcon.POWER -> R.drawable.ic_power
             HeroIcon.PLUG -> R.drawable.ic_plug
+            HeroIcon.CAR -> R.drawable.ic_car
             HeroIcon.CAR_USB -> R.drawable.ic_car_usb
             HeroIcon.CAR_WIFI -> R.drawable.ic_car_wifi
             HeroIcon.REFRESH -> R.drawable.ic_refresh
             HeroIcon.ALERT -> R.drawable.ic_alert
         }
-        heroBox.addView(FrameLayout(c).apply {
-            background = c.oval(c.clr(fgRes))
-            addView(c.icon(iconRes, 32, c.clr(onFgRes)), FrameLayout.LayoutParams(c.dp(32), c.dp(32), Gravity.CENTER))
-        }, lp(c.dp(64), c.dp(64)))
+        // слева значок в кружке, справа заголовок в одну строку; подзаголовок ниже на всю ширину
+        heroBox.addView(c.hbox(12).apply {
+            addView(FrameLayout(c).apply {
+                background = c.oval(c.clr(fgRes))
+                addView(c.icon(iconRes, 24, c.clr(onFgRes)), FrameLayout.LayoutParams(c.dp(24), c.dp(24), Gravity.CENTER))
+            }, lp(c.dp(44), c.dp(44)))
+            addView(c.text(st.title.get(c), 20f, 600, c.clr(textRes)).apply {
+                letterSpacing = -0.015f
+                lineHeight = c.dp(26)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+            }, lp(0, WRAP, 1f))
+        }, lp(MATCH, WRAP))
         heroBox.addView(c.vbox(6).apply {
-            addView(c.text(st.title.get(c), 28f, 600, c.clr(textRes)).apply { letterSpacing = -0.01f; lineHeight = c.dp(34) })
             addView(c.text(st.sub.get(c), 16f, 400).apply { lineHeight = c.dp(22) })
             lastWireless?.let { addView(c.text(it, 14f, 400, c.clr(R.color.on2))) }
         }, lp(MATCH, WRAP))
@@ -184,13 +199,9 @@ class HomeScreen(host: MainActivity) : Screen(host) {
         for ((label, sm) in st.stages) stagesBox.addView(stageRow(label.get(c), sm.first, sm.second.get(c)), c.lpDp(MATCH, 52))
 
         footer.removeAllViews()
-        st.primary?.let { p ->
-            val (label, icon) = if (p == PrimaryAction.START_SERVER) {
-                c.getString(R.string.home_btn_start) to R.drawable.ic_play
-            } else {
-                c.getString(R.string.home_btn_restart) to R.drawable.ic_refresh_btn
-            }
-            footer.addView(c.primaryButton(label, icon).apply { setOnClickListener { Actions.startServerFromUi(c) } })
+        // сервер ГУ включает пользователь сам: и первый запуск, и после обрыва кнопка ведёт в настройки Android Auto
+        if (st.primary != null) {
+            footer.addView(c.primaryButton(c.getString(R.string.action_open_aa), R.drawable.ic_open).apply { setOnClickListener { Actions.startServerFromUi(c) } })
         }
         st.outline?.let { o ->
             val b = when (o) {
@@ -200,27 +211,51 @@ class HomeScreen(host: MainActivity) : Screen(host) {
             footer.addView(b)
         }
         if (st.logLink) {
+            // «Отправить лог» живёт внутри самодиагностики: на главном одна понятная вторая кнопка
             footer.addView(c.tonalButton(c.getString(R.string.diag_home_btn)).apply { setOnClickListener { host.showDiag() } })
-            footer.addView(c.linkButton(c.getString(R.string.home_btn_send_log)).apply { setOnClickListener { LogShare.shareReport(c) } })
         }
         if (st.phase == Phase.RECONNECTING) updateGrace(st)
     }
 
-    /** Цепочка «Android Auto › ⋮ › Запустить сервер ГУ» (с переносом, как flex-wrap в макете). */
+    /** Как запустить сервер ГУ: три пронумерованных пункта на плашке surf (Main.dc.html, isOff). */
     private fun chain(): View {
         val c = ctx
-        val flow = FlowLayout(c, c.dp(6), c.dp(6))
-        fun chip(s: String, bold: Boolean = false) = c.text(s, 14f, if (bold) 700 else 400).apply {
-            background = c.shape(c.clr(R.color.surf), 8)
-            pad(c, 10, 6, 10, 6)
+        val box = c.vbox().apply {
+            background = c.shape(c.clr(R.color.surf), 16)
+            pad(c, 0, 4, 0, 4)
+            contentDescription = c.getString(R.string.home_chain_label)
         }
-        fun sep() = c.text("›", 14f, 400, c.clr(R.color.on2))
-        flow.addView(chip("Android Auto"))
-        flow.addView(sep())
-        flow.addView(chip("⋮", true))
-        flow.addView(sep())
-        flow.addView(chip(c.getString(R.string.home_btn_start)))
-        return flow
+        listOf(R.string.home_chain_1, R.string.home_chain_2, R.string.home_chain_3).forEachIndexed { i, res ->
+            if (i > 0) box.addView(c.divider())
+            box.addView(
+                c.hbox(12).apply {
+                    pad(c, 14, 12, 14, 12)
+                    addView(
+                        FrameLayout(c).apply {
+                            background = c.oval(c.clr(R.color.pri))
+                            addView(c.text("${i + 1}", 13f, 700, c.clr(R.color.onpri)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                        },
+                        lp(c.dp(24), c.dp(24)),
+                    )
+                    addView(c.text(boldText(res), 15f, 400).apply { lineHeight = c.dp(20) }, lp(0, WRAP, 1f))
+                },
+                lp(MATCH, WRAP),
+            )
+        }
+        return box
+    }
+
+    /** Строка ресурса с <b>: жирное рисуем шрифтом приложения (Golos 700), а не синтетическим BOLD. */
+    private fun boldText(res: Int): CharSequence {
+        val c = ctx
+        val out = SpannableString(c.getText(res))
+        for (sp in out.getSpans(0, out.length, StyleSpan::class.java)) {
+            if (sp.style == Typeface.BOLD) {
+                out.setSpan(TypefaceSpan(c.sans(700)), out.getSpanStart(sp), out.getSpanEnd(sp), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                out.removeSpan(sp)
+            }
+        }
+        return out
     }
 
     private fun graceBlock(st: HomeState): View {
@@ -250,8 +285,8 @@ class HomeScreen(host: MainActivity) : Screen(host) {
         row.addView(c.text(label, 16f, 500, c.clr(if (state == StageState.PEND) R.color.on2 else R.color.on)), lp(0, WRAP, 1f))
         val metaColor = when (state) {
             StageState.ERR -> R.color.err
-            StageState.TODO, StageState.PAUSE -> R.color.warn
-            StageState.ACTIVE -> R.color.acc
+            StageState.PAUSE -> R.color.warn
+            StageState.TODO, StageState.ACTIVE -> R.color.acc
             else -> R.color.on2
         }
         row.addView(c.text(meta, 14f, 500, c.clr(metaColor)))
@@ -278,8 +313,8 @@ class HomeScreen(host: MainActivity) : Screen(host) {
             StageState.PAUSE -> { box.background = c.oval(c.clr(R.color.warnc)); glyph(R.drawable.ic_pause, c.clr(R.color.warn)) }
             StageState.ERR -> { box.background = c.oval(c.clr(R.color.err)); glyph(R.drawable.ic_close, c.clr(R.color.onerr)) }
             StageState.TODO -> {
-                box.background = c.oval(c.clr(R.color.warn))
-                box.addView(c.text("!", 16f, 700, c.clr(R.color.warnc)).apply { gravity = Gravity.CENTER }, FrameLayout.LayoutParams(MATCH, MATCH))
+                box.background = c.oval(c.clr(R.color.pri))
+                box.addView(c.text("!", 16f, 700, c.clr(R.color.onpri)).apply { gravity = Gravity.CENTER }, FrameLayout.LayoutParams(MATCH, MATCH))
             }
             StageState.PEND -> box.background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
@@ -288,45 +323,5 @@ class HomeScreen(host: MainActivity) : Screen(host) {
             }
         }
         return box
-    }
-}
-
-/** Строки слева направо с переносом. */
-class FlowLayout(ctx: android.content.Context, private val hGap: Int, private val vGap: Int) : ViewGroup(ctx) {
-    override fun onMeasure(wSpec: Int, hSpec: Int) {
-        val maxW = MeasureSpec.getSize(wSpec)
-        var x = 0
-        var y = 0
-        var rowH = 0
-        for (i in 0 until childCount) {
-            val v = getChildAt(i)
-            measureChild(v, MeasureSpec.makeMeasureSpec(maxW, MeasureSpec.AT_MOST), MeasureSpec.UNSPECIFIED)
-            if (x > 0 && x + v.measuredWidth > maxW) {
-                x = 0
-                y += rowH + vGap
-                rowH = 0
-            }
-            x += v.measuredWidth + hGap
-            rowH = maxOf(rowH, v.measuredHeight)
-        }
-        setMeasuredDimension(maxW, y + rowH)
-    }
-
-    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
-        val maxW = r - l
-        var x = 0
-        var y = 0
-        var rowH = 0
-        for (i in 0 until childCount) {
-            val v = getChildAt(i)
-            if (x > 0 && x + v.measuredWidth > maxW) {
-                x = 0
-                y += rowH + vGap
-                rowH = 0
-            }
-            v.layout(x, y, x + v.measuredWidth, y + v.measuredHeight)
-            x += v.measuredWidth + hGap
-            rowH = maxOf(rowH, v.measuredHeight)
-        }
     }
 }

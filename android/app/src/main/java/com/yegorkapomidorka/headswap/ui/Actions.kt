@@ -1,15 +1,14 @@
 package com.yegorkapomidorka.headswap.ui
 
 import android.Manifest
-import android.app.Activity
-import android.app.AlertDialog
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbManager
-import android.provider.Settings
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import com.yegorkapomidorka.headswap.MainActivity
 import com.yegorkapomidorka.headswap.AppLocale
@@ -18,11 +17,11 @@ import com.yegorkapomidorka.headswap.BridgeService
 import com.yegorkapomidorka.headswap.CarLifeState
 import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.aa.AaCreds
-import com.yegorkapomidorka.headswap.aa.AaPrefs
+import com.yegorkapomidorka.headswap.aa.AaServerCheck
+import com.yegorkapomidorka.headswap.aa.ManualServerCheck
 import com.yegorkapomidorka.headswap.aa.PhoneMicCapture
+import com.yegorkapomidorka.headswap.aa.ProbeResult
 import com.yegorkapomidorka.headswap.aa.TranscodeSelfCheck
-import com.yegorkapomidorka.headswap.autosrv.AutoServer
-import com.yegorkapomidorka.headswap.autosrv.Trigger
 
 /**
  * Действия, которые раньше жили прямо в MainActivity (кнопки UI и команды intent):
@@ -95,52 +94,45 @@ object Actions {
         }
     }
 
-    /** Перезапуск сервера ГУ: кнопка или команда adb; без включённой службы спецвозможностей объясняем, что делать. */
-    fun restartServer(ctx: Context, fromCmd: Boolean = false) {
-        if (!AutoServer.isConnected) {
-            AppLog.i("AUTOSRV: служба спецвозможностей не подключена, перезапускать нечем")
-            if (fromCmd || ctx !is Activity) {
-                Toast.makeText(ctx, AppLocale.wrap(ctx).getString(R.string.act_service_off), Toast.LENGTH_LONG).show()
-            } else {
-                enableServiceDialog(ctx)
-            }
-            return
-        }
+    /**
+     * Кнопка «Открыть Android Auto» на главном экране и в онбординге: сервер ГУ включает пользователь сам
+     * (⋮ → «Вкл. сервер головного устр-ва»), поэтому только отмечаем запрос и открываем настройки AA.
+     */
+    fun startServerFromUi(ctx: Context) {
         HeadswapStatus.markServerRequested()
-        AutoServer.start(Trigger.BUTTON)
+        openAaSettings(ctx)
     }
 
     /**
-     * Кнопка «Запустить сервер ГУ» на главном экране: автозапуск включён и служба подключена - aa_server_restart,
-     * иначе открываем настройки AA, дальше пользователь жмёт «Запустить сервер ГУ» сам.
+     * Ручная проба сервера ГУ («Для разработчиков»): одна попытка полным рукопожатием, итог тостом и строками SRVCHECK в лог.
+     * Только без моста и USB: проба сбивает Android Auto. На состояние главного экрана не влияет.
      */
-    fun startServerFromUi(ctx: Context) {
-        if (AaPrefs(ctx).autoServer && AutoServer.isConnected) {
-            restartServer(ctx)
-        } else {
-            if (AaPrefs(ctx).autoServer) {
-                Toast.makeText(ctx, AppLocale.wrap(ctx).getString(R.string.act_autostart_off), Toast.LENGTH_LONG).show()
-            }
-            HeadswapStatus.markServerRequested()
-            openAaSettings(ctx)
+    fun checkServer(ctx: Context) {
+        val app = ctx.applicationContext
+        val main = Handler(Looper.getMainLooper())
+        fun toast(text: String) = main.post { Toast.makeText(app, text, Toast.LENGTH_LONG).show() }
+        val str = AppLocale.wrap(app)
+        val refusal = AaServerCheck.start(app) { result, detail ->
+            toast(
+                when (result) {
+                    ProbeResult.ALIVE -> str.getString(R.string.dev_check_server_alive)
+                    ProbeResult.REFUSED -> str.getString(R.string.dev_check_server_refused)
+                    ProbeResult.HUNG -> str.getString(R.string.dev_check_server_hung)
+                    ProbeResult.ERROR -> str.getString(R.string.dev_check_server_error, detail ?: "?")
+                },
+            )
         }
-    }
-
-    fun openAccessibilitySettings(ctx: Context) {
-        try {
-            ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: Exception) {
-            AppLog.e("не открыть настройки спецвозможностей", e)
+        if (refusal != null) {
+            toast(
+                str.getString(
+                    when (refusal) {
+                        ManualServerCheck.Refusal.BRIDGE -> R.string.dev_check_server_bridge
+                        ManualServerCheck.Refusal.USB -> R.string.dev_check_server_usb
+                        ManualServerCheck.Refusal.RUNNING -> R.string.dev_check_server_running
+                    },
+                ),
+            )
         }
-    }
-
-    fun enableServiceDialog(ctx: Context) {
-        AlertDialog.Builder(ctx, R.style.Theme_Headswap_Dialog)
-            .setTitle(ctx.getString(R.string.act_enable_title))
-            .setMessage(ctx.getString(R.string.act_enable_message, ctx.getString(R.string.autosrv_label)))
-            .setPositiveButton(ctx.getString(R.string.act_open)) { _, _ -> openAccessibilitySettings(ctx) }
-            .setNegativeButton(ctx.getString(R.string.act_cancel), null)
-            .show()
     }
 
     /** Проверка микрофона телефона без машины: 2 с AudioRecord, в лог сколько байт (ждём около 64000) и пик. */
