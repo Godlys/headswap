@@ -12,6 +12,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.hardware.usb.UsbManager
+import android.media.AudioManager
 import android.net.Network
 import android.os.Handler
 import android.os.IBinder
@@ -30,6 +31,7 @@ import com.yegorkapomidorka.headswap.aa.BridgeHost
 import com.yegorkapomidorka.headswap.aa.EqLive
 import com.yegorkapomidorka.headswap.aa.MetaRelay
 import com.yegorkapomidorka.headswap.aa.MicMode
+import com.yegorkapomidorka.headswap.aa.PhoneCall
 import com.yegorkapomidorka.headswap.aa.PhoneMicCapture
 import com.yegorkapomidorka.headswap.aa.VideoGeometry
 import com.yegorkapomidorka.headswap.link.CarTransport
@@ -841,6 +843,14 @@ class BridgeService : Service() {
             val log = { line: String, ui: Boolean -> AppLog.i(line, ui) }
             val core = AaBridgeCore(log, clockUs = { SystemClock.elapsedRealtimeNanos() / 1_000 })
             core.micModeProvider = { aaPrefs.micMode }
+            val audio = getSystemService(AudioManager::class.java)
+            core.phoneCallProvider = {
+                when (audio?.mode) {
+                    AudioManager.MODE_RINGTONE -> PhoneCall.RINGING
+                    AudioManager.MODE_IN_CALL -> PhoneCall.ACTIVE
+                    else -> PhoneCall.IDLE                  // IN_COMMUNICATION не берём: так же выглядит голос ассистента
+                }
+            }
             core.musicRateProvider = { aaPrefs.musicRate }
             core.mediaChunkProvider = { aaPrefs.mediaChunk }
             core.voiceChunkProvider = { aaPrefs.voiceChunk }

@@ -75,6 +75,9 @@ private object NoLink : CarlifeLink {
     override fun goToDesktop() {}
 }
 
+/** Звонок на телефоне: IDLE — нет, RINGING — входящий звонит, ACTIVE — разговор (AudioManager MODE_IN_CALL). */
+enum class PhoneCall { IDLE, RINGING, ACTIVE }
+
 /**
  * Логика моста AA -> CarLife без Android и сокетов: приём видео от AA как AaVideoSink, правила первого
  * сообщения для CarLife (SPS+PPS+IDR в одном), переключение заглушка/AA, маппинг тачей, запрос ключевого кадра.
@@ -316,6 +319,8 @@ class AaBridgeCore(
     // --- микрофон AA: запрос открыл телефон, звук берём у ГУ (CarLife VR) или с микрофона телефона ---
     /** Режим микрофона читается в момент каждого open: переключатель в UI действует сразу. */
     @Volatile var micModeProvider: () -> MicMode = { MicMode.AUTO }
+    /** Состояние звонка на телефоне (AudioManager.mode): на [huVwCns2Delphi] перемотка руля на время звонка = принять/положить. */
+    @Volatile var phoneCallProvider: () -> PhoneCall = { PhoneCall.IDLE }
 
     /** Микрофон телефона (AudioRecord); null = нет. Один экземпляр на всё время: router вызывает start/stop по очереди. */
     @Volatile var phoneMic: PhoneMic? = null
@@ -866,7 +871,12 @@ class AaBridgeCore(
             p.sendRotary(delta)
             return
         }
-        val android = HARD_KEY_TO_ANDROID[code]
+        val call = if (huVwCns2Delphi) phoneCallProvider() else PhoneCall.IDLE
+        val android = delphiKey(code, call) ?: HARD_KEY_TO_ANDROID[code]
+        if (call == PhoneCall.ACTIVE && code == HARD_KEY_SEEK_SUB) {
+            log("BRIDGE руль keycode=$code: идёт звонок, назад не шлю", true)
+            return
+        }
         if (android == null) {
             log("BRIDGE руль keycode=$code: нет аналога в AA, игнор", true)
             return
@@ -877,8 +887,24 @@ class AaBridgeCore(
             return
         }
         if (android == KEYCODE_SEARCH && voiceKeyBounce("руль keycode=$code")) return
-        log("BRIDGE руль keycode=$code -> AA KEYCODE $android", true)
+        val note = if (call != PhoneCall.IDLE) " (звонок ${call.name})" else ""
+        log("BRIDGE руль keycode=$code -> AA KEYCODE $android$note", true)
         p.sendKey(android)
+    }
+
+    /**
+     * На новых рулях VW нет кнопки трубки: пока звонит или идёт звонок, перемотка отвечает за звонок.
+     * Как на телефоне: зелёная слева, красная справа. Звонит: назад = принять (CALL), вперёд = отклонить (ENDCALL).
+     * Разговор: вперёд = положить трубку.
+     * Кнопки паузы тоже нет: удержание перемотки ГУ шлёт как keycode 0, вне звонка это пауза/плей.
+     * Только VW CNS2 Delphi 20082114 ([huVwCns2Delphi], Дмитрий); на прочих ГУ всё как было.
+     */
+    private fun delphiKey(code: Int, call: PhoneCall): Int? = when {
+        !huVwCns2Delphi -> null
+        call == PhoneCall.IDLE && code == HARD_KEY_SEEK_HOLD -> KEYCODE_MEDIA_PLAY_PAUSE
+        call == PhoneCall.RINGING && code == HARD_KEY_SEEK_SUB -> KEYCODE_CALL
+        call != PhoneCall.IDLE && code == HARD_KEY_SEEK_ADD -> KEYCODE_ENDCALL
+        else -> null
     }
 
     /**
@@ -1770,6 +1796,13 @@ class AaBridgeCore(
         const val VOICE_KEY_DEBOUNCE_MS = 500L
         const val KEYCODE_MEDIA_PLAY = 126
         const val KEYCODE_MEDIA_PAUSE = 127
+        const val KEYCODE_MEDIA_PLAY_PAUSE = 85
+        const val KEYCODE_CALL = 5
+        const val KEYCODE_ENDCALL = 6
+        const val HARD_KEY_SEEK_SUB = 0x0F
+        const val HARD_KEY_SEEK_ADD = 0x10
+        /** VW CNS2 Delphi 20082114: удержание вперёд/назад приходит как keycode 0 (Дмитрий, 24.10). */
+        const val HARD_KEY_SEEK_HOLD = 0
 
         /**
          * CarLife hard key (HUJ/CommonParams) -> Android KeyEvent; все значения есть в AapMessages.KEYCODES_SUPPORTED.
