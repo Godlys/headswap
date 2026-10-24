@@ -846,6 +846,20 @@ class AaBridgeAudioTest {
     }
 
     @Test
+    fun carlifeStartAfterPauseFlushesPendingTtsStop() {
+        // h482: подсказка кончилась на экране ГУ, START пришёл раньше 1500 мс - TTS_STOP терялся, музыка глушилась
+        core.onCarlifeStart()
+        core.onCarlifePause()
+        core.onAudioData(AapMessages.CH_AUDIO_SPEECH, pcm(100), 1)
+        core.onAudioStop(AapMessages.CH_AUDIO_SPEECH)
+        timers.advance(800)
+        core.onCarlifeStart()
+        assertEquals(4 to 0x40002, link.audio.last().let { it.chan to it.type })
+        timers.advance(1500)
+        assertEquals(1, link.audio.count { it.type == 0x40002 })
+    }
+
+    @Test
     fun carlifeStartWithoutPauseKeepsAudio() {
         // Desay G6S: START на каждое нажатие NAVI/MEDIA без PAUSE - повторный INIT рвал звук
         core.onCarlifeStart()
