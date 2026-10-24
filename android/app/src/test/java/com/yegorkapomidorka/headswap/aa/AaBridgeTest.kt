@@ -453,6 +453,21 @@ class AaBridgeCoreTest {
         assertEquals(3, peer.touches.size)
     }
 
+    @Test
+    fun touchDecimationX2SkipsEverySecondMove() {
+        val peer = FakePeer()
+        core.peer = peer
+        core.touchDecimationProvider = { TouchDecimation.X2 }
+        core.onCarlifeTouch(0, 10, 10)
+        for (y in 11..14) core.onCarlifeTouch(2, y, y)
+        core.onCarlifeTouch(1, 14, 14)
+        assertEquals(
+            listOf(Triple(0, 10, 10), Triple(2, 11, 11), Triple(2, 13, 13), Triple(2, 14, 14), Triple(1, 14, 14)),
+            peer.touches.toList(),
+        )
+        assertTrue(logs.any { it.contains("прореживание MOVE ×2") })
+    }
+
     private fun pts(vararg p: Int) = p.toList().chunked(3).map { TouchPoint(it[0], it[1], it[2]) }
 
     @Test

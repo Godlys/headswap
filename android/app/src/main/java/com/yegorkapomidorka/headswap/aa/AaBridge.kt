@@ -244,6 +244,11 @@ class AaBridgeCore(
     /** h425: VW CNS2 Delphi копит MOVE ~190 мс и шлёт пачкой; раздаём пачку равномерно. Только при [huVwCns2Delphi]. */
     private val touchPacer = TouchBurstPacer(clockMs, audioSched) { a, x, y, px, py -> dispatchTouch(a, x, y, px, py) }
     @Volatile private var touchPacerLogged = false
+
+    /** Прореживание MOVE ([TouchDecimation]) стоит перед пейсером и прямой отправкой. */
+    @Volatile var touchDecimationProvider: () -> TouchDecimation = { TouchDecimation.DEFAULT }
+    private val touchDecimator = TouchDecimator { a, x, y, px, py -> routeTouch(a, x, y, px, py) }
+    @Volatile private var touchDecimationLogged = 1
     private val mediaReleaseTimer = AudioTimer()
     private val voiceExitTimer = AudioTimer()
     private var carlifePaused = false          // VIDEO_ENCODER_PAUSE после последнего START
@@ -369,6 +374,8 @@ class AaBridgeCore(
         huMazda20622111 = false                // STATISTIC_INFO придёт заново в этой сессии
         huVwCns2Delphi = false                 // STATISTIC_INFO придёт заново в этой сессии
         vrReply = false
+        touchDecimator.reset()
+        touchDecimationLogged = 1
         touchPacer.reset()
         touchPacerLogged = false
         h295TouchAt = NEVER
@@ -690,6 +697,17 @@ class AaBridgeCore(
      * [VideoMode.mapTouch] (без margin-ов 1:1). Один палец уходит в AA так же, как до мультитача (id 0, action_index 0).
      */
     fun onCarlifeTouch(action: Int, x: Int, y: Int, px: Int = 0, py: Int = 0) {
+        val every = touchDecimationProvider().every
+        if (every != touchDecimationLogged) {
+            touchDecimationLogged = every
+            log("BRIDGE тач: прореживание MOVE ${if (every > 1) "×$every" else "выкл"} (настройка)", true)
+        }
+        touchDecimator.onTouch(action, x, y, px, py, every)
+        onHuTouch(action and 0xFF)                                            // вне touchLock: вложенных блокировок нет
+    }
+
+    /** Выход прореживателя: на Delphi через пейсер пачек, на остальных ГУ сразу в AA. */
+    private fun routeTouch(action: Int, x: Int, y: Int, px: Int, py: Int) {
         if (huVwCns2Delphi) {
             touchPacer.onTouch(action, x, y, px, py)
             if (touchPacer.bursts == 1 && !touchPacerLogged) {
@@ -699,7 +717,6 @@ class AaBridgeCore(
         } else {
             dispatchTouch(action, x, y, px, py)
         }
-        onHuTouch(action and 0xFF)                                            // вне touchLock: вложенных блокировок нет
     }
 
     /**

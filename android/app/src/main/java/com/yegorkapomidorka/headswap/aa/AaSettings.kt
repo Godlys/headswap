@@ -41,6 +41,11 @@ class AaPrefs(ctx: Context) {
         get() = TtsPreroll.parse(sp.getString("ttsPreroll", TtsPreroll.DEFAULT.name))
         set(v) = sp.edit().putString("ttsPreroll", v.name).apply()
 
+    /** Прореживание MOVE тача (имя TouchDecimation, по умолчанию Выкл; эксперимент, не входит в пресеты авто). Мост читает на каждое событие. */
+    var touchDecimation: TouchDecimation
+        get() = TouchDecimation.parse(sp.getString("touchDecimation", TouchDecimation.DEFAULT.name))
+        set(v) = sp.edit().putString("touchDecimation", v.name).apply()
+
     /** Видео моста:перекодирование (по умолчанию) или passthrough H.264 AA как есть. */
     var transcode: Boolean
         get() = sp.getBoolean("transcode", true)

@@ -238,6 +238,7 @@ object LogShare {
             appendLine("  размер пакета музыки: ${aa.mediaChunk.name}")
             appendLine("  размер пакета голоса: ${aa.voiceChunk.name}")
             appendLine("  тишина перед подсказкой: ${aa.ttsPreroll.name}")
+            appendLine("  прореживание тача: ${aa.touchDecimation.name}")
             appendLine("  мой автомобиль: ${aa.carPreset?.let { "${it.name}${if (aa.carSettings == it.settings) "" else ", настройки изменены вручную"}" } ?: "не выбрана"}")
             appendLine("  сертификат: ${aa.certSet}")
             appendLine("  автозапуск сервера ГУ: ${aa.autoServer}")
