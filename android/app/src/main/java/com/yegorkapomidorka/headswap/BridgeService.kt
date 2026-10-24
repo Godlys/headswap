@@ -780,16 +780,15 @@ class BridgeService : Service() {
 
         // AA-сессия к серверу ГУ на 127.0.0.1:5277 живёт на уровне сервиса (BridgeHost), а не этой USB-сессии
         var h = host
-        // режим фиксируется на подключение; тёплая AA с другой геометрией не годится (SDR уже ушёл), её закрываем
+        // режим фиксируется на подключение (SDR уже ушёл). Сервер ГУ одноразовый, а перезапустить его теперь некому
+        // (службы спецвозможностей нет), поэтому живую AA с другой геометрией или DPI не закрываем: работаем со старым режимом
         val chosenGeometry = aaPrefs.videoGeometry
         val wantMode = chosenGeometry.effective(aaPrefs.transcode)
         val wantDensity = aaPrefs.aaDensity
         if (h != null && !h.isDead && h.core.videoMode != wantMode) {
-            AppLog.i("BRIDGE: видео-режим сменился (${h.core.videoMode.label} -> ${wantMode.label}), тёплую AA закрываю и поднимаю заново")
-            h.shutdown("смена видео-режима")
+            AppLog.i("BRIDGE: видео-режим/DPI сменился (${h.core.videoMode.label} -> ${wantMode.label}), применится после перезапуска сервера ГУ")
         } else if (h != null && !h.isDead && h.core.densityOverride != wantDensity) {
-            AppLog.i("BRIDGE: DPI AA сменился (${h.core.densityOverride} -> $wantDensity, 0 = авто), тёплую AA закрываю и поднимаю заново")
-            h.shutdown("смена DPI AA")
+            AppLog.i("BRIDGE: видео-режим/DPI сменился (DPI ${h.core.densityOverride} -> $wantDensity, 0 = авто), применится после перезапуска сервера ГУ")
         }
         if (h == null || h.isDead) {
             h = createHost(aaPrefs, chosenGeometry, wantMode, wantDensity, previous = h)
@@ -805,10 +804,11 @@ class BridgeService : Service() {
             AppLog.i("BRIDGE: AA-хост уже есть, переиспользую (grace=${h.isInGrace})")
         }
         // на воздухе перекодирование обязательно: в passthrough битрейт не регулируется. Режим хоста не трогаем
-        // (без перекодирования он уже R720, его можно перекодировать), хост не пересоздаём: сервер AA одноразовый
-        val transcode = aaPrefs.transcode || transport.caps == TransportCaps.TCP6
+        // (без перекодирования он уже R720, его можно перекодировать), хост не пересоздаём: сервер AA одноразовый.
+        // Старый режим живого хоста с кропом (WIDE*, R1024) в passthrough не живёт: перекодирование держим включённым
+        val transcode = aaPrefs.transcode || transport.caps == TransportCaps.TCP6 || h.core.videoMode.needsTranscode
         if (h.core.transcodeEnabled != transcode) {
-            AppLog.i("BRIDGE видео: ${if (transcode) "воздух, перекодирование включаю принудительно" else "кабель, возвращаю passthrough по настройке"}")
+            AppLog.i("BRIDGE видео: ${if (transcode) "перекодирование включаю принудительно (воздух или режим хоста ${h.core.videoMode.label})" else "кабель, возвращаю passthrough по настройке"}")
             h.core.transcodeEnabled = transcode
         }
         if (wakeLock == null) {
