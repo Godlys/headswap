@@ -215,6 +215,10 @@ fun Context.outlineButton(label: String, iconRes: Int = 0, heightDp: Int = 64, s
 fun Context.tonalButton(label: String, heightDp: Int = 52, sp: Float = 15f): LinearLayout =
     pill(label, 0, heightDp, sp, clr(R.color.surf2), clr(R.color.on), 0)
 
+/** Тональная кнопка-контейнер (pric/onpric): вторая по важности кнопка под основной. */
+fun Context.containerButton(label: String, heightDp: Int = 56, sp: Float = 17f): LinearLayout =
+    pill(label, 0, heightDp, sp, clr(R.color.pric), clr(R.color.onpric), 0)
+
 /** Текстовая кнопка (акцент). */
 fun Context.linkButton(label: String, heightDp: Int = 48, sp: Float = 16f): LinearLayout =
     pill(label, 0, heightDp, sp, 0, clr(R.color.acc), 0)

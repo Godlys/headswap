@@ -1,46 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="step_aa_dev_title">Режим разработчика Android Auto</string>
-    <string name="step_aa_dev_body">Откройте настройки Android Auto, пролистайте вниз и 10 раз нажмите «Сведения о версиях и разрешениях», подтвердите. Без этого не будет пункта «Сервер головного устройства».</string>
-    <string name="step_aa_dev_hint">В HyperOS этих настроек нет в обычных Настройках — открывайте их кнопкой ниже.</string>
+    <!-- Шаг: заголовок, пронумерованный список (string-array), подсказка, кнопки; short - название в чеклисте -->
+    <string name="step_aa_dev_title">Включите режим разработчика Android Auto</string>
+    <string-array name="step_aa_dev_list">
+        <item>Нажмите кнопку «Открыть Android Auto»</item>
+        <item>Пролистайте в самый низ</item>
+        <item>10 раз нажмите на строку «Версия» и подтвердите</item>
+    </string-array>
     <string name="step_aa_dev_primary">Открыть Android Auto</string>
     <string name="step_aa_dev_short">Режим разработчика AA</string>
 
-    <string name="step_aa_unknown_title">Неизвестные источники в Android Auto</string>
-    <string name="step_aa_unknown_body">Чтобы на магнитоле появились видео, YouTube и браузер (Fermata Auto, ParkedTube, AABrowser), включите в Android Auto: Настройки → ⋮ → Настройки разработчика → Неизвестные источники. Без этого Android Auto не покажет приложения, установленные не из Google Play.</string>
-    <string name="step_aa_unknown_primary">Открыть настройки Android Auto</string>
+    <string name="step_aa_unknown_title">Включите установку из неизвестных источников</string>
+    <string-array name="step_aa_unknown_list">
+        <item>Нажмите кнопку «Открыть Android Auto»</item>
+        <item>Нажмите ⋮ и выберите «Для разработчиков»</item>
+        <item>Пролистайте вниз до пункта «Неизвестные источники»</item>
+        <item>Поставьте галочку</item>
+    </string-array>
+    <string name="step_aa_unknown_hint">Без этого пункта Android Auto не покажет приложения, установленные в обход Google Play.</string>
+    <string name="step_aa_unknown_primary">Открыть Android Auto</string>
     <string name="step_aa_unknown_short">Неизвестные источники</string>
 
     <string name="step_autostart_title">Запустите сервер ГУ</string>
-    <string name="step_autostart_body">Откройте Android Auto, нажмите ⋮ вверху справа и выберите «Вкл. сервер головного устр-ва».</string>
+    <string-array name="step_autostart_list">
+        <item>Нажмите кнопку «Открыть Android Auto»</item>
+        <item>Нажмите ⋮ вверху справа</item>
+        <item>Выберите «Вкл. сервер головного устр-ва»</item>
+    </string-array>
     <string name="step_autostart_hint">Достаточно включить один раз: сервер ГУ остаётся работать в фоне, Headswap его не выключает. Если Android всё же закроет его сам, включите снова, открыв настройки AA. Автозапуска через спецвозможности больше нет, теперь нужно включать сервер ГУ вручную.</string>
     <string name="step_autostart_primary">Открыть Android Auto</string>
+    <string name="step_autostart_short">Сервер ГУ</string>
 
-    <string name="step_notif_title">Уведомления</string>
-    <string name="step_notif_body">Покажу статус в шторке, и система не выгрузит мост, пока экран погашен.</string>
+    <string name="step_notif_title">Включите уведомления</string>
+    <string-array name="step_notif_list">
+        <item>Нажмите кнопку «Разрешить» внизу экрана</item>
+        <item>Нажмите «Разрешить» в окне Android «Разрешить приложению Headswap отправлять уведомления?»</item>
+    </string-array>
+    <string name="step_notif_hint">В шторке будет видно, как идёт подключение, а Android не выгрузит Headswap, пока экран погашен.</string>
+    <string name="step_notif_short">Уведомления</string>
 
-    <string name="step_background_title">Работа в фоне</string>
-    <string name="step_background_body">HyperOS убивает фоновые приложения. Снимите ограничение батареи, иначе мост может отключиться при погашенном экране.</string>
-    <string name="step_background_hint">Xiaomi: Настройки → Приложения → Headswap → «Автозапуск» включить, «Контроль активности» → «Нет ограничений».</string>
+    <!-- Пункты 3-4 (автозапуск) показываются только на Xiaomi -->
+    <string name="step_background_title">Снимите ограничение батареи</string>
+    <string-array name="step_background_list">
+        <item>Нажмите кнопку «Снять ограничение батареи»</item>
+        <item>Выберите «Нет ограничений»</item>
+        <item>Вернитесь и нажмите кнопку «Автозапуск»</item>
+        <item>Пролистайте до Headswap и включите переключатель</item>
+    </string-array>
     <string name="step_background_primary">Снять ограничение батареи</string>
-    <string name="step_background_extra">Автозапуск и контроль активности</string>
+    <string name="step_background_extra">Автозапуск</string>
+    <string name="step_background_short">Работа в фоне</string>
 
-    <string name="step_mic_title">Микрофон</string>
-    <string name="step_mic_body">Нужен для «Окей, Google» и голосового ввода, если микрофон машины недоступен: голос возьму с микрофона телефона.</string>
+    <string name="step_mic_title">Разрешите доступ к микрофону</string>
+    <string-array name="step_mic_list">
+        <item>Нажмите кнопку «Разрешить» внизу экрана</item>
+        <item>Нажмите «При использовании приложения»</item>
+    </string-array>
+    <string name="step_mic_hint">Нужен, чтобы вызывать голосового ассистента.</string>
+    <string name="step_mic_short">Микрофон</string>
 
-    <string name="step_bluetooth_title">Bluetooth для звонков</string>
-    <string name="step_bluetooth_body">Звонки в Android Auto всегда идут через Bluetooth: один раз сопрягите телефон с магнитолой как телефон или гарнитуру. Музыка и навигация идут по кабелю.</string>
+    <string name="step_bluetooth_title">Включите Bluetooth</string>
+    <string-array name="step_bluetooth_list">
+        <item>Нажмите кнопку «Открыть Bluetooth»</item>
+        <item>Включите Bluetooth</item>
+        <item>Подключитесь к магнитоле</item>
+    </string-array>
+    <string name="step_bluetooth_hint">Нужно для звонков: в Android Auto они идут только через Bluetooth.</string>
     <string name="step_bluetooth_primary">Открыть Bluetooth</string>
+    <string name="step_bluetooth_short">Bluetooth для звонков</string>
 
-    <string name="step_location_title">Геопозиция для Карт</string>
-    <string name="step_location_body">Google Картам и 2ГИС в Android Auto нужен доступ к местоположению, иначе на экране машины будет «требуется доступ к геоданным».</string>
-    <string name="step_location_hint">Включите геолокацию и разрешите её приложениям карт.</string>
+    <string name="step_location_title">Включите геолокацию</string>
+    <string-array name="step_location_list">
+        <item>Нажмите кнопку «Открыть геолокацию»</item>
+        <item>Включите переключатель «Включить геолокацию»</item>
+    </string-array>
+    <string name="step_location_hint">Без неё Google Карты и 2ГИС в Android Auto пишут «требуется доступ к геоданным».</string>
     <string name="step_location_primary">Открыть геолокацию</string>
+    <string name="step_location_short">Геопозиция для Карт</string>
 
-    <string name="step_first_title">Первое подключение</string>
-    <string name="step_first_body">Подключите кабель к магнитоле, телефон разблокирован. На запрос «Открыть Headswap для USB-аксессуара» отметьте «По умолчанию» и нажмите «ОК».</string>
-    <string name="step_first_hint">Если на магнитоле экран «启动CarLife» — нажмите эту кнопку. В машине телефон должен быть разблокирован в момент подключения, иначе на ГУ будет «Разблокируйте телефон».</string>
+    <string name="step_first_title">При первом подключении</string>
+    <string-array name="step_first_list">
+        <item>Разблокируйте телефон и подключите кабель к магнитоле</item>
+        <item>Отметьте «Использовать по умолчанию»</item>
+        <item>Нажмите «ОК»</item>
+    </string-array>
+    <string name="step_first_hint">Если на магнитоле экран «启动CarLife», нажмите эту кнопку.</string>
     <string name="step_first_primary">Понятно</string>
+    <string name="step_first_short">Первое подключение</string>
 
     <string name="onb_already_done">Уже сделано</string>
     <string name="onb_skip">Пропустить</string>
@@ -48,8 +94,8 @@
     <string name="onb_later">Позже</string>
     <string name="onb_back">Назад</string>
     <string name="onb_next">Дальше</string>
+    <string name="onb_got_it">Понятно</string>
     <string name="onb_step_progress">Шаг %1$d из %2$d</string>
-    <string name="onb_xiaomi_only">Только Xiaomi / HyperOS</string>
     <string name="onb_done_chip">Уже выполнено</string>
 
     <string name="onb_checklist_title">Проверка готовности</string>

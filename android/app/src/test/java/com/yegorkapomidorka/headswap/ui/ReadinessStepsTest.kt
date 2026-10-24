@@ -2,6 +2,7 @@ package com.yegorkapomidorka.headswap.ui
 
 import com.yegorkapomidorka.headswap.R
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -26,9 +27,39 @@ class ReadinessStepsTest {
         assertEquals("aa_unknown", s.id.key)
         // «Уже сделано» ведёт дальше и ставит ручную отметку; шаг ничего не требует и не блокирует онбординг
         assertEquals(R.string.onb_already_done, s.skip)
-        assertNull(s.hint)
+        assertEquals(R.string.step_aa_unknown_hint, s.hint)
         assertNull(s.extra)
         assertEquals(R.string.step_aa_unknown_short, s.short)
+    }
+
+    @Test
+    fun serverStepIsManualWithoutExtra() {
+        // службы спецвозможностей нет: выполненность шага - только ручная отметка «Понятно»
+        val s = Readiness.info(StepId.AUTOSTART)
+        assertEquals(R.string.onb_got_it, s.skip)
+        assertEquals(R.string.step_autostart_primary, s.primary)
+        assertNull(s.extra)
+    }
+
+    @Test
+    fun onlyCarStepHasBodyInsteadOfList() {
+        for (s in Readiness.STEPS) {
+            if (s.id == StepId.CAR) {
+                assertNull(s.list)
+                assertEquals(R.string.step_car_body, s.body)
+            } else {
+                assertNotNull(s.id.key, s.list)
+                assertNull(s.id.key, s.body)
+            }
+        }
+    }
+
+    @Test
+    fun extraOnlyOnBackgroundStep() {
+        assertEquals(listOf(StepId.BACKGROUND), Readiness.STEPS.filter { it.extra != null }.map { it.id })
+        // шаги 1 и 5 без подсказки
+        assertNull(Readiness.info(StepId.AA_DEV).hint)
+        assertNull(Readiness.info(StepId.BACKGROUND).hint)
     }
 
     @Test

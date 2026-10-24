@@ -66,27 +66,27 @@
     <string name="notif_server_started">Head unit server started</string>
 
     <!-- Onboarding mock screens (drawn illustrations of system UI) -->
-    <string name="mock_aa_title">Android Auto settings</string>
-    <string name="mock_aa_notifications">Notifications</string>
-    <string name="mock_aa_cars">Connected cars</string>
+    <string name="mock_aa_title" translatable="false">Android Auto</string>
     <string name="mock_aa_version">Version</string>
     <string name="mock_aadev_title">Developer settings</string>
-    <string name="mock_aadev_resolution">Video resolution</string>
     <string name="mock_aadev_unknown">Unknown sources</string>
+    <string name="mock_menu_help">Help &amp; feedback</string>
+    <string name="mock_menu_start">Start head unit server</string>
+    <string name="mock_menu_exit">Exit developer mode</string>
     <string name="mock_notif_now">Headswap · now</string>
-    <string name="mock_notif_hint">Status in the notification shade, even with the screen off</string>
-    <string name="mock_bg_title">Headswap · App info</string>
-    <string name="mock_bg_battery">Battery: Unrestricted</string>
+    <string name="mock_bg_activity">Battery saver</string>
+    <string name="mock_bg_no_limits">No restrictions</string>
+    <string name="mock_bg_no_limits_sub">Battery saver will not limit the app\'s background work</string>
     <string name="mock_bg_autostart">Autostart</string>
-    <string name="mock_bg_saver">Battery saver: No restrictions</string>
     <string name="mock_mic_question">Allow Headswap to record audio?</string>
     <string name="mock_mic_while_using">While using the app</string>
-    <string name="mock_bt_title">Bluetooth · paired devices</string>
-    <string name="mock_bt_headunit">Head unit · calls and audio</string>
-    <string name="mock_bt_headphones">Headphones</string>
-    <string name="mock_loc_title">Location</string>
+    <string name="mock_mic_once">Only this time</string>
+    <string name="mock_mic_deny">Don\'t allow</string>
+    <string name="mock_bt_title" translatable="false">Bluetooth</string>
+    <string name="mock_bt_headunit">Head unit</string>
+    <string name="mock_bt_connected">Connected</string>
     <string name="mock_loc_use">Use location</string>
-    <string name="mock_loc_maps">Maps: allowed</string>
+    <string name="mock_loc_use_sub">Apps with this permission can access your location.</string>
     <string name="mock_usb_question">Open Headswap to handle the USB accessory?</string>
     <string name="mock_usb_default">Use by default for this USB accessory</string>
     <string name="mock_cancel">Cancel</string>

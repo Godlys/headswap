@@ -112,29 +112,29 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         val done = Readiness.isDone(c, s.id)
         shownDone = done
         renderProgress(s)
+        renderTitle(s)
 
+        // прокручивается только картинка и текст, заголовок остаётся на месте
         val body = c.vbox().apply {
             addView(
                 FrameLayout(c).apply {
                     background = c.shape(c.clr(R.color.surf2), 28)
-                    minimumHeight = c.dp(if (s.hint != null) 0 else 190)     // с подсказкой макет компактнее: текст целиком виден без прокрутки
+                    // с подсказкой и на шагах с окном Android Auto макет компактнее: текст целиком виден без прокрутки
+                    val compact = s.hint != null || s.id == StepId.AA_DEV || s.id == StepId.AA_UNKNOWN
+                    minimumHeight = c.dp(if (compact) 0 else 190)
                     pad(c, 20, 20, 20, 20)
                     addView(Mocks.build(c, s.id), FrameLayout.LayoutParams(MATCH, WRAP, Gravity.CENTER_VERTICAL))
                 },
                 lp(MATCH, WRAP).margins(c, 0, 4, 0, 0),
             )
             val text = c.vbox(10).apply { pad(c, 0, 18, 0, 36) }     // нижний отступ больше затемнения края: конец текста не тонет в fade
-            if (s.id == StepId.BACKGROUND && Readiness.isXiaomi()) {
-                text.addView(chipLabel(c.getString(R.string.onb_xiaomi_only)), lp(WRAP, WRAP))
-            }
             if (done) text.addView(doneChip(), lp(WRAP, WRAP))
-            text.addView(c.text(c.getString(s.title), 28f, 600).apply { letterSpacing = -0.01f; lineHeight = c.dp(34) })
-            text.addView(c.text(s.bodyText(c), 17f, 400, c.clr(R.color.on2)).apply { lineHeight = c.dp(24) })
+            text.addView(numberedList(s.listItems(c)), lp(MATCH, WRAP))
             s.hint?.let {
                 text.addView(
-                    c.text(c.getString(it), 14f, 400, c.clr(R.color.on2)).apply {
+                    c.text(c.getString(it), 14f, 400, c.clr(R.color.onpric)).apply {
                         lineHeight = c.dp(20)
-                        background = c.shape(c.clr(R.color.surf), 16)
+                        background = c.shape(c.clr(R.color.pric), 16)
                         pad(c, 14, 12, 14, 12)
                     },
                     lp(MATCH, WRAP),
@@ -149,7 +149,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         buttons.addView(c.primaryButton(primaryLabel).apply { setOnClickListener { onPrimary(s, done) } })
         val showExtra = s.extra != null && !done && (s.id != StepId.BACKGROUND || Readiness.isXiaomi())
         if (showExtra) {
-            buttons.addView(c.outlineButton(c.getString(s.extra!!), 0, 48, 15f).apply { setOnClickListener { onExtra(s) } })
+            buttons.addView(c.containerButton(c.getString(s.extra!!)).apply { setOnClickListener { onExtra(s) } })
         }
         val skipLabel = if (done && s.id != StepId.FIRST) c.getString(R.string.onb_back) else c.getString(s.skip)
         buttons.addView(c.linkButton(skipLabel, 48).apply { setOnClickListener { onSkip(s, done) } })
@@ -164,6 +164,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         val c = ctx
         shownDone = Readiness.isDone(c, s.id)
         renderProgress(s)
+        renderTitle(s)
         val aa = AaPrefs(c)
         if (carChoice == null) carChoice = aa.carPreset
 
@@ -179,8 +180,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         carChoice?.let { chooser.show(it) }
 
         val body = c.vbox(12).apply { pad(c, 0, 4, 0, 24) }
-        body.addView(c.text(c.getString(s.title), 28f, 600).apply { letterSpacing = -0.01f; lineHeight = c.dp(34) })
-        body.addView(c.text(s.bodyText(c), 17f, 400, c.clr(R.color.on2)).apply { lineHeight = c.dp(24) })
+        body.addView(c.text(c.getString(s.body!!), 17f, 400, c.clr(R.color.on2)).apply { lineHeight = c.dp(24) })
         body.addView(chooser.view, lp(MATCH, WRAP).margins(c, 0, 8, 0, 0))
         root.addView(fadingScroll(body), lp(MATCH, 0, 1f))
 
@@ -213,9 +213,36 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         addView(content)
     }
 
-    private fun chipLabel(s: String) = ctx.text(s, 13f, 600, ctx.clr(R.color.onpric)).apply {
-        background = ctx.shape(ctx.clr(R.color.pric), 8)
-        pad(ctx, 10, 4, 10, 4)
+    /** Заголовок шага под строкой «Шаг n из N»: вне прокрутки. */
+    private fun renderTitle(s: StepInfo) {
+        val c = ctx
+        root.addView(
+            c.text(c.getString(s.title), 24f, 600).apply { letterSpacing = -0.01f; lineHeight = c.dp(30) },
+            lp(MATCH, WRAP).margins(c, 0, 4, 0, 16),
+        )
+    }
+
+    /** Пронумерованный список: кружок pri с цифрой и текст шага. */
+    private fun numberedList(items: List<String>): View {
+        val c = ctx
+        return c.vbox(12).apply {
+            items.forEachIndexed { i, t ->
+                addView(
+                    c.hbox(12).apply {
+                        gravity = Gravity.TOP
+                        addView(
+                            FrameLayout(c).apply {
+                                background = c.oval(c.clr(R.color.pri))
+                                addView(c.text("${i + 1}", 14f, 700, c.clr(R.color.onpri)), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+                            },
+                            lp(c.dp(26), c.dp(26)),
+                        )
+                        addView(c.text(t, 17f, 400).apply { lineHeight = c.dp(24) }, lp(0, WRAP, 1f))
+                    },
+                    lp(MATCH, WRAP),
+                )
+            }
+        }
     }
 
     private fun doneChip(): View {
