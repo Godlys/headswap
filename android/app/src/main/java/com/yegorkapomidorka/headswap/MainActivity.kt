@@ -13,7 +13,6 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.WindowInsets
-import android.view.WindowManager
 import android.widget.FrameLayout
 import com.yegorkapomidorka.headswap.aa.AaCreds
 import com.yegorkapomidorka.headswap.aa.AaProbe
@@ -67,7 +66,6 @@ class MainActivity : Activity() {
         if (AppTheme.medium) setTheme(R.style.Theme_Headswap_Medium)
         super.onCreate(savedInstanceState)
         AppLog.init(this)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         root = FrameLayout(this)
         if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
         root.setOnApplyWindowInsetsListener { v, ins ->
