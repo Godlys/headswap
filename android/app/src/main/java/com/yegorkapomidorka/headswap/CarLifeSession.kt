@@ -131,6 +131,7 @@ class CarLifeSession(
 
     // видео статистика
     @Volatile private var lastVideoTx = 0L
+    private var idleBeatLogged = false
     private var vFrames = 0L
     private var vBytes = 0L
     private var vKeys = 0L
@@ -1066,7 +1067,11 @@ class CarLifeSession(
     private val pauseHeartbeatHu: Boolean get() = bridge.huVw20082120 || (air && bridge.huVwBt1420)
 
     private fun pauseHeartbeat() {
-        if (closed.get() || !paused || !PAUSE_KEEPALIVE_ENABLED) return
+        if (closed.get() || !PAUSE_KEEPALIVE_ENABLED) return
+        if (!paused) {
+            idleHeartbeat()
+            return
+        }
         val (type, period) =
             if (pauseHeartbeatHu) Msg.VIDEO_HEARTBEAT to PAUSE_HEARTBEAT_MS else Msg.VIDEO_DATA to pauseKeepaliveMs
         val now = SystemClock.elapsedRealtime()
@@ -1074,6 +1079,23 @@ class CarLifeSession(
         if (vBeats == 0L) AppLog.i("видео: PAUSE, шлю пустой ${Msg.name(type)} раз в $period мс, чтобы ГУ не рвало USB")
         lastVideoTx = now
         send(Ch.VIDEO, Wire.dataInner(type, unixSeconds(), ByteArray(0)))
+    }
+
+    /**
+     * VW CNS2 Delphi 20082114 (h425, лог 2026-10-24): AA на статичном экране не шлёт кадров, через 6,4 с без видео ГУ
+     * порвала USB (EIO), паузы до 5,1 с проходили. Вне PAUSE после [IDLE_HEARTBEAT_MS] без кадров шлём VIDEO_HEARTBEAT,
+     * как на PAUSE, и дальше с тем же шагом, пока AA молчит.
+     */
+    private fun idleHeartbeat() {
+        if (!bridge.huVwCns2Delphi || !carlifeStarted || vFrames == 0L) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastVideoTx < IDLE_HEARTBEAT_MS) return
+        if (!idleBeatLogged) {
+            idleBeatLogged = true
+            AppLog.i("видео: AA молчит ${now - lastVideoTx} мс, шлю пустой VIDEO_HEARTBEAT раз в $IDLE_HEARTBEAT_MS мс, чтобы ГУ не рвало USB")
+        }
+        lastVideoTx = now
+        send(Ch.VIDEO, Wire.dataInner(Msg.VIDEO_HEARTBEAT, unixSeconds(), ByteArray(0)))
     }
 
     private fun tick() {
@@ -1209,6 +1231,7 @@ class CarLifeSession(
         private const val SILENCE_MS = 10_000L
         private const val PAUSE_KEEPALIVE_MS = 2_000L  // Desay G6S: пустой VIDEO_DATA
         private const val PAUSE_HEARTBEAT_MS = 100L    // VW 20082120: пустой VIDEO_HEARTBEAT
+        private const val IDLE_HEARTBEAT_MS = 1_000L   // Delphi 20082114: AA без кадров дольше секунды
 
         /** На воздухе раз в ~1 с: ГУ на Wi-Fi рвут видео-сокет быстрее (план 5.2 п.4). */
         private const val PAUSE_KEEPALIVE_AIR_MS = 900L
