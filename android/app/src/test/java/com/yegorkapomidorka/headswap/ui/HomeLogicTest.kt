@@ -124,10 +124,10 @@ class HomeLogicTest {
         assertEquals(true, s.logLink)
         assertEquals(UiText.res(R.string.home_title_server_down), s.notifTitle)
         assertEquals(UiText.res(R.string.notif_server_down), s.notifText)
-        // короткий отказ (~6 с после ByeBye) норма: прежнее «Запустите сервер ГУ», без красного
+        // короткий отказ (~6 с после ByeBye) норма: обычное «Подключаюсь», без красного и без «Запустите сервер ГУ»
         val short = HomeLogic.compute(inp(running = true, status = status, protocol = true, refusedMs = HomeLogic.REFUSED_DOWN_MS - 1, worked = true))
-        assertEquals(Phase.OFF, short.phase)
-        assertEquals(true, short.showChain)
+        assertEquals(Phase.WAITING, short.phase)
+        assertEquals(false, short.showChain)
     }
 
     @Test

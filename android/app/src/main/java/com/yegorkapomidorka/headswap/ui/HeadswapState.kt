@@ -135,7 +135,8 @@ object HomeLogic {
                 ),
             )
             serverDown -> serverDownState()
-            refused -> state(
+            // сервер уже работал: короткий отказ после ByeBye - норма, пока AA снова слушает; ждём как обычное подключение
+            refused && !i.serverWorked -> state(
                 Phase.OFF, Tone.PRI, HeroIcon.POWER, UiText.res(R.string.home_title_off),
                 UiText.res(R.string.home_sub_refused, TEXT_START_CHAIN),
                 listOf(
