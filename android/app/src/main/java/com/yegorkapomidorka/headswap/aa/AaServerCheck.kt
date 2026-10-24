@@ -30,9 +30,6 @@ enum class ProbeResult {
     ERROR,
 }
 
-/** Что показывает главный экран про сервер ГУ. */
-enum class ServerState { UNKNOWN, CHECKING, ALIVE, DOWN, ERROR }
-
 /** Одна попытка пробы. Настоящая - AaSessionProbe, в тестах подменяется. */
 fun interface ServerProbe {
     fun probeOnce(): ProbeResult
@@ -44,6 +41,7 @@ fun interface ServerProbe {
  * VERSION, TLS, AuthComplete, ответ на SERVICE_DISCOVERY_REQUEST и сразу штатное закрытие (ByeBye, EOF, close).
  * Видео и каналы не открываем: после SDR телефон шлёт запросы каналов, но сессия уже останавливается.
  * Возвращается только когда сессия закрылась полностью (onEnd): иначе мост подключился бы поверх неё.
+ * Автоматически не запускается: даже короткая проба сбивает Android Auto, следующее подключение машины получало отказ или зависание.
  */
 class AaSessionProbe(
     private val loadCreds: () -> AapCredentials,
@@ -59,11 +57,17 @@ class AaSessionProbe(
         override fun onFrame(annexB: ByteArray, ptsUs: Long) {}
     }
 
+    /** Чем кончилась последняя попытка (ошибка подключения или причина конца сессии): для тоста при ERROR. */
+    @Volatile var lastDetail: String = ""
+        private set
+
     override fun probeOnce(): ProbeResult {
+        lastDetail = ""
         val creds = try {
             loadCreds()
         } catch (e: Throwable) {
-            log("SRVCHECK сертификаты не загрузились: ${e.javaClass.simpleName}: ${e.message}", true)
+            lastDetail = "${e.javaClass.simpleName}: ${e.message}"
+            log("SRVCHECK сертификаты не загрузились: $lastDetail", true)
             return ProbeResult.ERROR
         }
         val ended = CountDownLatch(1)
@@ -123,6 +127,7 @@ class AaSessionProbe(
         }
         if (interrupted) Thread.currentThread().interrupt()
         val result = classify(connectError.get(), session.connected, session.established, endReason.get())
+        lastDetail = connectError.get()?.let { "${it.javaClass.simpleName}: ${it.message}" } ?: endReason.get()
         log(
             "SRVCHECK сессия: connected=${session.connected} established=${session.established} закрытие чистое=${session.exitOk} " +
                 "rx=${session.stats.rxFrames} tx=${session.stats.txFrames}, причина: ${endReason.get()}",
@@ -144,276 +149,171 @@ class AaSessionProbe(
                 else -> ProbeResult.ERROR
             }
             established -> ProbeResult.ALIVE
-            endReason.startsWith("нет VERSION_RESPONSE") || endReason.startsWith("TLS handshake: таймаут") -> ProbeResult.HUNG
+            endReason.startsWith(AapSession.NO_VERSION_RESPONSE_REASON) || endReason.startsWith("TLS handshake: таймаут") -> ProbeResult.HUNG
             else -> ProbeResult.ERROR
         }
     }
 }
 
 /**
- * Серия проб и правила, когда её можно запускать. Без Android: проба, "занято" и часы приходят снаружи.
- * Одна серия за раз; не чаще раза в minIntervalMs (ранний запуск откладывается, а не отбрасывается);
- * REFUSED повторяется до attempts раз с паузой pauseMs (сразу после ByeBye сервер ГУ ещё не слушает), остальные итоги финальны
- * (повторять голые подключения к зависшему серверу незачем). Попытку, дошедшую до TCP, прервать нельзя:
- * cancelAndAwait отменяет только ожидания и следующие попытки, а текущую дожидается.
+ * Ручная проба из «Для разработчиков»: одна попытка в фоновой нити, без серий и повторов.
+ * Не стартует при живом мосте и подключённом USB (одноразовый сервер 5277 тогда нужен им) и не параллельно с другой.
+ * Попытку, дошедшую до TCP, прервать нельзя, поэтому мост перед подключением ждёт её конца (awaitIdle).
+ * Результат на состояние главного экрана не влияет.
  */
-class ServerCheckController(
+class ManualServerCheck(
     private val probe: ServerProbe,
-    private val busy: () -> Boolean,
-    private val now: () -> Long,
+    private val busy: () -> Refusal?,
     private val log: (String) -> Unit,
-    private val afterCloseDelayMs: Long = AFTER_CLOSE_DELAY_MS,
-    private val minIntervalMs: Long = MIN_INTERVAL_MS,
-    private val staleMs: Long = STALE_MS,
-    private val attempts: Int = ATTEMPTS,
-    private val pauseMs: Long = PAUSE_MS,
 ) {
-    enum class Trigger { AFTER_CLOSE, APP_OPEN }
+    /** Почему пробу не запустили. */
+    enum class Refusal { BRIDGE, USB, RUNNING }
 
     private val lock = ReentrantLock()
-    private val changed = lock.newCondition()
+    private val idle = lock.newCondition()
+    private var running = false
 
-    // всё ниже под lock
-    private var worker: Thread? = null
-    private var token = 0
-    private var checking = false
-    private var result: ProbeResult? = null
-    private var finishedAt = NONE
-    private var recheck = false
-    private var alive = false
-
-    val state: ServerState
-        get() = lock.withLock {
-            when {
-                checking -> ServerState.CHECKING
-                else -> when (result) {
-                    null -> ServerState.UNKNOWN
-                    ProbeResult.ALIVE -> ServerState.ALIVE
-                    ProbeResult.REFUSED, ProbeResult.HUNG -> ServerState.DOWN
-                    ProbeResult.ERROR -> ServerState.ERROR
-                }
-            }
-        }
-
-    /** Сервер хоть раз отвечал в этом процессе: красное "не отвечает" тогда уместно, а не для новичка. */
-    val everAlive: Boolean get() = lock.withLock { alive }
-
-    /** Мост сам закрыл AA (ByeBye позади): проверить сервер через afterCloseDelayMs. */
-    fun afterBridgeClosed() = launch(Trigger.AFTER_CLOSE)
-
-    /** Приложение открыто: проверить, если сессии нет, проб не было или последняя старая. */
-    fun onAppOpened() = launch(Trigger.APP_OPEN)
-
-    /** Пользователь нажал "Открыть Android Auto": после неудачной пробы вернётся и ждёт свежую, без правила старости. */
-    fun onOpenAaRequested() {
-        lock.withLock { recheck = result == ProbeResult.REFUSED || result == ProbeResult.HUNG }
-    }
-
-    /**
-     * Мост подключается к серверу: проба не должна быть на нём ни секунды. Отменяет ожидания и повторы,
-     * дожидается текущей попытки (она сама ограничена по времени) и сбрасывает прошлый итог.
-     */
-    fun cancelAndAwait(timeoutMs: Long) {
+    /** null = проба запущена, onDone позовётся из рабочей нити (detail - текст сбоя, если проба упала исключением); иначе причина отказа. */
+    fun start(onDone: (ProbeResult, String?) -> Unit): Refusal? {
         lock.withLock {
-            token++
-            result = null
-            finishedAt = NONE
-            recheck = false
-            if (worker == null) return
-            log("SRVCHECK мост подключается: жду конца пробы")
-            var left = TimeUnit.MILLISECONDS.toNanos(timeoutMs)
-            var interrupted = false
-            while (worker != null && left > 0) {
-                try {
-                    left = changed.awaitNanos(left)
-                } catch (_: InterruptedException) {
-                    interrupted = true
+            if (running) return Refusal.RUNNING
+            busy()?.let { return it }
+            running = true
+        }
+        val t = Thread({
+            var result = ProbeResult.ERROR
+            var detail: String? = null
+            try {
+                log("SRVCHECK ручная проба: старт")
+                result = probe.probeOnce()
+            } catch (e: Throwable) {
+                detail = "${e.javaClass.simpleName}: ${e.message}"
+                log("SRVCHECK сбой: $detail")
+            } finally {
+                lock.withLock {
+                    running = false
+                    idle.signalAll()
                 }
             }
-            if (interrupted) Thread.currentThread().interrupt()
-            if (worker != null) log("SRVCHECK проба не закончилась за $timeoutMs мс, подключаюсь всё равно")
-        }
+            log("SRVCHECK ИТОГ: $result")
+            onDone(result, detail)
+        }, "aa-srvcheck")
+        t.isDaemon = true
+        t.start()
+        return null
     }
 
-    /** Дождаться конца запущенной серии (для тестов). */
+    /** Дождаться конца идущей пробы; false = не закончилась за timeoutMs. */
     fun awaitIdle(timeoutMs: Long): Boolean = lock.withLock {
         var left = TimeUnit.MILLISECONDS.toNanos(timeoutMs)
-        while (worker != null && left > 0) left = changed.awaitNanos(left)
-        worker == null
-    }
-
-    private fun launch(trigger: Trigger) {
-        lock.withLock {
-            if (worker != null) {
-                log("SRVCHECK пропуск ($trigger): проба уже идёт или ждёт")
-                return
-            }
-            if (trigger == Trigger.APP_OPEN && !allowOpen()) return
-            // не чаще раза в minIntervalMs: слишком ранний запуск ждёт, пока интервал не пройдёт
-            val sinceLast = if (finishedAt == NONE) Long.MAX_VALUE else now() - finishedAt
-            val throttle = if (sinceLast >= minIntervalMs) 0L else minIntervalMs - sinceLast
-            val delay = maxOf(if (trigger == Trigger.AFTER_CLOSE) afterCloseDelayMs else 0L, throttle)
-            val my = ++token
-            checking = true
-            val t = Thread({ work(trigger, delay, my) }, "aa-srvcheck")
-            t.isDaemon = true
-            worker = t
-            t.start()
-        }
-    }
-
-    /** Правила открытия приложения; зовётся под lock. */
-    private fun allowOpen(): Boolean {
-        if (busy()) {
-            log("SRVCHECK пропуск (APP_OPEN): мост или USB заняты")
-            return false
-        }
-        val age = if (finishedAt == NONE) Long.MAX_VALUE else now() - finishedAt
-        val forced = recheck
-        if (!forced && age < staleMs) {
-            log("SRVCHECK пропуск (APP_OPEN): последняя проба ${age / 1000} с назад")
-            return false
-        }
-        recheck = false
-        return true
-    }
-
-    private fun work(trigger: Trigger, delayMs: Long, my: Int) {
-        var verdict: ProbeResult? = null
-        try {
-            if (delayMs > 0 && !sleepOrCancel(delayMs, my)) {
-                log("SRVCHECK ($trigger) отменена до старта")
-                return
-            }
-            if (!gate(my)) return
-            log("SRVCHECK старт ($trigger, ждала ${delayMs} мс)")
-            val t0 = now()
-            verdict = series(my)
-            if (verdict != null) log("SRVCHECK ИТОГ: $verdict за ${now() - t0} мс")
-        } catch (e: Throwable) {
-            log("SRVCHECK сбой: ${e.javaClass.simpleName}: ${e.message}")
-        } finally {
-            lock.withLock {
-                if (verdict != null && token == my) {
-                    result = verdict
-                    finishedAt = now()
-                    if (verdict == ProbeResult.ALIVE) alive = true
-                }
-                checking = false
-                worker = null
-                changed.signalAll()
-            }
-        }
-    }
-
-    /** null = серия прервана (занято, отмена): прошлый итог остаётся как был. */
-    private fun series(my: Int): ProbeResult? {
-        var last: ProbeResult? = null
-        for (i in 1..attempts) {
-            if (i > 1 && !sleepOrCancel(pauseMs, my)) {
-                log("SRVCHECK серия отменена перед попыткой $i")
-                return null
-            }
-            if (!gate(my)) return null
-            val t1 = now()
-            val r = try {
-                probe.probeOnce()
-            } catch (e: Throwable) {
-                log("SRVCHECK попытка $i/$attempts: сбой ${e.javaClass.simpleName}: ${e.message}")
-                ProbeResult.ERROR
-            }
-            log("SRVCHECK попытка $i/$attempts: $r за ${now() - t1} мс")
-            last = r
-            if (r != ProbeResult.REFUSED) break
-        }
-        return last
-    }
-
-    /** Можно ли идти на сервер: нас не отменили, мост не работает, USB не подключён. */
-    private fun gate(my: Int): Boolean = lock.withLock {
-        when {
-            token != my -> {
-                log("SRVCHECK отменена: мост подключается")
-                false
-            }
-            busy() -> {
-                log("SRVCHECK отложена: мост или USB заняты")
-                false
-            }
-            else -> true
-        }
-    }
-
-    /** false = отменили (cancelAndAwait) за время ожидания. */
-    private fun sleepOrCancel(ms: Long, my: Int): Boolean = lock.withLock {
-        var left = TimeUnit.MILLISECONDS.toNanos(ms)
-        while (token == my && left > 0) {
+        var interrupted = false
+        while (running && left > 0) {
             try {
-                left = changed.awaitNanos(left)
+                left = idle.awaitNanos(left)
             } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return@withLock false
+                interrupted = true
             }
         }
-        token == my
-    }
-
-    companion object {
-        /** После ByeBye сервер ГУ ещё ~6 с не слушает: даём ему время до первой попытки. */
-        const val AFTER_CLOSE_DELAY_MS = 8_000L
-        const val MIN_INTERVAL_MS = 60_000L
-        const val STALE_MS = 10 * 60_000L
-        const val ATTEMPTS = 4
-        const val PAUSE_MS = 5_000L
-        private const val NONE = Long.MIN_VALUE
+        if (interrupted) Thread.currentThread().interrupt()
+        !running
     }
 }
 
 /**
- * Проверка живости сервера ГУ для главного экрана. Состояние (`state`) читает UI, сигналы шлют сервис, activity и кнопки.
- * Не работает, пока жив мост или подключён USB-аксессуар: одноразовый сервер 5277 тогда нужен ему.
+ * Пассивная диагностика сервера ГУ по настоящим подключениям моста (AaConnector), сама к серверу не ходит:
+ * как долго он подряд отказывает (ECONNREFUSED) и сколько раз подряд принял TCP, но не прислал VERSION_RESPONSE.
+ * Короткие отказы (~6 с после ByeBye, пока AA снова слушает порт) норма: решает главный экран (HomeLogic) по порогам.
+ * Серия принадлежит одному циклу коннектора: reset() в начале и в конце, старые отказы в новую поездку не попадают.
  */
-object AaServerCheck {
-    @Volatile private var ctl: ServerCheckController? = null
+class ServerFailures(private val now: () -> Long = { System.nanoTime() / 1_000_000 }) {
+    @Volatile private var refusedSince = NONE
 
-    /** Сколько мост ждёт конец пробы перед подключением. Попытка сама укладывается в ~35 с. */
+    /** Подряд принятых по TCP подключений без VERSION_RESPONSE. */
+    @Volatile var versionHangs = 0
+        private set
+
+    /** Хоть раз за процесс установилась настоящая AA-сессия: сервер работал. Не сбрасывается. */
+    @Volatile var worked = false
+        private set
+
+    /** Сколько миллисекунд сервер отказывает без перерыва (0 = не отказывает). */
+    val refusedForMs: Long get() = refusedSince.let { if (it == NONE) 0L else now() - it }
+
+    fun onRefused() {
+        if (refusedSince == NONE) refusedSince = now()
+        versionHangs = 0
+    }
+
+    /** TCP принят: порт уже не отказывает (дальше решит VERSION_RESPONSE). */
+    fun onTcpAccepted() {
+        refusedSince = NONE
+    }
+
+    fun onNoVersionResponse() {
+        refusedSince = NONE
+        versionHangs++
+    }
+
+    /** Сессия установилась: сервер работает, серии обнуляются. */
+    fun onEstablished() {
+        reset()
+        worked = true
+    }
+
+    /** Любой другой исход (голый EOF, TLS и т.п.), начало и конец цикла коннектора. */
+    fun reset() {
+        refusedSince = NONE
+        versionHangs = 0
+    }
+
+    private companion object {
+        const val NONE = Long.MIN_VALUE
+    }
+}
+
+/** Ручная проба для кнопки в «Для разработчиков» (Actions.checkServer) и ожидание её конца перед подключением моста. */
+object AaServerCheck {
+    @Volatile private var manual: ManualServerCheck? = null
+    @Volatile private var probe: AaSessionProbe? = null
+
+    /** Сколько мост ждёт конец ручной пробы перед подключением. Попытка сама укладывается в ~35 с. */
     private const val AWAIT_MS = 45_000L
 
-    val state: ServerState get() = ctl?.state ?: ServerState.UNKNOWN
-    val everAlive: Boolean get() = ctl?.everAlive ?: false
-
-    private fun controller(ctx: Context): ServerCheckController {
-        ctl?.let { return it }
+    private fun checker(ctx: Context): ManualServerCheck {
+        manual?.let { return it }
         synchronized(this) {
-            ctl?.let { return it }
+            manual?.let { return it }
             val app = ctx.applicationContext
             val usb = app.getSystemService(UsbManager::class.java)
-            val c = ServerCheckController(
-                probe = AaSessionProbe(
-                    loadCreds = { AaCreds.load(app, AaPrefs(app).certSet).creds },
-                    sd = { VideoMode.DEFAULT.sdOptions(fullAudio = false, carMake = AaPrefs(app).carMake) },
-                    log = { line, ui -> AppLog.i(line, ui) },
-                ),
-                busy = { CarLifeState.running || usb.accessoryList?.isNotEmpty() == true },
-                now = { System.nanoTime() / 1_000_000 },
+            val p = AaSessionProbe(
+                loadCreds = { AaCreds.load(app, AaPrefs(app).certSet).creds },
+                sd = { VideoMode.DEFAULT.sdOptions(fullAudio = false, carMake = AaPrefs(app).carMake) },
+                log = { line, ui -> AppLog.i(line, ui) },
+            )
+            probe = p
+            val c = ManualServerCheck(
+                probe = p,
+                busy = {
+                    when {
+                        CarLifeState.running -> ManualServerCheck.Refusal.BRIDGE
+                        usb.accessoryList?.isNotEmpty() == true -> ManualServerCheck.Refusal.USB
+                        else -> null
+                    }
+                },
                 log = { AppLog.i(it) },
             )
-            ctl = c
+            manual = c
             return c
         }
     }
 
-    /** MainActivity.onResume. */
-    fun onAppOpened(ctx: Context) = controller(ctx).onAppOpened()
+    /** Кнопка в «Для разработчиков». null = проба пошла, onDone позовётся из рабочей нити (detail - причина при ERROR). */
+    fun start(ctx: Context, onDone: (ProbeResult, String?) -> Unit): ManualServerCheck.Refusal? =
+        checker(ctx).start { result, err -> onDone(result, err ?: if (result == ProbeResult.ERROR) probe?.lastDetail else null) }
 
-    /** Мост закрыл AA штатно (grace истёк или Стоп). */
-    fun afterBridgeClosed(ctx: Context) = controller(ctx).afterBridgeClosed()
-
-    /** Кнопка "Открыть Android Auto". */
-    fun onOpenAaRequested(ctx: Context) = controller(ctx).onOpenAaRequested()
-
-    /** AaConnector перед каждым подключением к серверу ГУ (нить коннектора, не main). */
+    /** AaConnector перед каждым подключением к серверу ГУ (нить коннектора, не main): ручная проба не должна держать сервер. */
     fun beforeBridgeConnect() {
-        ctl?.cancelAndAwait(AWAIT_MS)
+        val c = manual ?: return
+        if (!c.awaitIdle(AWAIT_MS)) AppLog.i("SRVCHECK проба не закончилась за $AWAIT_MS мс, подключаюсь всё равно")
     }
 }

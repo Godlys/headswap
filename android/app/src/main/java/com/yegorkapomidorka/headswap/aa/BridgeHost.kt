@@ -44,10 +44,6 @@ class BridgeHost(
     @get:Synchronized
     val isInGrace: Boolean get() = grace != null
 
-    /** AA-коннектор запускался (хост закрывали после настоящей AA-сессии, а не вхолостую). */
-    @get:Synchronized
-    val wasStarted: Boolean get() = started
-
     fun awaitTornDown(timeoutMs: Long): Boolean = tornDownLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
 
     /** Новая CarLife-сессия: отменить grace, при первой - запустить AA. false = хост уже закрывается. */

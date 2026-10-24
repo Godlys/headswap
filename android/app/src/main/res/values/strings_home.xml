@@ -47,7 +47,6 @@
     <string name="home_stage_not_started">start it</string>
     <string name="home_stage_connecting">connecting</string>
     <string name="home_stage_handshake">handshake</string>
-    <string name="home_stage_checking">checking</string>
     <string name="home_stage_hu_parked">disconnected</string>
     <string name="home_stage_no_answer">not responding</string>
     <string name="home_stage_started">started</string>

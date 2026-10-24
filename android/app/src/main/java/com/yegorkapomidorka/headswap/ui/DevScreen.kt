@@ -153,6 +153,7 @@ class DevScreen(host: MainActivity) : Screen(host) {
             c.getString(R.string.dev_action_scan) to { Actions.scan(c, "кнопка") },
             c.getString(R.string.dev_action_stop_bridge) to { Actions.stopBridge(c) },
             c.getString(R.string.dev_action_aa_settings) to { Actions.openAaSettings(c) },
+            c.getString(R.string.dev_action_check_server) to { Actions.checkServer(c) },
             c.getString(R.string.dev_action_aa_selftest) to { Actions.aaSelftest(c) },
             c.getString(R.string.dev_action_mic_test) to { Actions.micTest(c) },
         )

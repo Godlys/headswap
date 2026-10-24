@@ -1,5 +1,6 @@
 package com.yegorkapomidorka.headswap.aa
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
@@ -18,12 +19,13 @@ class AaConnectorLoopTest {
         while (!cond() && System.currentTimeMillis() - t0 < ms) Thread.sleep(10)
     }
 
-    private fun connector(socket: () -> java.net.Socket): AaConnector {
+    private fun connector(failures: ServerFailures = ServerFailures(), socket: () -> java.net.Socket): AaConnector {
         val core = AaBridgeCore({ _, _ -> })
         return AaConnector(
             core, creds, { m, _ -> logs.add(m) },
             options = { AapOptions(preVideoTimeoutMs = 1000) },
             retryMs = 50,
+            failures = failures,
             sessionFactory = { sink, o, lg, end ->
                 events.add("session")
                 AapSession(creds, sink, o, lg, socketFactory = socket, onEnd = end)
@@ -39,6 +41,26 @@ class AaConnectorLoopTest {
         c.stop()
         assertTrue(events.toString(), events.count { it == "session" } >= 3)
         assertTrue(logs.toString(), logs.count { it.contains("недоступен (connection refused)") } == 1)
+    }
+
+    @Test
+    fun connectionRefusedFeedsServerFailuresButOtherConnectErrorsDoNot() {
+        val refused = ServerFailures()
+        val c = connector(refused) { throw java.net.ConnectException("Connection refused") }
+        c.start()
+        waitFor { events.count { it == "session" } >= 3 && refused.refusedForMs > 0 }
+        assertTrue("отказ засчитан", refused.refusedForMs > 0)
+        c.stop()
+        waitFor { refused.refusedForMs == 0L }
+        assertEquals("после остановки коннектора серия обнуляется", 0L, refused.refusedForMs)
+
+        events.clear()
+        val other = ServerFailures()
+        val c2 = connector(other) { throw IOException("EPERM") }
+        c2.start()
+        waitFor { events.count { it == "session" } >= 3 }
+        assertEquals("не ECONNREFUSED отказом не считаем", 0L, other.refusedForMs)
+        c2.stop()
     }
 
     @Test

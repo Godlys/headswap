@@ -338,7 +338,7 @@ class AapSession(
             } catch (e: IOException) {
                 // сервер ГУ не слушает: тихий выход без ByeBye и итогов, мост сам повторит
                 log("AA сервер ${opts.host}:${opts.port} недоступен: ${e.javaClass.simpleName}: ${e.message}", false)
-                stopReason = "сервер недоступен: ${e.javaClass.simpleName}"
+                stopReason = "$UNAVAILABLE_REASON${e.javaClass.simpleName}"
                 return
             }
             connected = true
@@ -545,7 +545,7 @@ class AapSession(
             log("AA игнорирую кадр до version response: ch=${fr.chan} flags=0x%02x".format(fr.flags), true)
         }
         throw SessionError(
-            "нет VERSION_RESPONSE. Если соединение открыто, но тишина: сервер ГУ завис на прошлой сессии, " +
+            "$NO_VERSION_RESPONSE_REASON. Если соединение открыто, но тишина: сервер ГУ завис на прошлой сессии, " +
                 "перезапусти его в настройках разработчика Android Auto (или force-stop AA)."
         )
     }
@@ -841,6 +841,12 @@ class AapSession(
     private fun u16(b: ByteArray, i: Int) = ((b[i].toInt() and 0xFF) shl 8) or (b[i + 1].toInt() and 0xFF)
 
     companion object {
+        /** Начало причины конца сессии, когда TCP к серверу ГУ не установился (дальше имя исключения; ConnectException = отказ). */
+        const val UNAVAILABLE_REASON = "сервер недоступен: "
+
+        /** Начало причины конца сессии, когда TCP принят, но VERSION_RESPONSE не пришёл. */
+        const val NO_VERSION_RESPONSE_REASON = "нет VERSION_RESPONSE"
+
         private const val VERSION_TIMEOUT_MS = 10_000L      // AapTransport.kt HANDSHAKE_TIMEOUT_MS
         private const val TLS_TIMEOUT_MS = 15_000L          // AapSslContext.kt SSL_HANDSHAKE_TIMEOUT_MS
         private const val POLL_MS = 100

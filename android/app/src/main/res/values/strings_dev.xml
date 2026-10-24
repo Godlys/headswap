@@ -58,6 +58,14 @@
     <string name="dev_action_scan">Scan</string>
     <string name="dev_action_stop_bridge">Stop bridge</string>
     <string name="dev_action_aa_settings">Android Auto settings</string>
+    <string name="dev_action_check_server">Check head unit server</string>
+    <string name="dev_check_server_alive">Head unit server is responding</string>
+    <string name="dev_check_server_refused">Head unit server refuses the connection</string>
+    <string name="dev_check_server_hung">Head unit server does not answer the handshake</string>
+    <string name="dev_check_server_error">Error: %1$s</string>
+    <string name="dev_check_server_bridge">The bridge is running: the check would break the current session. Stop the bridge first.</string>
+    <string name="dev_check_server_usb">A USB accessory (the car) is connected: the check would break the connection. Unplug the cable.</string>
+    <string name="dev_check_server_running">A check is already running</string>
     <string name="dev_action_aa_selftest" translatable="false">AA selftest</string>
     <string name="dev_action_mic_test" translatable="false">Mic test</string>
 

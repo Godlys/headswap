@@ -46,7 +46,6 @@
     <string name="home_stage_not_started">запустите</string>
     <string name="home_stage_connecting">подключаюсь</string>
     <string name="home_stage_handshake">рукопожатие</string>
-    <string name="home_stage_checking">проверяю</string>
     <string name="home_stage_hu_parked">отключена</string>
     <string name="home_stage_no_answer">не отвечает</string>
     <string name="home_stage_started">запущен</string>

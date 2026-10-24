@@ -16,211 +16,103 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
-/** Серия проб сервера ГУ на фейковом транспорте (без сети): ретраи, ограничения, гейты, отмена. */
+/** Ручная проба сервера ГУ на фейковом транспорте, пассивные счётчики отказов, классификация и настоящая проба по loopback. */
 class AaServerCheckTest {
-    private class FakeProbe(private vararg val script: ProbeResult) : ServerProbe {
+    private class FakeProbe(private val result: ProbeResult = ProbeResult.ALIVE) : ServerProbe {
         val calls = AtomicInteger()
-        val times = CopyOnWriteArrayList<Long>()
 
         @Volatile var gate: CountDownLatch? = null
         @Volatile var entered = CountDownLatch(1)
 
         override fun probeOnce(): ProbeResult {
-            val i = calls.getAndIncrement()
-            times.add(System.nanoTime() / 1_000_000)
+            calls.incrementAndGet()
             entered.countDown()
             gate?.await(10, TimeUnit.SECONDS)
-            return script[minOf(i, script.size - 1)]
+            return result
         }
     }
 
     private val logs = CopyOnWriteArrayList<String>()
-    private val clock = AtomicLong(1_000_000L)
-    @Volatile private var busy = false
+    @Volatile private var busy: ManualServerCheck.Refusal? = null
 
-    private fun controller(
-        probe: ServerProbe,
-        afterCloseDelayMs: Long = 20,
-        minIntervalMs: Long = 100,
-        staleMs: Long = 600_000,
-        pauseMs: Long = 10,
-        real: Boolean = false,
-    ) = ServerCheckController(
-        probe, { busy }, { if (real) System.nanoTime() / 1_000_000 else clock.get() }, { logs.add(it) },
-        afterCloseDelayMs = afterCloseDelayMs, minIntervalMs = minIntervalMs, staleMs = staleMs, attempts = 4, pauseMs = pauseMs,
-    )
+    private fun checker(probe: ServerProbe) = ManualServerCheck(probe, { busy }, { logs.add(it) })
 
-    private fun run(c: ServerCheckController, trigger: () -> Unit) {
-        trigger()
-        assertTrue("серия не закончилась\n" + logs.joinToString("\n"), c.awaitIdle(5000))
-    }
-
-    @Test
-    fun refusedIsRetriedUntilServerAnswers() {
-        val p = FakeProbe(ProbeResult.REFUSED, ProbeResult.REFUSED, ProbeResult.ALIVE)
-        val c = controller(p)
-        run(c) { c.afterBridgeClosed() }
-        assertEquals(3, p.calls.get())
-        assertEquals(ServerState.ALIVE, c.state)
-        assertTrue(c.everAlive)
-    }
-
-    @Test
-    fun refusedAllFourAttemptsIsDownByLastResult() {
-        val p = FakeProbe(ProbeResult.REFUSED)
-        val c = controller(p, pauseMs = 40)
-        run(c) { c.afterBridgeClosed() }
-        assertEquals(4, p.calls.get())
-        assertEquals(ServerState.DOWN, c.state)
-        assertFalse(c.everAlive)
-        // пауза между попытками выдержана
-        val gaps = p.times.zipWithNext { a, b -> b - a }
-        assertTrue(gaps.toString(), gaps.all { it >= 35 })
-    }
-
-    @Test
-    fun refusedThenHungFinishesWithHung() {
-        val p = FakeProbe(ProbeResult.REFUSED, ProbeResult.HUNG, ProbeResult.ALIVE)
-        val c = controller(p)
-        run(c) { c.afterBridgeClosed() }
-        assertEquals("HUNG финален: голые подключения к зависшему серверу не повторяем", 2, p.calls.get())
-        assertEquals(ServerState.DOWN, c.state)
-    }
-
-    @Test
-    fun errorIsFinalAndIsNotDown() {
-        val p = FakeProbe(ProbeResult.ERROR, ProbeResult.ALIVE)
-        val c = controller(p)
-        run(c) { c.afterBridgeClosed() }
-        assertEquals(1, p.calls.get())
-        assertEquals(ServerState.ERROR, c.state)
-    }
-
-    @Test
-    fun afterCloseWaitsEightSecondsRule() {
-        val p = FakeProbe(ProbeResult.ALIVE)
-        val c = controller(p, afterCloseDelayMs = 150, real = true)
-        val t0 = System.nanoTime() / 1_000_000
-        c.afterBridgeClosed()
-        assertEquals(ServerState.CHECKING, c.state)
-        assertTrue(c.awaitIdle(5000))
-        assertTrue("проба раньше задержки: ${p.times[0] - t0} мс", p.times[0] - t0 >= 140)
-        assertEquals(8_000L, ServerCheckController.AFTER_CLOSE_DELAY_MS)
-        assertEquals(60_000L, ServerCheckController.MIN_INTERVAL_MS)
-        assertEquals(4, ServerCheckController.ATTEMPTS)
-        assertEquals(5_000L, ServerCheckController.PAUSE_MS)
-    }
-
-    @Test
-    fun busyBridgeOrUsbSkipsProbeAndKeepsOldState() {
-        val p = FakeProbe(ProbeResult.ALIVE)
-        val c = controller(p)
-        busy = true
-        run(c) { c.afterBridgeClosed() }
-        run(c) { c.onAppOpened() }
-        assertEquals(0, p.calls.get())
-        assertEquals(ServerState.UNKNOWN, c.state)
-        busy = false
-        run(c) { c.onAppOpened() }
-        assertEquals(1, p.calls.get())
-        assertEquals(ServerState.ALIVE, c.state)
-    }
-
-    @Test
-    fun busyDuringSeriesStopsBeforeNextAttempt() {
-        val busyAfterFirst = object : ServerProbe {
-            val calls = AtomicInteger()
-            override fun probeOnce(): ProbeResult {
-                calls.incrementAndGet()
-                busy = true                 // USB подключили между попытками
-                return ProbeResult.REFUSED
-            }
+    private class Done {
+        val latch = CountDownLatch(1)
+        val result = AtomicReference<ProbeResult?>()
+        val detail = AtomicReference<String?>()
+        val callback: (ProbeResult, String?) -> Unit = { r, d ->
+            result.set(r)
+            detail.set(d)
+            latch.countDown()
         }
-        val c = controller(busyAfterFirst)
-        run(c) { c.afterBridgeClosed() }
-        assertEquals(1, busyAfterFirst.calls.get())
-        assertEquals("итога нет: серия прервана", ServerState.UNKNOWN, c.state)
+    }
+
+    // --- ручная проба ---
+
+    @Test
+    fun manualProbeRunsOnceAndReportsResult() {
+        val p = FakeProbe(ProbeResult.REFUSED)
+        val done = Done()
+        assertNull(checker(p).start(done.callback))
+        assertTrue(done.latch.await(5, TimeUnit.SECONDS))
+        assertEquals(1, p.calls.get())
+        assertEquals(ProbeResult.REFUSED, done.result.get())
+        assertNull(done.detail.get())
+        assertTrue(logs.toString(), logs.any { it.contains("ИТОГ: REFUSED") })
     }
 
     @Test
-    fun appOpenProbesOnlyWhenNeverProbedOrOlderThanTenMinutes() {
-        val p = FakeProbe(ProbeResult.ALIVE)
-        val c = controller(p)
-        run(c) { c.onAppOpened() }
-        assertEquals("проб не было", 1, p.calls.get())
-        clock.addAndGet(9 * 60_000L)
-        run(c) { c.onAppOpened() }
-        assertEquals("9 минут: свежая", 1, p.calls.get())
-        clock.addAndGet(2 * 60_000L)
-        run(c) { c.onAppOpened() }
-        assertEquals("11 минут: старая", 2, p.calls.get())
-    }
-
-    @Test
-    fun recheckAfterOpenAaSkipsStalenessButNotThrottle() {
-        val p = FakeProbe(ProbeResult.REFUSED, ProbeResult.REFUSED, ProbeResult.REFUSED, ProbeResult.REFUSED, ProbeResult.ALIVE)
-        val c = controller(p, minIntervalMs = 200, real = true)
-        run(c) { c.afterBridgeClosed() }
-        assertEquals(ServerState.DOWN, c.state)
-        assertEquals(4, p.calls.get())
-        val finished = System.nanoTime() / 1_000_000
-        // без нажатия «Открыть Android Auto» свежий отказ повторно не проверяется
-        run(c) { c.onAppOpened() }
-        assertEquals(4, p.calls.get())
-        c.onOpenAaRequested()
-        run(c) { c.onAppOpened() }
-        assertEquals(5, p.calls.get())
-        assertEquals(ServerState.ALIVE, c.state)
-        // не чаще minInterval: ранний повтор отложен, а не отброшен
-        assertTrue("повтор через ${p.times[4] - finished} мс", p.times[4] - finished >= 100)
-    }
-
-    @Test
-    fun openAaWithoutPriorFailureDoesNotForceRecheck() {
-        val p = FakeProbe(ProbeResult.ALIVE)
-        val c = controller(p)
-        run(c) { c.onAppOpened() }
-        c.onOpenAaRequested()
-        run(c) { c.onAppOpened() }
+    fun manualProbeRefusedWhileBridgeOrUsbBusy() {
+        val p = FakeProbe()
+        val c = checker(p)
+        busy = ManualServerCheck.Refusal.BRIDGE
+        assertEquals(ManualServerCheck.Refusal.BRIDGE, c.start { _, _ -> })
+        busy = ManualServerCheck.Refusal.USB
+        assertEquals(ManualServerCheck.Refusal.USB, c.start { _, _ -> })
+        assertEquals("проба не запускалась", 0, p.calls.get())
+        busy = null
+        val done = Done()
+        assertNull(c.start(done.callback))
+        assertTrue(done.latch.await(5, TimeUnit.SECONDS))
         assertEquals(1, p.calls.get())
     }
 
     @Test
-    fun secondTriggerWhileRunningIsSkipped() {
-        val p = FakeProbe(ProbeResult.ALIVE)
+    fun secondManualProbeWhileRunningIsRefused() {
+        val p = FakeProbe()
         p.gate = CountDownLatch(1)
-        val c = controller(p)
-        c.onAppOpened()
+        val c = checker(p)
+        val done = Done()
+        assertNull(c.start(done.callback))
         assertTrue(p.entered.await(5, TimeUnit.SECONDS))
-        c.onAppOpened()
-        c.afterBridgeClosed()
+        assertEquals(ManualServerCheck.Refusal.RUNNING, c.start { _, _ -> })
         p.gate!!.countDown()
-        assertTrue(c.awaitIdle(5000))
+        assertTrue(done.latch.await(5, TimeUnit.SECONDS))
         assertEquals("одна проба за раз", 1, p.calls.get())
     }
 
     @Test
-    fun bridgeConnectingCancelsPendingProbeAndDropsOldResult() {
-        val p = FakeProbe(ProbeResult.ALIVE)
-        val c = controller(p, afterCloseDelayMs = 5_000)
-        c.afterBridgeClosed()
-        c.cancelAndAwait(2000)
-        assertTrue(c.awaitIdle(2000))
-        assertEquals(0, p.calls.get())
-        assertEquals(ServerState.UNKNOWN, c.state)
+    fun probeExceptionIsErrorWithDetail() {
+        val done = Done()
+        assertNull(checker({ throw IllegalStateException("boom") }).start(done.callback))
+        assertTrue(done.latch.await(5, TimeUnit.SECONDS))
+        assertEquals(ProbeResult.ERROR, done.result.get())
+        assertEquals("IllegalStateException: boom", done.detail.get())
     }
 
     @Test
-    fun bridgeConnectingWaitsForAttemptInFlight() {
-        val p = FakeProbe(ProbeResult.REFUSED)
+    fun bridgeConnectWaitsForProbeInFlight() {
+        val p = FakeProbe()
         p.gate = CountDownLatch(1)
-        val c = controller(p)
-        c.onAppOpened()
+        val c = checker(p)
+        assertNull(c.start { _, _ -> })
         assertTrue(p.entered.await(5, TimeUnit.SECONDS))
         val returned = AtomicLong(0)
         val t = Thread {
-            c.cancelAndAwait(5000)
+            assertTrue(c.awaitIdle(5000))
             returned.set(System.nanoTime())
         }
         t.start()
@@ -230,16 +122,76 @@ class AaServerCheckTest {
         p.gate!!.countDown()
         t.join(5000)
         assertTrue(returned.get() >= released)
-        assertEquals("после отмены повторов нет", 1, p.calls.get())
-        assertEquals("итог отменённой серии не записан", ServerState.UNKNOWN, c.state)
-        assertFalse(c.everAlive)
     }
 
     @Test
-    fun probeExceptionIsErrorNotCrash() {
-        val c = controller({ throw IllegalStateException("boom") })
-        run(c) { c.onAppOpened() }
-        assertEquals(ServerState.ERROR, c.state)
+    fun awaitIdleReturnsAtOnceWhenNothingRunsAndTimesOutOtherwise() {
+        val p = FakeProbe()
+        val c = checker(p)
+        assertTrue(c.awaitIdle(50))
+        p.gate = CountDownLatch(1)
+        assertNull(c.start { _, _ -> })
+        assertTrue(p.entered.await(5, TimeUnit.SECONDS))
+        assertFalse(c.awaitIdle(100))
+        p.gate!!.countDown()
+        assertTrue(c.awaitIdle(5000))
+    }
+
+    // --- пассивные счётчики отказов ---
+
+    @Test
+    fun refusedStreakCountsFromFirstRefusal() {
+        val clock = AtomicLong(1_000L)
+        val f = ServerFailures { clock.get() }
+        assertEquals(0L, f.refusedForMs)
+        f.onRefused()
+        clock.addAndGet(6_000)
+        f.onRefused()
+        assertEquals("отсчёт от первого отказа, а не от последнего", 6_000L, f.refusedForMs)
+        clock.addAndGet(10_000)
+        f.onRefused()
+        assertEquals(16_000L, f.refusedForMs)
+    }
+
+    @Test
+    fun acceptedTcpBreaksRefusedStreak() {
+        val clock = AtomicLong(1_000L)
+        val f = ServerFailures { clock.get() }
+        f.onRefused()
+        clock.addAndGet(20_000)
+        f.onTcpAccepted()
+        assertEquals(0L, f.refusedForMs)
+        f.onRefused()
+        clock.addAndGet(1_000)
+        assertEquals("новая серия начинается заново", 1_000L, f.refusedForMs)
+    }
+
+    @Test
+    fun versionHangsAreConsecutive() {
+        val f = ServerFailures { 0L }
+        f.onNoVersionResponse()
+        f.onNoVersionResponse()
+        assertEquals(2, f.versionHangs)
+        f.onRefused()
+        assertEquals("отказ между зависаниями рвёт серию", 0, f.versionHangs)
+        f.onNoVersionResponse()
+        f.reset()
+        assertEquals(0, f.versionHangs)
+    }
+
+    @Test
+    fun establishedSessionClearsStreaksAndRemembersThatServerWorked() {
+        val clock = AtomicLong(0L)
+        val f = ServerFailures { clock.get() }
+        assertFalse(f.worked)
+        f.onRefused()
+        f.onNoVersionResponse()
+        f.onEstablished()
+        assertEquals(0L, f.refusedForMs)
+        assertEquals(0, f.versionHangs)
+        assertTrue(f.worked)
+        f.reset()
+        assertTrue("reset не забывает, что сервер работал", f.worked)
     }
 
     // --- классификация итога настоящей пробы ---
@@ -301,9 +253,11 @@ class AaServerCheckTest {
     }
 
     @Test
-    fun realProbeOnClosedPortIsRefused() {
+    fun realProbeOnClosedPortIsRefusedWithDetail() {
         val port = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
-        assertEquals(logs.joinToString("\n"), ProbeResult.REFUSED, probe(port).probeOnce())
+        val p = probe(port)
+        assertEquals(logs.joinToString("\n"), ProbeResult.REFUSED, p.probeOnce())
+        assertTrue(p.lastDetail, p.lastDetail.startsWith("ConnectException"))
     }
 
     @Test

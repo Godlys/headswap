@@ -161,6 +161,11 @@ class AaPrefs(ctx: Context) {
         get() = sp.getBoolean("progressSeconds", false)
         set(v) = sp.edit().putBoolean("progressSeconds", v).apply()
 
+    /** Хоть раз установилась настоящая AA-сессия: сервер ГУ у пользователя работал (для «Сервер ГУ не отвечает», а не «Запустите сервер ГУ»). */
+    var serverWorked: Boolean
+        get() = sp.getBoolean("serverWorked", false)
+        set(v) = sp.edit().putBoolean("serverWorked", v).apply()
+
     /** Предупреждение про видео в движении в разделе «Приложения для магнитолы» уже показано (один раз). */
     var appsWarningShown: Boolean
         get() = sp.getBoolean("appsWarningShown", false)
@@ -215,6 +220,9 @@ object AaState {
 
     /** Ошибка настройки, из-за которой мост не стартует (например, нет сертификата head unit); null = всё в порядке. */
     @Volatile var setupError: String? = null
+
+    /** Отказы сервера ГУ при настоящих подключениях моста: источник состояния «Сервер ГУ не отвечает» на главном экране. */
+    val serverFailures = ServerFailures()
 
     fun reset() {
         frames.set(0)

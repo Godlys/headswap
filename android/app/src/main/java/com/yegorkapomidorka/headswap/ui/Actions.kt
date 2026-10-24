@@ -7,6 +7,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbManager
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import com.yegorkapomidorka.headswap.MainActivity
 import com.yegorkapomidorka.headswap.AppLocale
@@ -16,7 +18,9 @@ import com.yegorkapomidorka.headswap.CarLifeState
 import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.aa.AaCreds
 import com.yegorkapomidorka.headswap.aa.AaServerCheck
+import com.yegorkapomidorka.headswap.aa.ManualServerCheck
 import com.yegorkapomidorka.headswap.aa.PhoneMicCapture
+import com.yegorkapomidorka.headswap.aa.ProbeResult
 import com.yegorkapomidorka.headswap.aa.TranscodeSelfCheck
 
 /**
@@ -96,8 +100,39 @@ object Actions {
      */
     fun startServerFromUi(ctx: Context) {
         HeadswapStatus.markServerRequested()
-        AaServerCheck.onOpenAaRequested(ctx)         // после "не отвечает" вернёмся и перепроверим без правила 10 минут
         openAaSettings(ctx)
+    }
+
+    /**
+     * Ручная проба сервера ГУ («Для разработчиков»): одна попытка полным рукопожатием, итог тостом и строками SRVCHECK в лог.
+     * Только без моста и USB: проба сбивает Android Auto. На состояние главного экрана не влияет.
+     */
+    fun checkServer(ctx: Context) {
+        val app = ctx.applicationContext
+        val main = Handler(Looper.getMainLooper())
+        fun toast(text: String) = main.post { Toast.makeText(app, text, Toast.LENGTH_LONG).show() }
+        val str = AppLocale.wrap(app)
+        val refusal = AaServerCheck.start(app) { result, detail ->
+            toast(
+                when (result) {
+                    ProbeResult.ALIVE -> str.getString(R.string.dev_check_server_alive)
+                    ProbeResult.REFUSED -> str.getString(R.string.dev_check_server_refused)
+                    ProbeResult.HUNG -> str.getString(R.string.dev_check_server_hung)
+                    ProbeResult.ERROR -> str.getString(R.string.dev_check_server_error, detail ?: "?")
+                },
+            )
+        }
+        if (refusal != null) {
+            toast(
+                str.getString(
+                    when (refusal) {
+                        ManualServerCheck.Refusal.BRIDGE -> R.string.dev_check_server_bridge
+                        ManualServerCheck.Refusal.USB -> R.string.dev_check_server_usb
+                        ManualServerCheck.Refusal.RUNNING -> R.string.dev_check_server_running
+                    },
+                ),
+            )
+        }
     }
 
     /** Проверка микрофона телефона без машины: 2 с AudioRecord, в лог сколько байт (ждём около 64000) и пик. */
