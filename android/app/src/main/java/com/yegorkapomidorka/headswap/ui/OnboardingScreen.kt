@@ -209,7 +209,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         isVerticalFadingEdgeEnabled = true
         setFadingEdgeLength(ctx.dp(24))
         isVerticalScrollBarEnabled = true
-        isScrollbarFadingEnabled = false
+        isScrollbarFadingEnabled = true     // постоянная полоса ложится на правый край карточки-иллюстрации; хвост текста и так виден по затемнению
         addView(content)
     }
 
