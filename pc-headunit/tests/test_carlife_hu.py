@@ -8,6 +8,7 @@ import socket
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -137,6 +138,80 @@ def test_loopback_auth_fail():
     t.join(10)
     b.s.close()
     assert res["auth"] == "AUTH FAIL"
+
+
+def test_nal_types_and_pause_command():
+    assert C.nal_types(b"\x00\x00\x00\x01\x67ab\x00\x00\x00\x01\x68c\x00\x00\x01\x65zz") == [7, 8, 5]
+    assert C.nal_types(b"\x00\x00\x00\x01\x41yy") == [1]
+    assert C.nal_types(b"") == [] and C.nal_types(b"\x00\x00\x01") == []
+    assert C.cmd_inner(C.VIDEO_ENCODER_PAUSE) == bytes.fromhex("00000000" "0001800A")
+    assert C.msg_name(C.VIDEO_ENCODER_PAUSE) == "VIDEO_ENCODER_PAUSE"
+    assert C.parse_args(["--pause-cycles", "3"]).pause_every == 10.0
+    for bad in (dict(pause_cycles=-1), dict(pause_every=0), dict(pause_for=-1)):
+        try:
+            C.Options(**bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"Options({bad}) must fail")
+
+
+IDR_FRAME = C.data_inner(C.VIDEO_DATA, b"\x00\x00\x00\x01\x67a\x00\x00\x00\x01\x68b\x00\x00\x00\x01\x65" + b"i" * 20)
+P_FRAME = C.data_inner(C.VIDEO_DATA, b"\x00\x00\x00\x01\x41" + b"p" * 10)
+
+
+def test_loopback_pause_cycles():
+    """Мост шлёт кадры, на PAUSE замолкает (кроме одного кадра «в пути»), на START через 30 мс отдаёт IDR."""
+    hu, t, res, out = start_hu(2.0, no_auth=True, pause_cycles=2, pause_every=0.3, pause_for=0.2)
+    b = FakeBridge(hu.port)
+    b.send_cmd(C.MD_INFO, MD_INFO_BODY)
+    b.s.sendall(C.outer(C.CH_VIDEO, IDR_FRAME))
+    b.s.settimeout(0.02)
+    paused, idr_due, last_p = False, None, 0.0
+    end = time.monotonic() + 8
+    while time.monotonic() < end:
+        try:
+            data = b.s.recv(65536)
+        except socket.timeout:
+            data = None
+        except OSError:
+            break
+        if data == b"":
+            break
+        for chan, inner in b.parser.feed(data or b""):
+            mtype, body, _ = C.parse_inner(chan, inner)
+            b.msgs.append((chan, mtype, body))
+            if chan == C.CH_CMD and mtype == C.VIDEO_ENCODER_PAUSE:
+                paused = True
+                b.s.sendall(C.outer(C.CH_VIDEO, P_FRAME))
+            elif chan == C.CH_CMD and mtype == C.VIDEO_ENCODER_START and paused:
+                paused, idr_due = False, time.monotonic() + 0.03
+        now = time.monotonic()
+        if paused:
+            continue
+        if idr_due is not None:
+            if now >= idr_due:
+                b.s.sendall(C.outer(C.CH_VIDEO, IDR_FRAME))
+                idr_due = None
+        elif now - last_p >= 0.05:
+            b.s.sendall(C.outer(C.CH_VIDEO, P_FRAME))
+            last_p = now
+    t.join(10)
+    b.s.close()
+    assert not t.is_alive()
+    assert b.types() == ([C.HU_PROTOCOL_VERSION] + BURST[:2] + BURST[3:]            # без HU_AUTHEN_REQUEST
+                         + [C.VIDEO_ENCODER_PAUSE, C.VIDEO_ENCODER_START] * 2)
+    p = res["pause"]
+    assert [c["k"] for c in p["cycles"]] == [1, 2]
+    # кадр после PAUSE мост шлёт всегда, плюс бывают кадры «в пути» (шлются раз в 50 мс до разбора PAUSE): точное число не фиксируем
+    assert all(c["paused_frames"] >= 1 for c in p["cycles"])
+    assert p["paused_frames_total"] == sum(c["paused_frames"] for c in p["cycles"]) >= 2
+    assert p["no_idr"] == 0
+    for c in p["cycles"]:
+        assert 0 <= c["first_ms"] <= c["idr_ms"] < 1000
+    log = (out / "carlife_hu.log").read_text(encoding="utf-8")
+    assert "pause #1: paused_frames=" in log and ", start->first_frame=" in log and ", start->idr=" in log
+    assert "pause cycles: 2, worst start->idr " in log
+    assert f", frames during pause total {p['paused_frames_total']}" in log
 
 
 def test_loopback_no_auth_flag():

@@ -21,13 +21,23 @@ interface TranscodeOutput {
  * (AaTranscoder); ядро моста работает с интерфейсом, чтобы логика проверялась на JVM.
  */
 interface VideoTranscoder {
-    /** CODEC_CONFIG AA (SPS+PPS). Новый SPS -> декодер будет пересоздан на следующем IDR. */
+    /**
+     * CODEC_CONFIG AA (SPS+PPS). Новый SPS -> декодер будет пересоздан на следующем IDR.
+     * Не блокирует, обрабатывается на нити транскодера; "nofeedthread" в tuning - старый синхронный путь.
+     */
     fun feedConfig(annexB: ByteArray)
 
-    /** Кадр AA (access unit). Первый кадр декодеру должен быть IDR. */
+    /**
+     * Кадр AA (access unit). Первый кадр декодеру должен быть IDR.
+     * Не блокирует, обрабатывается на нити транскодера (очередь полна -> кадр теряется до IDR, onNeedAaKeyFrame);
+     * "nofeedthread" в tuning - старый синхронный путь.
+     */
     fun feedFrame(annexB: ByteArray, ptsUs: Long)
 
-    /** Сбросить декодер (новая AA-сессия): энкодер остаётся жить. */
+    /**
+     * Сбросить декодер (новая AA-сессия): энкодер остаётся жить. Не блокирует, выполняется на нити транскодера
+     * после уже принятых кадров; "nofeedthread" в tuning - старый синхронный путь.
+     */
     fun resetDecoder()
 
     fun requestSyncFrame()

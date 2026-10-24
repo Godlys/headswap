@@ -10,6 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
 class FakeTranscoder : VideoTranscoder {
@@ -18,24 +19,36 @@ class FakeTranscoder : VideoTranscoder {
     val resets = AtomicInteger()
     val syncs = AtomicInteger()
     val stops = AtomicInteger()
+
+    /** Вызовы моста в порядке прихода: config, frame:idr, frame:p, reset, sync, intro, stop. */
+    val journal = CopyOnWriteArrayList<String>()
     override fun feedConfig(annexB: ByteArray) {
+        journal.add("config")
         configs.add(annexB)
     }
 
     override fun feedFrame(annexB: ByteArray, ptsUs: Long) {
+        journal.add(if (5 in AnnexB.nalTypes(annexB)) "frame:idr" else "frame:p")
         frames.add(annexB)
     }
 
     override fun resetDecoder() {
+        journal.add("reset")
         resets.incrementAndGet()
     }
 
     override fun requestSyncFrame() {
+        journal.add("sync")
         syncs.incrementAndGet()
+    }
+
+    override fun startIntro(banner: android.graphics.Bitmap) {
+        journal.add("intro")
     }
 
     override fun statsLine() = "fake"
     override fun stop() {
+        journal.add("stop")
         stops.incrementAndGet()
     }
 }
@@ -352,6 +365,146 @@ class AaTranscodeCoreTest {
         core.tick()
         assertTrue(logs.any { it.contains("видео[passthrough]") && it.contains("простой AA") })
         assertEquals("в простое ничего не шлём", 1, link.sent.size)
+    }
+
+    // --- контракт моста к транскодеру: порядок вызовов и реакция на колбэки (транскодер кормится асинхронно) ---
+
+    /** Только вызовы подачи (config/frame:*) из журнала - порядок, в котором транскодер увидит данные AA. */
+    private fun feedLog(t: FakeTranscoder) = t.journal.filter { it == "config" || it.startsWith("frame:") }
+
+    /** Две нити одновременно, обе должны завершиться за 2 с (иначе зависание/взаимоблокировка). */
+    private fun runConcurrently(a: () -> Unit, b: () -> Unit) {
+        val errors = CopyOnWriteArrayList<Throwable>()
+        val go = CountDownLatch(1)
+        val threads = listOf(a, b).mapIndexed { i, body ->
+            Thread({
+                go.await()
+                try { body() } catch (e: Throwable) { errors.add(e) }
+            }, "test-thread-$i").also { it.isDaemon = true; it.start() }
+        }
+        go.countDown()
+        val t0 = System.currentTimeMillis()
+        threads.forEach { it.join(maxOf(1, 2000 - (System.currentTimeMillis() - t0))) }
+        threads.forEach { assertFalse("нить ${it.name} зависла", it.isAlive) }
+        assertTrue("исключения в нитях: $errors", errors.isEmpty())
+    }
+
+    @Test
+    fun startOrderConfigBeforeIdrAndNoPBeforeIdr() {
+        core.onCarlifeStart()
+        core.onCodecConfig(aaCfg)
+        core.onFrame(aaP, 1)                                   // P до первого IDR отбрасывается
+        assertEquals(listOf("config"), feedLog(tr))
+        core.onFrame(aaIdr, 2)
+        core.onFrame(aaP, 3)
+        core.onFrame(aaP, 4)
+        assertEquals(listOf("config", "frame:idr", "frame:p", "frame:p"), feedLog(tr))
+    }
+
+    @Test
+    fun bareIdrIsFedGluedWithKnownConfig() {
+        core.onCarlifeStart()
+        core.onCodecConfig(aaCfg)                              // config пришёл раньше
+        core.onFrame(aaIdr, 1)                                 // IDR голый: только NAL 5
+        assertEquals(listOf(5), AnnexB.nalTypes(aaIdr))
+        assertEquals(1, tr.frames.size)
+        assertEquals(listOf(7, 8, 5), AnnexB.nalTypes(tr.frames[0]))
+        assertArrayEquals(aaCfg + aaIdr, tr.frames[0])
+    }
+
+    @Test
+    fun needAaKeyFrameDropsPUntilNextIdrAndIdrGoesWithConfig() {
+        core.onCarlifeStart()
+        core.onCodecConfig(aaCfg)
+        core.onFrame(aaIdr, 1)
+        core.onFrame(aaP, 2)
+        core.onNeedAaKeyFrame()                                // декодер потерял кадр
+        core.onFrame(aaP, 3)
+        core.onFrame(aaP, 4)
+        core.onFrame(aaIdr, 5)
+        core.onFrame(aaP, 6)
+        assertEquals(listOf("config", "frame:idr", "frame:p", "frame:idr", "frame:p"), feedLog(tr))
+        assertEquals(listOf(7, 8, 5), AnnexB.nalTypes(tr.frames[2]))
+        assertArrayEquals(aaCfg + aaIdr, tr.frames[2])
+        assertArrayEquals(aaP, tr.frames[3])
+    }
+
+    /** START после PAUSE: gotIdr сбрасывается, декодер ждёт IDR от AA (reset декодера на START мост не зовёт). */
+    @Test
+    fun startAfterPauseDropsPUntilIdr() {
+        core.onCarlifeStart()
+        core.onCodecConfig(aaCfg)
+        core.onFrame(aaIdr, 1)
+        core.onFrame(aaP, 2)
+        core.onCarlifePause()
+        core.onCarlifeStart()
+        val fed = tr.frames.size
+        core.onFrame(aaP, 3)
+        assertEquals(fed, tr.frames.size)
+        core.onFrame(aaIdr, 4)
+        core.onFrame(aaP, 5)
+        assertEquals(listOf("frame:idr", "frame:p", "frame:idr", "frame:p"), tr.journal.filter { it.startsWith("frame:") })
+        assertArrayEquals(aaCfg + aaIdr, tr.frames[2])
+    }
+
+    /** Реальный вызов resetDecoder из ядра - новая AA-сессия (onAaConnecting/onAaEnded): reset раньше IDR, P до IDR отброшен. */
+    @Test
+    fun aaReconnectResetsDecoderBeforeNextIdr() {
+        core.onCarlifeStart()
+        core.onCodecConfig(aaCfg)
+        core.onFrame(aaIdr, 1)
+        core.onFrame(aaP, 2)
+        core.onAaConnecting()
+        assertEquals(1, tr.resets.get())
+        core.onFrame(aaP, 3)                                   // P после сброса - до IDR не идёт
+        core.onCodecConfig(aaCfg)
+        core.onFrame(aaIdr, 4)
+        core.onFrame(aaP, 5)
+        val j = tr.journal
+        val reset = j.indexOf("reset")
+        val idr2 = j.lastIndexOf("frame:idr")
+        assertTrue("reset=$reset idr2=$idr2 journal=$j", reset in 0 until idr2)
+        assertEquals(listOf("config", "frame:idr", "frame:p"), j.subList(reset + 1, j.size).filter { it == "config" || it.startsWith("frame:") })
+        assertEquals("frame:p", j.last())
+    }
+
+    @Test
+    fun transcodeErrorFromOtherThreadDoesNotHangAndStopsFeeding() {
+        core.onCarlifeStart()
+        core.onCodecConfig(aaCfg)
+        core.onFrame(aaIdr, 1)
+        val old = tr
+        runConcurrently(
+            { for (i in 0 until 200) { core.onFrame(aaP, 2L + i); Thread.sleep(1) } },
+            { Thread.sleep(20); core.onTranscodeError("тест") },
+        )
+        waitStop(old)
+        assertEquals(1, old.stops.get())
+        assertFalse(core.isTranscoding)
+        val fed = feedLog(old).size
+        core.onFrame(aaP, 1000)
+        core.onFrame(aaIdr, 1001)
+        assertEquals("старый транскодер больше не кормится", fed, feedLog(old).size)
+        assertArrayEquals(aaCfg + aaIdr, link.sent.last())     // откат на passthrough
+    }
+
+    @Test
+    fun needAaKeyFrameFromOtherThreadDoesNotHangAndNextIdrIsFed() {
+        core.onCarlifeStart()
+        core.onCodecConfig(aaCfg)
+        core.onFrame(aaIdr, 1)
+        runConcurrently(
+            { for (i in 0 until 200) { core.onFrame(aaP, 2L + i); Thread.sleep(1) } },
+            { for (i in 0 until 20) { core.onNeedAaKeyFrame(); Thread.sleep(1) } },
+        )
+        val fed = tr.frames.size
+        core.onFrame(aaP, 1000)                                // после последнего колбэка декодер ждёт IDR
+        assertEquals(fed, tr.frames.size)
+        core.onFrame(aaIdr, 1001)
+        assertEquals(fed + 1, tr.frames.size)
+        assertArrayEquals(aaCfg + aaIdr, tr.frames.last())
+        assertEquals("frame:idr", tr.journal.last { it.startsWith("frame:") })
+        assertEquals(0, tr.stops.get())
     }
 }
 

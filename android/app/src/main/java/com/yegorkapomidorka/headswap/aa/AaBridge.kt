@@ -187,6 +187,9 @@ class AaBridgeCore(
     private var mediaRateLogged = MEDIA_RATE
     @Volatile var mediaChunkProvider: () -> MediaChunk = { MediaChunk.DEFAULT }
     private var mediaChunkLogged = CarlifeAudio.MAX_CHUNK
+    @Volatile var voiceChunkProvider: () -> VoiceChunk = { VoiceChunk.DEFAULT }
+    private var voiceChunkLogged = CarlifeAudio.MAX_CHUNK
+    @Volatile var ttsPrerollProvider: () -> TtsPreroll = { TtsPreroll.DEFAULT }
     private val audioInited = HashMap<Int, Boolean>()
     private val audioLogged = HashMap<Int, Long>()
 
@@ -241,6 +244,11 @@ class AaBridgeCore(
     /** h425: VW CNS2 Delphi копит MOVE ~190 мс и шлёт пачкой; раздаём пачку равномерно. Только при [huVwCns2Delphi]. */
     private val touchPacer = TouchBurstPacer(clockMs, audioSched) { a, x, y, px, py -> dispatchTouch(a, x, y, px, py) }
     @Volatile private var touchPacerLogged = false
+
+    /** Прореживание MOVE ([TouchDecimation]) стоит перед пейсером и прямой отправкой. */
+    @Volatile var touchDecimationProvider: () -> TouchDecimation = { TouchDecimation.DEFAULT }
+    private val touchDecimator = TouchDecimator { a, x, y, px, py -> routeTouch(a, x, y, px, py) }
+    @Volatile private var touchDecimationLogged = 1
     private val mediaReleaseTimer = AudioTimer()
     private val voiceExitTimer = AudioTimer()
     private var carlifePaused = false          // VIDEO_ENCODER_PAUSE после последнего START
@@ -366,6 +374,8 @@ class AaBridgeCore(
         huMazda20622111 = false                // STATISTIC_INFO придёт заново в этой сессии
         huVwCns2Delphi = false                 // STATISTIC_INFO придёт заново в этой сессии
         vrReply = false
+        touchDecimator.reset()
+        touchDecimationLogged = 1
         touchPacer.reset()
         touchPacerLogged = false
         h295TouchAt = NEVER
@@ -373,6 +383,7 @@ class AaBridgeCore(
         h295LastTouchAt = NEVER
         mediaRateLogged = MEDIA_RATE
         mediaChunkLogged = CarlifeAudio.MAX_CHUNK
+        voiceChunkLogged = CarlifeAudio.MAX_CHUNK
         resampler?.reset()
         if (aaVideoSeen) placeholderText = TEXT_WAIT_FRAME
         meta.onAttach()
@@ -686,6 +697,17 @@ class AaBridgeCore(
      * [VideoMode.mapTouch] (без margin-ов 1:1). Один палец уходит в AA так же, как до мультитача (id 0, action_index 0).
      */
     fun onCarlifeTouch(action: Int, x: Int, y: Int, px: Int = 0, py: Int = 0) {
+        val every = touchDecimationProvider().every
+        if (every != touchDecimationLogged) {
+            touchDecimationLogged = every
+            log("BRIDGE тач: прореживание MOVE ${if (every > 1) "×$every" else "выкл"} (настройка)", true)
+        }
+        touchDecimator.onTouch(action, x, y, px, py, every)
+        onHuTouch(action and 0xFF)                                            // вне touchLock: вложенных блокировок нет
+    }
+
+    /** Выход прореживателя: на Delphi через пейсер пачек, на остальных ГУ сразу в AA. */
+    private fun routeTouch(action: Int, x: Int, y: Int, px: Int, py: Int) {
         if (huVwCns2Delphi) {
             touchPacer.onTouch(action, x, y, px, py)
             if (touchPacer.bursts == 1 && !touchPacerLogged) {
@@ -695,7 +717,6 @@ class AaBridgeCore(
         } else {
             dispatchTouch(action, x, y, px, py)
         }
-        onHuTouch(action and 0xFF)                                            // вне touchLock: вложенных блокировок нет
     }
 
     /**
@@ -971,7 +992,8 @@ class AaBridgeCore(
             audioInited[ch] = true
             log("BRIDGE CarLife ${chName(ch)} INIT ${rate}Гц ${channels}к 16бит (0x%08x)".format(CarlifeAudio.initType(ch)), true)
             if (ch == CarlifeAudio.CH_TTS) {
-                if (huVw20082120) sendTtsPreroll()
+                val prerollMs = ttsPrerollProvider().ms ?: if (huVw20082120) TTS_PREROLL_MS else 0
+                if (prerollMs > 0) sendTtsPreroll(prerollMs)
                 ttsPackets = 0
                 mediaGuard = false
                 mediaReleaseTimer.cancel()
@@ -1007,7 +1029,11 @@ class AaBridgeCore(
                 if (out.isEmpty()) return
             }
         }
-        val chunkMax = if (ch == CarlifeAudio.CH_MEDIA) mediaChunkProvider().bytes ?: CarlifeAudio.MAX_CHUNK else CarlifeAudio.MAX_CHUNK
+        val chunkMax = when (ch) {
+            CarlifeAudio.CH_MEDIA -> mediaChunkProvider().bytes ?: CarlifeAudio.MAX_CHUNK
+            CarlifeAudio.CH_TTS -> voiceChunkMax()
+            else -> CarlifeAudio.MAX_CHUNK
+        }
         if (ch == CarlifeAudio.CH_MEDIA && chunkMax != mediaChunkLogged) {
             mediaChunkLogged = chunkMax
             log("BRIDGE музыка: пакеты по $chunkMax Б (настройка)", true)
@@ -1071,9 +1097,10 @@ class AaBridgeCore(
             ttsPackets = 0
             log("BRIDGE CarLife VR INIT 16000Гц 1к 16бит (0x%08x): речь AA ch$chan в голосовой сессии".format(CarlifeAudio.VR_INIT), true)
         }
+        val chunkMax = voiceChunkMax()
         var off = 0
         while (off < pcm.size) {
-            val n = minOf(CarlifeAudio.MAX_CHUNK, pcm.size - off)
+            val n = minOf(chunkMax, pcm.size - off)
             val chunk = if (off == 0 && n == pcm.size) pcm else pcm.copyOfRange(off, off + n)
             if (!link.sendAudio(CarlifeAudio.CH_VR, CarlifeAudio.VR_DATA, chunk)) audioDropped++ else audioBytes += n
             off += n
@@ -1148,24 +1175,39 @@ class AaBridgeCore(
         musicStatus(0)
     }
 
+    /** Размер пакета речи, который задан явно или выбирается по ГУ; null = как отдаёт AA (Авто на остальных ГУ). */
+    private fun voiceChunkOverride(): Int? = voiceChunkProvider().bytes ?: if (huVwCns2Delphi) VOICE_CHUNK_DELPHI else null
+
+    /** Размер пакета речи (VR-ответ и TTS) для текущей отправки; смену значения пишет в лог один раз. */
+    private fun voiceChunkMax(): Int {
+        val size = voiceChunkOverride() ?: CarlifeAudio.MAX_CHUNK
+        if (size != voiceChunkLogged) {
+            voiceChunkLogged = size
+            log("BRIDGE голос: пакеты по $size Б (${if (voiceChunkProvider().bytes != null) "настройка" else "авто ГУ"})", true)
+        }
+        return size
+    }
+
     /**
      * Тишина сразу после TTS_INIT (VW CNS3 20082122, h222: шипение в начале подсказки). Baidu копит фразу
      * и шлёт её пачкой по 4096 Б быстрее реального времени (NaviTTSController.splitAndSendTTSData), у ГУ
      * есть запас; AA отдаёт речь в реальном времени с первого пакета, запаса нет. Нули дают ГУ открыть
-     * тракт на тишине и держат буфер на TTS_PREROLL_MS впереди до конца фразы.
+     * тракт на тишине и держат буфер на [ms] впереди до конца фразы. Куски нулей режутся размером пакета
+     * голоса, если он задан (настройка или авто-1024 на Delphi), иначе TTS_PREROLL_CHUNK.
      */
-    private fun sendTtsPreroll() {
-        val zeros = ByteArray(TTS_PREROLL_BYTES)
+    private fun sendTtsPreroll(ms: Int) {
+        val zeros = ByteArray((ms * TTS_BYTES_PER_SEC / 1000) and 1.inv())
+        val chunkMax = voiceChunkOverride() ?: TTS_PREROLL_CHUNK
         var off = 0
         while (off < zeros.size) {
-            val n = minOf(TTS_PREROLL_CHUNK, zeros.size - off)
+            val n = minOf(chunkMax, zeros.size - off)
             if (!link.sendAudio(CarlifeAudio.CH_TTS, CarlifeAudio.TTS_DATA, zeros.copyOfRange(off, off + n))) {
-                log("BRIDGE TTS пре-ролл: очередь полна, отправлено ${off * 1000 / TTS_BYTES_PER_SEC} из $TTS_PREROLL_MS мс", true)
+                log("BRIDGE TTS пре-ролл: очередь полна, отправлено ${off * 1000 / TTS_BYTES_PER_SEC} из $ms мс", true)
                 return
             }
             off += n
         }
-        log("BRIDGE TTS пре-ролл $TTS_PREROLL_MS мс тишины (${zeros.size} Б) после INIT", true)
+        log("BRIDGE TTS пре-ролл $ms мс тишины (${zeros.size} Б) после INIT", true)
     }
 
     /** Фактический TTS_STOP (таймер debounce); после него MEDIA-пакеты ждут ещё MEDIA_AFTER_TTS_MS. */
@@ -1707,11 +1749,15 @@ class AaBridgeCore(
         const val MEDIA_AFTER_TTS_MS = 300L
         const val VOICE_EXIT_DELAY_MS = 500L
         private const val TTS_DIAG_PACKETS = 3
-        /** Пре-ролл тишины TTS на VW 20082120/20082122/20082134 (h222); 16 кГц моно 16 бит, куски как у Baidu. */
+        /**
+         * Пре-ролл тишины TTS по умолчанию (Авто) на VW 20082120/20082122/20082134 (h222); 16 кГц моно 16 бит, куски как у Baidu.
+         * 400 мс взяты без измерений (шипение начала подсказки на CNS3), длительность подбирается настройкой [TtsPreroll].
+         */
         const val TTS_PREROLL_MS = 400
         private const val TTS_BYTES_PER_SEC = 16000 * 2
-        const val TTS_PREROLL_BYTES = TTS_PREROLL_MS * TTS_BYTES_PER_SEC / 1000
         private const val TTS_PREROLL_CHUNK = 4096
+        /** Авто-размер пакета речи на VW CNS2 Delphi (h425): заикание ответа ассистента ушло при MAX_CHUNK/10; AA отдаёт речь по 2048 Б. */
+        private const val VOICE_CHUNK_DELPHI = 1024
 
         /** Android KEYCODE_SEARCH: в AA запускает голосового ассистента. */
         const val KEYCODE_SEARCH = 84
