@@ -36,20 +36,6 @@ jobs:
           echo "using sdkmanager: $SDKM"
           yes | "$SDKM" --licenses >/dev/null 2>&1 || true
 
-      - name: Restore AA head unit certs (hur/jvc)
-        # release 构建硬依赖证书，缺失直接失败；从 secret 注入
-        run: |
-          if [ -z "$HEADSWAP_AA_CERTS_B64" ]; then
-            echo "::error::缺少 HEADSWAP_AA_CERTS_B64 secret（hur/jvc 的 cert.pem/key.pem 打包的 tar.gz base64），release 构建无法继续"
-            exit 1
-          fi
-          mkdir -p "$HEADSWAP_AA_CERTS"
-          echo "$HEADSWAP_AA_CERTS_B64" | base64 -d | tar -xz -C "$HEADSWAP_AA_CERTS"
-          find "$HEADSWAP_AA_CERTS" -type f
-        env:
-          HEADSWAP_AA_CERTS: ${{ runner.temp }}/aa-certs
-          HEADSWAP_AA_CERTS_B64: ${{ secrets.HEADSWAP_AA_CERTS_B64 }}
-
       - name: Restore signing key
         # 可选：有签名 secret 才恢复，否则产出 unsigned APK
         run: |
