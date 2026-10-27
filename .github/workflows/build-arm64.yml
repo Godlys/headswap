@@ -1,0 +1,79 @@
+name: Build arm64-v8a APK
+
+on:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: build-arm64-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: 打包 arm64-v8a Release
+    # 只有本次 push 的任意 commit message 包含「版本更新」才打包
+    if: contains(join(github.event.commits.*.message, ' '), '版本更新')
+    runs-on: ubuntu-latest
+    env:
+      HEADSWAP_AA_CERTS: ${{ runner.temp }}/aa-certs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK 37
+        run: |
+          sdkmanager --install "platforms;android-37" "build-tools;36.0.0" --sdk_root="$ANDROID_HOME"
+          yes | sdkmanager --licenses --sdk_root="$ANDROID_HOME" || true
+
+      - name: Restore AA head unit certs (hur/jvc)
+        # release 构建硬依赖证书，缺失直接失败；从 secret 注入
+        run: |
+          mkdir -p "$HEADSWAP_AA_CERTS"
+          echo "${{ secrets.HEADSWAP_AA_CERTS_B64 }}" | base64 -d | tar -xz -C "$HEADSWAP_AA_CERTS"
+        env:
+          HEADSWAP_AA_CERTS: ${{ runner.temp }}/aa-certs
+
+      - name: Restore signing key
+        # 可选：有签名 secret 才恢复，否则产出 unsigned APK
+        if: ${{ secrets.HEADSWAP_SIGNING_B64 != '' }}
+        run: |
+          mkdir -p ~/.android-keys
+          echo "${{ secrets.HEADSWAP_SIGNING_B64 }}" | base64 -d | tar -xz -C ~/.android-keys
+
+      - name: Build release APK (arm64-v8a only)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Rename APK
+        working-directory: android
+        run: |
+          cd app/build/outputs/apk/release
+          ls -la
+          # 优先签名版 app-release.apk，无签名则 unsigned
+          if [ -f app-release.apk ]; then
+            cp app-release.apk headswap-arm64-v8a.apk
+          elif [ -f app-release-unsigned.apk ]; then
+            cp app-release-unsigned.apk headswap-arm64-v8a.apk
+          fi
+          ls -la headswap-arm64-v8a.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: headswap-arm64-v8a
+          path: android/app/build/outputs/apk/release/headswap-arm64-v8a.apk
+          if-no-files-found: error

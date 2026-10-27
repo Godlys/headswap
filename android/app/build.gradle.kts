@@ -20,6 +20,10 @@ android {
         targetSdk = 37
         versionCode = 63
         versionName = "2.6.0"
+        // CI 只出 arm64-v8a（armv8）包：纯 Kotlin 无 native 库，将来若有 .so 也只打 arm64
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
         // «По воздуху» (беспровод): с 2.0.0 включён во всех сборках; выключить для проверки: gradlew assembleRelease -Pwlbeta=false
         buildConfigField("boolean", "WIRELESS_BETA", (project.findProperty("wlbeta") != "false").toString())
     }
