@@ -18,8 +18,6 @@ jobs:
     # push 时仅当任意 commit message 含「版本更新」才打包；手动触发总是执行（调试用）
     if: github.event_name == 'workflow_dispatch' || contains(join(github.event.commits.*.message, ' '), '版本更新')
     runs-on: ubuntu-latest
-    env:
-      HEADSWAP_AA_CERTS: ${{ runner.temp }}/aa-certs
     steps:
       - uses: actions/checkout@v4
 
@@ -54,10 +52,16 @@ jobs:
 
       - name: Restore signing key
         # 可选：有签名 secret 才恢复，否则产出 unsigned APK
-        if: ${{ secrets.HEADSWAP_SIGNING_B64 != '' }}
         run: |
-          mkdir -p ~/.android-keys
-          echo "${{ secrets.HEADSWAP_SIGNING_B64 }}" | base64 -d | tar -xz -C ~/.android-keys
+          if [ -n "$HEADSWAP_SIGNING_B64" ]; then
+            mkdir -p ~/.android-keys
+            echo "$HEADSWAP_SIGNING_B64" | base64 -d | tar -xz -C ~/.android-keys
+            ls -la ~/.android-keys
+          else
+            echo "未配置 HEADSWAP_SIGNING_B64，将产出 unsigned APK"
+          fi
+        env:
+          HEADSWAP_SIGNING_B64: ${{ secrets.HEADSWAP_SIGNING_B64 }}
 
       - name: Build release APK (arm64-v8a only)
         working-directory: android
