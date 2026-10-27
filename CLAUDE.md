@@ -1,21 +1,24 @@
 # CLAUDE.md
 
-## 改动如何进入 main 分支
+## 仓库与协作模式
 
-仓库 github.com/YegorkaPomidorka/headswap，所有者 Yegor。流程始终一致：
+仓库 `github.com/Godlys/headswap`（fork 自 `YegorkaPomidorka/headswap`，可私有化）。直接推 `main`，无 PR 流程。
 
-1. **Worktree。** 所有改动只在独立的 worktree 及其分支 `claude/...` 中进行。主 checkout（`main`）上有其他会话并行工作，不要在那里提交。
-2. **分支。** 提交到 worktree 分支。`git add` 只添加明确的路径，不用 `-a`。提交信息末尾加一行 `Co-Authored-By`。
-3. **推送分支。** 通过个人 gh 账号推送，不用 GCM（它会导向工作组织）：
-   `git -c credential.helper= -c "credential.helper=!gh auth git-credential" push -u origin <分支>`
-   如果 main 已经领先，先把 main 拉入分支（Claude Desktop 中用 `sync_with_base_branch`），再跑测试。
-4. **PR** 到 `main`：`gh pr create --repo YegorkaPomidorka/headswap --base main --head <分支>`。
-5. **合并。** 当 Yegor 说「залей」/「влей」（合并吧）时立即合并，不等评审——这就是他的授权：
-   `gh pr merge <编号> --repo YegorkaPomidorka/headswap --merge`
-6. **合并后** GitHub 上的 main 已更新。本地主 checkout 的 `main` 由在该 checkout 工作的会话自行拉取；不要在 worktree 里动它。
+## 改动如何进入 main
 
-版本号（`android/app/build.gradle.kts` 中的 `versionCode`/`versionName`）只在发布版本时单独提交「Version X.Y.Z (versionCode N)」。测试构建（`-cx5test1` 等）用临时版本号编译，不进提交。
+1. 所有改动直接在本地 checkout 完成，提交到 `main`。
+2. `git add` 只添加明确的路径，不用 `-a`。
+3. 提交信息末尾不要加 `Co-Authored-By`。
 
-除网站外，版本还发布到 GitHub Releases：应用从那里自更新（`update/UpdateLogic.kt`）。标签 `vX.Y.Z`，文件 `headswap-X.Y.Z.apk`（文件名同网站），应用在安装前会显示发布说明：
-`gh release create vX.Y.Z headswap-X.Y.Z.apk --repo YegorkaPomidorka/headswap --title "Headswap X.Y.Z" --notes-file <更新内容>`
-测试构建发布到 GitHub 只能加 `--prerelease`：这样 GitHub 不把它算作最新版本，应用也不会推送它。
+## 版本发布与 CI
+
+- CI（`.github/workflows/build-arm64.yml`）：push 到 `main` 且 commit message 含「版本更新」时，自动构建 **arm64-v8a** release APK，产物上传 Actions artifact（`headswap-arm64-v8a.apk`）；也可 `workflow_dispatch` 手动触发。签名密钥通过 repo secret `HEADSWAP_SIGNING_B64` 注入，未配置则产出 unsigned APK。
+- 版本号（`android/app/build.gradle.kts` 中的 `versionCode`/`versionName`）单独提交，commit 写「版本更新 vX.Y.Z」即可同时完成版本升级 + 触发 CI。
+- 发布到 GitHub Releases（应用从那里自更新，`update/UpdateLogic.kt` 指向本仓库）：标签 `vX.Y.Z`，文件 `headswap-X.Y.Z.apk`：
+  `gh release create vX.Y.Z headswap-X.Y.Z.apk --repo Godlys/headswap --title "Headswap X.Y.Z" --notes-file <更新内容>`
+- 测试构建发布只能加 `--prerelease`（避免被算作最新版本推送给用户）。
+- 若仓库变为私有：应用内自更新依赖 GitHub 公开 API（`api.github.com/repos/.../releases/latest`），**私有仓库下未认证请求会 404，自更新失效**，用户需手动下载新 APK。
+
+## 车机证书
+
+仓库已包含 Google Automotive Link 签发的车机证书（`android/app/src/main/assets/aa/{jvc,hur}/`，来自 aasdk 与 headunit-revived）。release 构建硬依赖该目录；如需替换，直接覆盖 `cert.pem`/`key.pem`（X.509 PEM + PKCS#8 或 PKCS#1 RSA）。注意 `android/.gitignore` 忽略该目录，提交变更需 `git add -f`。
