@@ -55,54 +55,52 @@
 | 大众途岳 XR 2025–2026 | 2.1 |
 | 大众途观 L Pro / 途昂 Pro | — |
 
-最新列表见[项目页面](https://yegorkapomidorka.com/headswap/)。
+最新列表见[上游项目页面](https://yegorkapomidorka.com/headswap/)（原作者维护）。
 
 欢迎提交其他车型的报告（Telegram 和 4PDA 见下文）。最低 Android 版本：10（API 29）。
 
 ## 安装（面向用户）
 
-1. 下载 APK：https://yegorkapomidorka.com/headswap/
+1. 下载 APK：GitHub Releases（本仓库）→ https://github.com/Godlys/headswap/releases
 2. 在 Android Auto 中开启开发者模式（设置 -> 连点「版本」10 次），然后在「三点」菜单中开启「车机服务器」（Start head unit server）。需要手动开启（应用内的「打开 Android Auto」按钮）：无障碍服务已经没有了。
 3. 用 USB 线把手机连接到车机。
 
-更新：在 1.1.10 之后的版本中，Headswap 会自动在 [GitHub Releases](https://github.com/YegorkaPomidorka/headswap/releases) 中查找新版本并覆盖安装，设置会保留。可在 设置 → 更新 中关闭。首次更新时 Android 会请求允许从 Headswap 安装应用。
+更新：在 1.1.10 之后的版本中，Headswap 会自动在 [GitHub Releases](https://github.com/Godlys/headswap/releases) 中查找新版本并覆盖安装，设置会保留。可在 设置 → 更新 中关闭。首次更新时 Android 会请求允许从 Headswap 安装应用。
 
 ## 从源码构建
 
-需要 JDK 17。
+需要 JDK 17（CI 用 21）。
 
 ```
 cd android
 ./gradlew assembleDebug
 ```
 
-Release 签名从 `~/.android-keys/headswap-release.properties` 读取（`storeFile`、`storePassword`、`keyAlias`、`keyPassword`）。没有这个文件只能构建 debug 包。
+Release 签名从 `~/.android-keys/headswap-release.properties` 读取（`storeFile`、`storePassword`、`keyAlias`、`keyPassword`）。没有这个文件只能构建 unsigned APK（release 也能构建，产物为 `app-release-unsigned.apk`）。
+
+### 自动构建（GitHub Actions）
+
+推送到 `main` 分支且 commit message 含「版本更新」时，CI 自动打包 arm64-v8a release APK，产物上传到 Actions artifact（`headswap-arm64-v8a.apk`）。手动触发（workflow_dispatch）始终执行。签名密钥通过 repo secret `HEADSWAP_SIGNING_B64`（tar.gz 的 base64，内含 `headswap-release.properties` 和 keystore）注入，未配置则产出 unsigned APK。
 
 ### 车机证书
 
-应用不包含仓库中的证书。Android Auto 只接受由 Google Automotive Link 签发的车机证书。开放项目中使用的公开证书和密钥位于：
-
-- [opencardev/aasdk](https://github.com/opencardev/aasdk)（[f1xpl/aasdk](https://github.com/f1xpl/aasdk) 的延续）：JVC Kenwood，`src/Messenger/Cryptor.cpp`（第 253-299 行），同样位于 `cert/headunit.crt` 和 `cert/headunit.key`；
-- [andreknieriem/headunit-revived](https://github.com/andreknieriem/headunit-revived)：`app/src/main/res/raw/cert` 和 `privkey`。
-
-将 PEM 文件放到如下位置：
+仓库已包含 Android Auto 车机证书（Google Automotive Link 签发），位于：
 
 ```
-android/app/src/main/assets/aa/jvc/cert.pem
+android/app/src/main/assets/aa/jvc/cert.pem   (JVC Kenwood)
 android/app/src/main/assets/aa/jvc/key.pem
-```
-
-和/或（headunit-revived 的证书组）
-
-```
-android/app/src/main/assets/aa/hur/cert.pem
+android/app/src/main/assets/aa/hur/cert.pem   (Google Android Reference)
 android/app/src/main/assets/aa/hur/key.pem
 ```
 
-PC 模拟器使用同样的文件，位于 `pc-headunit/certs/jvc/`（和 `hur/`）。`*.pem` 和 `*.key` 在 `.gitignore` 中。
+- `jvc` 证书来自 [f1xpl/aasdk](https://github.com/f1xpl/aasdk)（[opencardev/aasdk](https://github.com/opencardev/aasdk) 的延续）`src/Messenger/Cryptor.cpp` 内嵌的 JVC Kenwood 证书；
+- `hur` 证书来自 [andreknieriem/headunit-revived](https://github.com/andreknieriem/headunit-revived) `app/src/main/res/raw/`。
+
+两者均为公开的演示/参考证书，由 Google Automotive Link 签发，Android Auto 车机服务器可接受。Release 构建依赖它们（缺失时 `syncAaCerts` 任务会中止构建）；如需自备证书，直接替换对应 `cert.pem`/`key.pem` 即可（格式：X.509 PEM + PKCS#8 或 PKCS#1 RSA 私钥）。
 
 ## 仓库结构
 
+- `.github/workflows/build-arm64.yml`：CI —— push 到 main（commit 含「版本更新」）或手动触发时构建 arm64-v8a release APK 并上传 artifact。
 - `android/`：应用（Kotlin，包名 `com.yegorkapomidorka.headswap`）：AA <-> CarLife 桥接（`BridgeService`、`CarLifeSession`、`CarLifeState`、`AppLog`）、AA 客户端（`aa/`）、界面（`ui/`）。
 - `pc-headunit/`：用于 PC 调试的 Python Android Auto 车机模拟器，见 [pc-headunit/README.md](pc-headunit/README.md)。
 - `docs/`：协议规范：[aa-headunit.md](docs/aa-headunit.md)（车机侧的 Android Auto）、[carlife-protocol.md](docs/carlife-protocol.md)（通过 AOA 的 CarLife）、[carlife-v2-handshake.md](docs/carlife-v2-handshake.md)（CarLife 2.0 握手）。
@@ -117,10 +115,10 @@ PC 模拟器使用同样的文件，位于 `pc-headunit/certs/jvc/`（和 `hur/`
 
 ## 链接
 
-- 网站和 APK：https://yegorkapomidorka.com/headswap/
-- GitHub Releases（同样的 APK，应用从中自更新）：https://github.com/YegorkaPomidorka/headswap/releases
+- GitHub Releases（APK 下载，应用从中自更新）：https://github.com/Godlys/headswap/releases
 - Telegram：https://t.me/headswap
 - 4PDA 帖子：https://4pda.to/forum/index.php?showtopic=1127415
+- 上游项目（原作者）：https://github.com/YegorkaPomidorka/headswap 与 https://yegorkapomidorka.com/headswap/
 
 ## 免责声明
 

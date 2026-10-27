@@ -5,7 +5,7 @@ package com.yegorkapomidorka.headswap.update
  * Release：标签 vX.Y.Z，文件 headswap-X.Y.Z.apk；“最新”由 GitHub 自行确定（非草稿、非预发布）。
  */
 object UpdateLogic {
-    const val REPO = "YegorkaPomidorka/headswap"
+    const val REPO = "Godlys/headswap"
     const val API_LATEST = "https://api.github.com/repos/$REPO/releases/latest"
     /** API 未返回 200 时的备用路径（每个 IP 每小时限 60 次请求）：重定向到 tag 页面。 */
     const val PAGE_LATEST = "https://github.com/$REPO/releases/latest"
