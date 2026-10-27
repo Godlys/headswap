@@ -29,10 +29,11 @@ jobs:
           cache: gradle
 
       - name: Install SDK 37
-        # runner 预装完整 Android SDK（ANDROID_HOME=/usr/local/lib/android/sdk），只需补 platform 37
+        # runner 预装完整 Android SDK，sdkmanager 不在 PATH，用完整路径
         run: |
-          sdkmanager --install "platforms;android-37" "build-tools;36.0.0"
-          sdkmanager --licenses >/dev/null 2>&1 || true
+          export SDKMANAGER="${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKMANAGER" --install "platforms;android-37" "build-tools;36.0.0"
+          "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
 
       - name: Restore AA head unit certs (hur/jvc)
         # release 构建硬依赖证书，缺失直接失败；从 secret 注入
