@@ -5,24 +5,24 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Параметры [BitratePolicy] под транспорт. [USB] - прежнее поведение (кабель: старт с потолка, вниз до 0.8 слива,
- * вверх +10% раз в 10 с). [WIFI] - воздух (план Э3, 5.3): старт с 0.75 потолка, вниз не меньше чем ×0.7,
- * вверх +20% раз в 5 с после 10 с затишья, выше старта - только после 60 с без спадов.
+ * 面向不同传输方式的 [BitratePolicy] 参数。[USB] - 原有行为（有线：从上限起步，向下最多到排空速度的 0.8，
+ * 每 10 秒向上 +10%）。[WIFI] - 无线（方案 E3、5.3）：从上限的 0.75 起步，向下每档不小于 ×0.7，
+ * 静默 10 秒后每 5 秒向上 +20%，超过起始值则须先有 60 秒无下降。
  */
 data class BitrateProfile(
     val name: String,
-    /** Старт сессии: доля потолка. */
+    /** 会话起始值：上限的比例。 */
     val startFraction: Double,
-    /** Шаг вниз не меньше: цель не выше current * downStep (1.0 = только по сливу). */
+    /** 向下每档不小于：目标不高于 current * downStep（1.0 = 仅按排空速度）。 */
     val downStep: Double,
-    /** Вниз и без измеренного слива (только шагом [downStep]). */
+    /** 即使未测得排空速度也向下调整（仅按 [downStep] 步进）。 */
     val downWithoutDrain: Boolean,
     val upFactor: Double,
-    /** Затишье после спада, прежде чем подниматься. */
+    /** 下降后回升前需等待的静默时间。 */
     val upWaitMs: Long,
-    /** Между ступенями подъёма. */
+    /** 相邻回升档位之间的间隔。 */
     val upIntervalMs: Long,
-    /** Выше стартового битрейта - только после стольких мс без спадов (с начала сессии или последнего спада). */
+    /** 超过起始比特率——仅在如此多毫秒无下降之后（自会话开始或上次下降起）。 */
     val aboveStartAfterMs: Long,
 ) {
     companion object {
@@ -32,37 +32,37 @@ data class BitrateProfile(
 }
 
 /**
- * Целевой битрейт энкодера по состоянию видео-очереди CarLife: ГУ принимает видео с ограниченной скоростью
- * (Kia Seltos ~210 КиБ/с), энкодер на 6 Мбит/с забивает очередь и задержка растёт до секунд. Вниз - до 0.8 скорости слива,
- * вверх - ступенями после затишья (см. [BitrateProfile]). Чистая логика: время приходит параметром, кодек не трогает.
- * [update] зовётся с одной нити, [lowerCeiling] - с любой; [current] читается с любой.
+ * 根据 CarLife 视频队列状态调整编码器目标比特率：车机接收视频的速度有限
+ * （Kia Seltos 约 210 KiB/s），6 Mbps 的编码器会塞满队列，延迟增长到数秒。向下调整——最多降到排空速度的 0.8，
+ * 向上调整——静默后按档位回升（参见 [BitrateProfile]）。纯逻辑：时间由参数传入，不触碰编解码器。
+ * [update] 从单个线程调用，[lowerCeiling] 可从任意线程调用；[current] 可从任意线程读取。
  */
 class BitratePolicy(ceilingBps: Int, floorBps: Int = FLOOR_BPS, val profile: BitrateProfile = BitrateProfile.USB) {
     val floorBps = min(floorBps, ceilingBps)
 
-    /** Потолок, бит/с. Только вниз и на лету - [lowerCeiling] (ГУ с лимитом на размер кадра). */
+    /** 上限，比特/秒。只能向下且动态调整 - [lowerCeiling]（对帧大小有限制的车机）。 */
     @Volatile var ceilingBps = ceilingBps
         private set
 
     /**
-     * Потолок по нагреву телефона, бит/с (Int.MAX_VALUE = нет). В отличие от [ceilingBps] возвращается обратно, когда
-     * телефон остыл: подъём дальше идёт обычными ступенями.
+     * 按手机发热设置的上限，比特/秒（Int.MAX_VALUE = 无）。与 [ceilingBps] 不同，手机冷却后
+     * 该上限会恢复：后续回升按普通档位进行。
      */
     @Volatile var thermalCapBps = Int.MAX_VALUE
         private set
 
-    /** Битрейт старта сессии: потолок (USB) или его доля (воздух). */
+    /** 会话起始比特率：上限（USB）或其比例（无线）。 */
     val startBps = max(this.floorBps, (ceilingBps * profile.startFraction).toInt())
 
-    /** Текущая цель, бит/с. */
+    /** 当前目标，比特/秒。 */
     @Volatile var current = startBps
         private set
 
-    /** Бэклог после сглаживания, мс (для лога и тестов). */
+    /** 平滑后的 backlog，毫秒（用于日志和测试）。 */
     var smoothedMs = 0.0
         private set
 
-    /** Описание последнего изменения (для одной строки лога у вызывающего). */
+    /** 最近一次变更的说明（供调用方写一行日志）。 */
     var lastReason = ""
         private set
 
@@ -80,9 +80,9 @@ class BitratePolicy(ceilingBps: Int, floorBps: Int = FLOOR_BPS, val profile: Bit
     private var cleanSinceMs = NEVER
 
     /**
-     * Очередной замер: бэклог очереди (мс) и скорость слива (байт/с, 0 = ещё не измерена). Возвращает новый битрейт,
-     * если он изменился, иначе null. Бэклог сглаживается EWMA по времени (tau 1 с), поэтому одиночный IDR на 160 КБ
-     * не даёт отката, а результат не зависит от частоты вызовов.
+     * 下一次测量：队列 backlog（毫秒）和排空速度（字节/秒，0 = 尚未测量）。若比特率发生变化则返回新值，
+     * 否则返回 null。backlog 按时间做 EWMA 平滑（tau 1 秒），因此单个 160 KB 的 IDR
+     * 不会引发下调，结果也不受调用频率影响。
      */
     @Synchronized
     fun update(nowMs: Long, backlogMs: Double, drainBytesPerSec: Double): Int? {
@@ -133,8 +133,8 @@ class BitratePolicy(ceilingBps: Int, floorBps: Int = FLOOR_BPS, val profile: Bit
     }
 
     /**
-     * Опустить потолок (не ниже [floorBps]); выше текущего он не поднимается. Если [current] выше нового потолка, он
-     * срезается до него. true = потолок изменился (вызывающий сверяет [current] и применяет к энкодеру).
+     * 下调上限（不低于 [floorBps]）；不会升到当前值以上。若 [current] 高于新上限，则
+     * 将其截断到上限。true = 上限已变化（调用方核对 [current] 并应用到编码器）。
      */
     @Synchronized
     fun lowerCeiling(newCeilingBps: Int): Boolean {
@@ -150,8 +150,8 @@ class BitratePolicy(ceilingBps: Int, floorBps: Int = FLOOR_BPS, val profile: Bit
     }
 
     /**
-     * Потолок по нагреву (не ниже [floorBps]; Int.MAX_VALUE снимает его). [current] выше потолка срезается сразу.
-     * true = [current] изменился (вызывающий применяет его к энкодеру).
+     * 按发热设置上限（不低于 [floorBps]；Int.MAX_VALUE 解除）。[current] 高于上限时立即截断。
+     * true = [current] 已变化（调用方将其应用到编码器）。
      */
     @Synchronized
     fun setThermalCap(capBps: Int): Boolean {

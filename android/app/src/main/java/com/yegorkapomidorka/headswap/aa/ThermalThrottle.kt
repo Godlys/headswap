@@ -1,11 +1,11 @@
 package com.yegorkapomidorka.headswap.aa
 
-/** Источник нагрева телефона (на устройстве - PhoneThermal поверх PowerManager; в JVM-тестах - заглушка). */
+/** 手机发热数据源（设备上为基于 PowerManager 的 PhoneThermal；JVM 测试中为桩实现）。 */
 interface ThermalSource {
-    /** PowerManager.THERMAL_STATUS_* (0 = NONE). */
+    /** PowerManager.THERMAL_STATUS_*（0 = NONE）。 */
     fun status(): Int
 
-    /** Прогноз getThermalHeadroom на 10 с (1.0 = SEVERE), NaN = недоступен. */
+    /** getThermalHeadroom 对未来 10 秒的预测（1.0 = SEVERE），NaN = 不可用。 */
     fun headroom(): Float
 
     object NONE : ThermalSource {
@@ -15,8 +15,8 @@ interface ThermalSource {
 }
 
 /**
- * Ступень разгрузки перекодирования по нагреву телефона. [fpsCap] - потолок частоты энкодера (null = без ограничения),
- * [bitrateFraction] - доля потолка битрейта режима.
+ * 按手机发热对转码降载的档位。[fpsCap] - 编码器帧率上限（null = 不限制），
+ * [bitrateFraction] - 当前模式比特率上限的比例。
  */
 enum class ThermalLevel(val fpsCap: Int?, val bitrateFraction: Double) {
     NORMAL(null, 1.0),
@@ -25,18 +25,18 @@ enum class ThermalLevel(val fpsCap: Int?, val bitrateFraction: Double) {
 }
 
 /**
- * Разгрузка перекодирования по нагреву (жалобы: телефон перегревается в поездке). Вход - статус PowerManager
- * (getCurrentThermalStatus: 0 NONE .. 6 SHUTDOWN) и прогноз getThermalHeadroom (1.0 = SEVERE, NaN = неизвестно).
- * MODERATE или прогноз >= [WARM_HEADROOM] - [ThermalLevel.WARM], SEVERE и выше - [ThermalLevel.HOT].
- * Вниз (сильнее разгрузка) - сразу; обратно - по одной ступени и только если ниже уже [RELAX_MS] подряд,
- * чтобы частота не прыгала туда-сюда на границе статуса. Чистая логика: время приходит параметром. [update] - с одной нити.
+ * 按发热对转码降载（用户反馈：手机在行车途中过热）。输入为 PowerManager 状态
+ * （getCurrentThermalStatus：0 NONE .. 6 SHUTDOWN）和 getThermalHeadroom 预测（1.0 = SEVERE，NaN = 未知）。
+ * MODERATE 或预测 >= [WARM_HEADROOM] 时进入 [ThermalLevel.WARM]，SEVERE 及以上进入 [ThermalLevel.HOT]。
+ * 降档（更强降载）立即生效；回升则每次一档，且仅在持续低于 [RELAX_MS] 之后，
+ * 避免帧率在状态边界来回跳动。纯逻辑：时间由参数传入。[update] 从单线程调用。
  */
 class ThermalThrottle(private val relaxMs: Long = RELAX_MS) {
-    /** Читается с любой нити ([capFps] из обработки FRAME_RATE_CHANGE и создания транскодера). */
+    /** 可从任意线程读取（[capFps] 在 FRAME_RATE_CHANGE 处理和创建转码器时调用）。 */
     @Volatile var level = ThermalLevel.NORMAL
         private set
 
-    /** Самая сильная ступень за сессию и время на ней/выше NORMAL - для резюме. */
+    /** 会话期间最强档位以及在 NORMAL 及以上档位的时间 - 用于摘要。 */
     var maxLevel = ThermalLevel.NORMAL
         private set
     var throttledMs = 0L
@@ -45,7 +45,7 @@ class ThermalThrottle(private val relaxMs: Long = RELAX_MS) {
     private var lowerSinceMs = NEVER
     private var lastMs = NEVER
 
-    /** Ступень по одному замеру, без гистерезиса. */
+    /** 根据单次测量确定档位，无迟滞。 */
     fun levelFor(status: Int, headroom: Float): ThermalLevel = when {
         status >= STATUS_SEVERE -> ThermalLevel.HOT
         status == STATUS_MODERATE -> ThermalLevel.WARM
@@ -53,7 +53,7 @@ class ThermalThrottle(private val relaxMs: Long = RELAX_MS) {
         else -> ThermalLevel.NORMAL
     }
 
-    /** Очередной замер. Возвращает новую ступень, если она сменилась, иначе null. */
+    /** 下一次测量。若档位发生变化则返回新档位，否则返回 null。 */
     fun update(nowMs: Long, status: Int, headroom: Float): ThermalLevel? {
         if (lastMs != NEVER && level != ThermalLevel.NORMAL) throttledMs += maxOf(nowMs - lastMs, 0L)
         lastMs = nowMs
@@ -71,22 +71,22 @@ class ThermalThrottle(private val relaxMs: Long = RELAX_MS) {
         if (lowerSinceMs == NEVER) lowerSinceMs = nowMs
         if (nowMs - lowerSinceMs < relaxMs) return null
         level = ThermalLevel.values()[level.ordinal - 1]
-        lowerSinceMs = if (want < level) nowMs else NEVER      // до want ещё ступень: снова ждать relaxMs
+        lowerSinceMs = if (want < level) nowMs else NEVER      // 距离 want 还差一档：重新等待 relaxMs
         return level
     }
 
-    /** Частота с учётом нагрева: не выше потолка ступени. */
+    /** 考虑发热后的帧率：不超过当前档位的上限。 */
     fun capFps(fps: Int): Int = level.fpsCap?.let { minOf(fps, it) } ?: fps
 
-    /** Потолок битрейта с учётом нагрева. */
+    /** 考虑发热后的比特率上限。 */
     fun capBitrate(ceilingBps: Int): Int = (ceilingBps * level.bitrateFraction).toInt()
 
     companion object {
-        /** Значения PowerManager.THERMAL_STATUS_*. */
+        /** PowerManager.THERMAL_STATUS_* 的值。 */
         const val STATUS_MODERATE = 2
         const val STATUS_SEVERE = 3
 
-        /** Прогноз на 10 с: столько от порога SEVERE - уже разгружаемся, не дожидаясь MODERATE. */
+        /** 10 秒预测：距 SEVERE 阈值这么远时就开始降载，无需等到 MODERATE。 */
         const val WARM_HEADROOM = 0.85f
         const val RELAX_MS = 60_000L
         private const val NEVER = Long.MIN_VALUE

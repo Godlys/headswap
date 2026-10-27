@@ -16,7 +16,7 @@ import org.junit.Test
 import kotlin.math.abs
 import com.yegorkapomidorka.headswap.aa.AapMessages as M
 
-/** Ссылка, записывающая метаданные и MODULE_STATUS. */
+/** 记录元数据和 MODULE_STATUS 的链接。 */
 class MetaLink : CarlifeLink {
     val infos = ArrayList<CarlifeMediaInfo>()
     val progress = ArrayList<Int>()
@@ -31,7 +31,7 @@ class MetaLink : CarlifeLink {
         return true
     }
 
-    /** Как настоящая ГУ Honda: на каждый MODULE_STATUS NAVI=1 отвечает SUBSCRIBE_START (доставляет тест через pumpSubscribe). */
+    /** 像真正的本田车机一样:对每个 NAVI=1 的 MODULE_STATUS 回复 SUBSCRIBE_START(测试通过 pumpSubscribe 交付)。 */
     var huResubscribes = false
     var pendingSubscribe = 0
 
@@ -62,7 +62,7 @@ class MetaLink : CarlifeLink {
 class AaMetaTest {
     private val png = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 1, 2, 3)
 
-    // NAVI=1 на весь маршрут по умолчанию включён (кроме Desay G6S); тесты, выключающие флаг, возвращают его здесь
+    // 默认启用整条路线 NAVI=1(Desay G6S 除外);关闭该标志的测试在这里恢复它
     @After
     fun routeNaviOn() {
         AaBridgeCore.ROUTE_NAVI_STATUS_ENABLED = true
@@ -105,7 +105,7 @@ class AaMetaTest {
         override fun onNavDistance(d: AaNavDistance) { events.add("dist ${d.meters} ${d.timeSeconds} ${d.destinationMeters}") }
     }
 
-    // --- разбор ch9 / ch10 ---
+    // --- 解析 ch9 / ch10 ---
     @Test
     fun parsesMediaPlaybackChannel() {
         val r = Rec()
@@ -176,7 +176,7 @@ class AaMetaTest {
         assertEquals(21, AaMeta.turnFromManeuver(26))
         assertEquals(1, AaMeta.turnFromManeuver(0))
         assertEquals(1, AaMeta.turnFromManeuver(999))
-        // legacy: event x side
+        // 旧版:event × side
         assertEquals(2, AaMeta.turnFromLegacy(3, 2))
         assertEquals(8, AaMeta.turnFromLegacy(3, 1))
         assertEquals(3, AaMeta.turnFromLegacy(4, 2))
@@ -186,14 +186,14 @@ class AaMetaTest {
         assertEquals(5, AaMeta.turnFromLegacy(6, 3))
         assertEquals(24, AaMeta.turnFromLegacy(19, 3))
         assertEquals(1, AaMeta.turnFromLegacy(4, 3))
-        // каждый код манёвра рисуется
+        // 每个机动动作代码都能绘制
         for (t in 0..45) assertNotNull(AaMeta.glyph(AaMeta.turnFromManeuver(t)))
         assertEquals(90, AaMeta.glyph(3).angle)
         assertEquals(-90, AaMeta.glyph(7).angle)
         assertEquals(AaMeta.GlyphKind.DEST, AaMeta.glyph(24).kind)
     }
 
-    // --- подписи в логе по каналу ---
+    // --- 按通道的日志消息名 ---
     @Test
     fun logNamesDependOnChannel() {
         assertEquals("MEDIA_CONFIG", M.messageName(M.CH_AUDIO_MEDIA, 0x8003))
@@ -220,7 +220,7 @@ class AaMetaTest {
         assertFalse(M.isPeriodicMeta(M.CH_AUDIO_MEDIA, 0x8001))
     }
 
-    // --- реле в ядре моста ---
+    // --- 桥接核心中的中继 ---
     private class Rig {
         var now = 1_000_000L
         val link = MetaLink()
@@ -233,7 +233,7 @@ class AaMetaTest {
 
         fun start() = core.onCarlifeStart()
 
-        /** Доставить ответные SUBSCRIBE_START; число раундов ограничено, чтобы цикл перевзвода был виден, а не вис. */
+        /** 交付响应的 SUBSCRIBE_START;轮数受限,使重新激活循环可见而不挂起。 */
         fun pumpSubscribe(maxRounds: Int = 10): Int {
             var rounds = 0
             while (link.pendingSubscribe > 0 && rounds < maxRounds) {
@@ -272,7 +272,7 @@ class AaMetaTest {
         r.core.onMediaStatus(AaMeta.parseMediaStatus(status(2, 3))!!)
         assertEquals("без изменений не шлём", 3, r.link.progress.size)
 
-        // повтор тех же метаданных - тишина; новая обложка того же трека - тот же source; новый трек - новый source
+        // 重复相同元数据 - 静默;同一曲目的新封面 - 相同 source;新曲目 - 新 source
         r.core.onMediaMetadata(AaMeta.parseMediaMetadata(metadata("A"))!!)
         assertEquals(1, r.link.infos.size)
         r.core.onMediaMetadata(AaMeta.parseMediaMetadata(metadata("A", art = png + byteArrayOf(9)))!!)
@@ -303,9 +303,9 @@ class AaMetaTest {
         r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(300, 30))!!)
         assertTrue(r.link.turns.isEmpty())
-        // NAVI=1 уходит до подписки: VW BT 1538 (h244) подписывается только после него
+        // NAVI=1 在订阅前发出:VW BT 1538 (h244) 只在它之后订阅
         assertEquals(listOf(1), r.link.navi())
-        // подписка START moduleID=0 -> текущий манёвр сразу, NAVI=1 не дублируется
+        // 订阅 START moduleID=0 -> 立即发送当前机动动作,NAVI=1 不重复
         r.core.onCarlifeSubscribe(listOf(0), true)
         assertEquals(listOf(1), r.link.navi())
         assertEquals(1, r.link.turns.size)
@@ -317,7 +317,7 @@ class AaMetaTest {
         val r = Rig()
         r.core.onCarlifeSubscribe(listOf(0), true)
         r.start()
-        r.core.onNavStatus(2)            // INACTIVE на старте: ни «прибыли», ни NAVI
+        r.core.onNavStatus(2)            // START 时为 INACTIVE:既无「到达」也无 NAVI
         assertTrue(r.link.turns.isEmpty())
         assertTrue(r.link.navi().isEmpty())
 
@@ -346,7 +346,7 @@ class AaMetaTest {
             assertEquals(300, totalDistance)
             assertEquals(250, remainDistance)
         }
-        // новый манёвр: дистанция сбрасывается, первая дистанция уходит без троттлинга, total с неё
+        // 新机动动作:距离重置,第一条距离不经过节流直接发出,total 取自它
         r.now += 10
         r.core.onNavTurn(AaMeta.parseNavState(navState(7, "Second Ave"))!!)
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(900, 60))!!)
@@ -356,7 +356,7 @@ class AaMetaTest {
             assertEquals(7, nextTurn)
             assertEquals(900, totalDistance)
         }
-        // конец маршрута: action 3, nextTurn 24, NAVI=0
+        // 路线结束:action 3,nextTurn 24,NAVI=0
         r.core.onNavStatus(2)
         with(r.link.turns.last()) {
             assertEquals(3, action)
@@ -375,7 +375,7 @@ class AaMetaTest {
         r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(30, 6))!!)
         assertEquals(1, r.link.turns.size)
-        // стоим: AA повторяет те же данные раз в секунду; SHOW -> UPDATE уходит сразу, дальше тишина до 5 с
+        // 停着:AA 每秒重复相同数据;SHOW -> UPDATE 立即发出,之后静默到 5 秒
         val same = { r.now += 1000; r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(30, 6))!!) }
         same()
         assertEquals(2, r.link.turns.size)
@@ -385,7 +385,7 @@ class AaMetaTest {
         same()
         assertEquals("keepalive через 5 с", 3, r.link.turns.size)
         assertEquals(2, r.link.turns[2].action)
-        // AA замолчал на 15 с: следующий пакет снова SHOW
+        // AA 沉默了 15 秒:下一个数据包再次 SHOW
         r.now += 15_000
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(20, 4))!!)
         assertEquals(4, r.link.turns.size)
@@ -404,7 +404,7 @@ class AaMetaTest {
         r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
         var m = 2000
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(m, 200))!!)
-        // едем: дистанция меняется каждую секунду, SHOW не реже раза в 10 с, остальное UPDATE
+        // 行驶中:距离每秒变化,SHOW 至少每 10 秒一次,其余为 UPDATE
         repeat(25) {
             r.now += 1000
             m -= 10
@@ -426,7 +426,7 @@ class AaMetaTest {
         r.now += 1000
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(10, 1))!!)
         assertEquals(100, r.link.turns.last().totalDistance)
-        // следующий поворот тот же (ключ не сменился), дистанция 10 -> 50: новый манёвр, без троттлинга
+        // 下一个转弯相同(键未变化),距离 10 -> 50:新机动动作,不节流
         r.now += 100
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(50, 12))!!)
         with(r.link.turns.last()) {
@@ -434,7 +434,7 @@ class AaMetaTest {
             assertEquals(50, remainDistance)
             assertEquals("total с нового поворота", 50, totalDistance)
         }
-        // дрожание на 10-20 м новым поворотом не считается
+        // 10-20 米的抖动不算新转弯
         r.now += 1000
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(40, 10))!!)
         r.now += 1000
@@ -511,7 +511,7 @@ class AaMetaTest {
         r.core.onNavTurn(AaMeta.parseNavState(navState(39, "Home"))!!)
         assertEquals("хвост не поднимает NAVI", listOf(1, 0), r.link.navi())
         assertEquals("и не шлёт NEXT_TURN", turns, r.link.turns.size)
-        // позже - новый маршрут без статуса стартует неявно
+        // 之后 - 无状态的新路线隐式启动
         r.now += MetaRelay.TAIL_MS
         r.core.onNavTurn(AaMeta.parseNavState(navState(7, "Next"))!!)
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(100, 10))!!)
@@ -533,14 +533,14 @@ class AaMetaTest {
         r.core.onAaEnded(true)
         assertEquals(listOf(1, 0), r.link.navi())
 
-        // TTS раньше маршрута, тёплый START посреди: NAVI=1 один раз, конец маршрута его не гасит
+        // TTS 早于路线,中途热 START:NAVI=1 只一次,路线结束不熄灭它
         val q = Rig()
         q.core.onCarlifeSubscribe(listOf(0), true)
         q.start()
         q.core.onAudioData(M.CH_AUDIO_SPEECH, ByteArray(640), 0)
         q.core.onNavStatus(1)
         assertEquals(listOf(1), q.link.navi())
-        q.core.onCarlifeStart()          // тёплый START: звук не трогаем
+        q.core.onCarlifeStart()          // 热 START:不动声音
         q.core.onNavStatus(2)
         assertEquals(listOf(1), q.link.navi())
     }
@@ -554,12 +554,12 @@ class AaMetaTest {
             r.start()
             r.core.onNavStatus(1)
             r.core.onAudioData(M.CH_AUDIO_SPEECH, ByteArray(640), 0)
-            r.core.onNavStatus(2)                                   // «Вы прибыли» ещё играет
+            r.core.onNavStatus(2)                                   // 「您已到达」仍在播放
             assertEquals(listOf(1), r.link.navi())
             r.core.onAudioStop(M.CH_AUDIO_SPEECH)
             assertEquals("TTS кончился после маршрута: NAVI=0, приборка гаснет", listOf(1, 0), r.link.navi())
 
-            // маршрут идёт: конец TTS NAVI не трогает
+            // 路线进行中:TTS 结束不影响 NAVI
             val q = Rig()
             q.core.onCarlifeSubscribe(listOf(0), true)
             q.start()
@@ -567,7 +567,7 @@ class AaMetaTest {
             q.core.onAudioData(M.CH_AUDIO_SPEECH, ByteArray(640), 0)
             q.core.onAudioStop(M.CH_AUDIO_SPEECH)
             assertEquals(listOf(1), q.link.navi())
-            q.core.onNavStatus(2)                                   // крестик посреди маршрута, TTS уже молчит
+            q.core.onNavStatus(2)                                   // 路线中间的叉号,TTS 已沉默
             assertEquals("отмена маршрута: NAVI=0", listOf(1, 0), q.link.navi())
         } finally {
             AaBridgeCore.TTS_DEBOUNCE_ENABLED = true
@@ -601,7 +601,7 @@ class AaMetaTest {
         assertRouteWithoutNavi(Rig())
     }
 
-    /** Маршрут без NAVI=1: манёвры идут, NAVI=1 остаётся только вокруг TTS. */
+    /** 不带 NAVI=1 的路线:机动动作照常,NAVI=1 只在 TTS 周围保持。 */
     private fun assertRouteWithoutNavi(r: Rig) {
         r.core.onCarlifeSubscribe(listOf(0), true)
         r.start()
@@ -617,7 +617,7 @@ class AaMetaTest {
     @Test
     fun routeNaviOnForUsualHu() {
         val r = Rig()
-        r.core.onHuInfo("", "")                  // Honda Vezel: пустые manufacturer / model
+        r.core.onHuInfo("", "")                  // Honda Vezel:空的 manufacturer / model
         r.core.onHuStatistic("20832125")
         r.core.onCarlifeSubscribe(listOf(0), true)
         r.start()
@@ -657,7 +657,7 @@ class AaMetaTest {
         r.core.onCarlifeClosed()
         r.core.attach(MetaLink())
         assertTrue("новая сессия - флаг заново", !r.core.huVw20082138)
-        r.core.onHuStatistic("20082138")                       // порядок любой: канал раньше имени
+        r.core.onHuStatistic("20082138")                       // 顺序任意:通道先于名称
         assertTrue("одного канала мало", !r.core.huVw20082138)
         r.core.onHuInfo("VW BT 1538", "VW BT 1538")
         assertTrue(r.core.huVw20082138)
@@ -667,7 +667,7 @@ class AaMetaTest {
     fun pioneerRm56FlagByManufacturerAndModelAndReset() {
         val r = Rig()
         assertTrue(!r.core.huPioneerRm56)
-        r.core.onHuInfo("Pioneer", "AVH-Z9200")                 // другая модель Pioneer под обход не попадает
+        r.core.onHuInfo("Pioneer", "AVH-Z9200")                 // 其他 Pioneer 型号不纳入该绕行
         assertTrue(!r.core.huPioneerRm56)
         r.core.onHuInfo("Other", "RM56E8B")
         assertTrue(!r.core.huPioneerRm56)
@@ -683,7 +683,7 @@ class AaMetaTest {
     @Test
     fun vwIdFlagNotSetForVwBt1420OnSameChannel() {
         val r = Rig()
-        r.core.onHuInfo("VW BT 1420", "VW BT 1420")             // Павел: тот же канал прошивки, другое BT-имя
+        r.core.onHuInfo("VW BT 1420", "VW BT 1420")             // Pavel:同一固件通道,不同的 BT 名称
         r.core.onHuStatistic("20082138")
         assertTrue(!r.core.huVw20082138)
         assertTrue(r.core.huVwBt1420)
@@ -719,7 +719,7 @@ class AaMetaTest {
     fun pauseHeartbeatForVwCns2DelphiChannel20082114() {
         val r = Rig()
         r.core.onHuInfo("VW", "")
-        r.core.onHuStatistic("20082114")                  // h425: Tharu 2020 CNS2, EIO через 6-8 с PAUSE
+        r.core.onHuStatistic("20082114")                  // h425:Tharu 2020 CNS2,EIO 在 6-8 秒后 PAUSE
         assertTrue(r.core.huVw20082120)
     }
 
@@ -766,7 +766,7 @@ class AaMetaTest {
         assertFalse("новая сессия - флаг заново по HU_INFO", r.core.huHyundaiCn7)
     }
 
-    /** Ссылка, запоминающая INIT и данные MEDIA. */
+    /** 记住 INIT 和 MEDIA 数据的链接。 */
     private class CapLink(private val d: MetaLink = MetaLink()) : CarlifeLink by d {
         val inits = ArrayList<ByteArray>()
         val data = java.io.ByteArrayOutputStream()
@@ -863,7 +863,7 @@ class AaMetaTest {
         assertEquals("заиграл: отложенный трек уходит", "A", r.link.infos.single().song)
         assertEquals("прогресс ушёл", 1, r.link.progress.size)
 
-        // AA умерла: трек протух, после рестарта без нового metadata ничего не показываем
+        // AA 已死:曲目过期,重启后没有新 metadata 就不显示任何内容
         r.core.onAaEnded(true)
         r.now += 5000
         r.core.onMediaStatus(AaMeta.parseMediaStatus(status(2, 1))!!)
@@ -873,7 +873,7 @@ class AaMetaTest {
     @Test
     fun huMusicOffPausesAaWithAndWithoutPause() {
         assertEquals(127, AaBridgeCore.KEYCODE_MEDIA_PAUSE)
-        // Desay G6S: PAUSE, затем MUSIC=0
+        // Desay G6S:先 PAUSE,再 MUSIC=0
         val r = Rig()
         val peer = FakePeer()
         r.core.peer = peer
@@ -885,7 +885,7 @@ class AaMetaTest {
         r.core.onCarlifeMusicControl(0)
         assertEquals(listOf(AaBridgeCore.KEYCODE_MEDIA_PAUSE), peer.keys.toList())
 
-        // другие ГУ: MUSIC=0 без PAUSE
+        // 其他车机:MUSIC=0 不带 PAUSE
         val q = Rig()
         val qPeer = FakePeer()
         q.core.peer = qPeer
@@ -914,7 +914,7 @@ class AaMetaTest {
         assertEquals(listOf(127), peer.keys.toList())
     }
 
-    /** Desay G6S, AA играет, ГУ ушло на радио (MUSIC=0 после PAUSE). */
+    /** Desay G6S,AA 播放中,车机切到收音机(PAUSE 之后 MUSIC=0)。 */
     private fun g6sPausedByUs(): Pair<Rig, FakePeer> {
         val r = Rig()
         val peer = FakePeer()
@@ -930,7 +930,7 @@ class AaMetaTest {
 
     @Test
     fun g6sMusicOnAfterOurPauseResumesAaOnceForWholeBurst() {
-        // h214: START, затем пачка MUSIC=1 - play один раз, MUSIC=1 на всю пачку
+        // h214:START,然后一串 MUSIC=1 - play 一次,MUSIC=1 覆盖整串
         val (r, peer) = g6sPausedByUs()
         r.now += 950
         r.start()
@@ -944,16 +944,16 @@ class AaMetaTest {
         }
         assertEquals("126 один раз", listOf(127, 126), peer.keys.toList())
         assertTrue(r.logs.any { it.contains("вернулось на CarLife-музыку") })
-        // MEDIA снова пересылается
+        // MEDIA 再次转发
         val pcm = ByteArray(640)
         r.core.onAudioData(M.CH_AUDIO_MEDIA, pcm, 0)
         assertEquals(1, r.link.audio.count { it == CarlifeAudio.MEDIA_DATA })
-        // после окна ответ снова по факту
+        // 窗口过后,应答按实际情况恢复
         r.now += AaBridgeCore.HU_RESUME_ANSWER_MS
         r.core.onCarlifeMusicControl(1)
         assertEquals(listOf(127, 126), peer.keys.toList())
 
-        // MUSIC=1 раньше START (лог 2026-10-13): тоже play
+        // MUSIC=1 早于 START(日志 2026-10-13):同样 play
         val (q, qPeer) = g6sPausedByUs()
         q.now += 5000
         assertTrue(q.core.onCarlifeMusicControl(1))
@@ -963,7 +963,7 @@ class AaMetaTest {
 
     @Test
     fun g6sMusicOnWithoutOurPauseDoesNotPlay() {
-        // свежая сессия: пачка MUSIC=1 через ~2 с после HU_INFO, паузы нашей нет (h33: радио не глушить)
+        // 新会话:HU_INFO 后约 2 秒一串 MUSIC=1,没有我们的暂停(h33:不静音收音机)
         val r = Rig()
         val peer = FakePeer()
         r.core.peer = peer
@@ -972,7 +972,7 @@ class AaMetaTest {
         repeat(10) { assertFalse(r.core.onCarlifeMusicControl(1)) }
         assertTrue(peer.keys.isEmpty())
 
-        // юзер сам поставил AA на паузу до ухода ГУ: MUSIC=1 не запускает трек
+        // 用户在切到车机前自行暂停了 AA:MUSIC=1 不启动曲目
         val q = Rig()
         val qPeer = FakePeer()
         q.core.peer = qPeer
@@ -984,7 +984,7 @@ class AaMetaTest {
         assertFalse(q.core.onCarlifeMusicControl(1))
         assertTrue(qPeer.keys.isEmpty())
 
-        // возврат без MUSIC=1 (NAVI): только START - play нет
+        // 无 MUSIC=1 的返回(NAVI):只有 START - 没有 play
         val (n, nPeer) = g6sPausedByUs()
         n.now += 7000
         n.start()
@@ -992,7 +992,7 @@ class AaMetaTest {
         n.start()
         assertEquals(listOf(127), nPeer.keys.toList())
 
-        // не Desay G6S: MUSIC=1 после нашей паузы play не шлёт
+        // 非 Desay G6S:我们暂停后 MUSIC=1 不发送 play
         val o = Rig()
         val oPeer = FakePeer()
         o.core.peer = oPeer
@@ -1002,7 +1002,7 @@ class AaMetaTest {
         o.core.onCarlifeMusicControl(1)
         assertEquals(listOf(127), oPeer.keys.toList())
 
-        // флаг выключен - старое поведение
+        // 标志关闭 - 旧行为
         AaBridgeCore.HU_MUSIC_RESUME_ENABLED = false
         try {
             val (f, fPeer) = g6sPausedByUs()
@@ -1019,7 +1019,7 @@ class AaMetaTest {
         fun media(r: Rig) = r.core.onAudioData(M.CH_AUDIO_MEDIA, pcm, 0)
         fun Rig.mediaPackets(type: Int) = link.audio.count { it == type }
 
-        // выход из паузы по началу медиаканала AA
+        // 根据 AA 媒体通道启动退出暂停
         val r = Rig()
         r.core.peer = FakePeer()
         r.start()
@@ -1038,7 +1038,7 @@ class AaMetaTest {
         assertEquals("после MEDIA START данные снова идут", 2, r.mediaPackets(CarlifeAudio.MEDIA_INIT))
         assertEquals(2, r.mediaPackets(CarlifeAudio.MEDIA_DATA))
 
-        // выход из паузы по статусу playing после paused
+        // 根据 paused 之后的 playing 状态退出暂停
         val q = Rig()
         q.core.peer = FakePeer()
         q.start()
@@ -1055,7 +1055,7 @@ class AaMetaTest {
         assertEquals(2, q.mediaPackets(CarlifeAudio.MEDIA_DATA))
     }
 
-    /** AA играет, ГУ ушло на радио (MUSIC=0): 127 ушёл, huPausedAa. Возвращает риг, пир и счётчик пакетов MEDIA. */
+    /** AA 播放中,车机切到收音机(MUSIC=0):127 已发送,huPausedAa。返回 rig、peer 和 MEDIA 包计数。 */
     private inner class PausedRig {
         val r = Rig()
         val peer = FakePeer()
@@ -1081,7 +1081,7 @@ class AaMetaTest {
         assertEquals(listOf(127), p.peer.keys.toList())
         r.core.onHuBtHfpConnection(2)
         r.now += 6000
-        r.core.onCarlifeTouch(1, 10, 10)          // UP не ввод пользователя
+        r.core.onCarlifeTouch(1, 10, 10)          // UP 不是用户输入
         r.core.onAudioStart(M.CH_AUDIO_MEDIA)
         assertEquals("автоплей после HFP: снова 127", listOf(127, 127), p.peer.keys.toList())
         assertTrue(r.logs.any { it.contains("автоплей, снова KEYCODE 127") })
@@ -1089,11 +1089,11 @@ class AaMetaTest {
         p.media()
         assertEquals("MEDIA не уходит", before, p.mediaData())
 
-        // не чаще раза в секунду
+        // 不超过每秒一次
         r.now += 500
         r.core.onAudioStart(M.CH_AUDIO_MEDIA)
         assertEquals(listOf(127, 127), p.peer.keys.toList())
-        // автоплей через статус плеера: paused -> playing
+        // 通过播放器状态自动播放:paused -> playing
         r.now += 600
         r.core.onMediaStatus(AaMeta.parseMediaStatus(status(3, 2))!!)
         r.now += 1500
@@ -1133,7 +1133,7 @@ class AaMetaTest {
         assertEquals("без HFP play снимает паузу", before + 1, p.mediaData())
         assertEquals(listOf(127), p.peer.keys.toList())
 
-        // HFP отключился (state=0) окно не открывает
+        // HFP 断开(state=0)不打开窗口
         val q = PausedRig()
         q.r.core.onHuBtHfpConnection(0)
         q.r.core.onAudioStart(M.CH_AUDIO_MEDIA)
@@ -1198,7 +1198,7 @@ class AaMetaTest {
         val peer = FakePeer()
         r.core.peer = peer
         r.start()
-        r.core.onMediaStatus(AaMeta.parseMediaStatus(status(3, 1))!!)       // AA на паузе (ассистент / пользователь)
+        r.core.onMediaStatus(AaMeta.parseMediaStatus(status(3, 1))!!)       // AA 暂停中(助手 / 用户)
         assertFalse("MUSIC=0: ответ MUSIC=0", r.core.onCarlifeMusicControl(0))
         assertTrue("AA не играет: 127 не шлём", peer.keys.isEmpty())
         assertTrue(r.logs.any { it.contains("AA не играет: хвост MEDIA не пересылаю до play") })
@@ -1222,14 +1222,14 @@ class AaMetaTest {
         r.start()
         r.core.onMediaStatus(AaMeta.parseMediaStatus(status(2, 1))!!)
         r.core.onAudioData(M.CH_AUDIO_MEDIA, ByteArray(640), 0)
-        r.core.onAudioData(M.CH_AUDIO_SPEECH, ByteArray(640), 0)            // TTS инициализирован
+        r.core.onAudioData(M.CH_AUDIO_SPEECH, ByteArray(640), 0)            // TTS 已初始化
         assertTrue("MEDIA играет: MUSIC активна", r.core.musicActive)
         assertFalse("MUSIC=0: ответ MUSIC=0, хотя пауза MEDIA отложена", r.core.onCarlifeMusicControl(0))
         assertFalse("пауза MEDIA ждёт конца TTS", r.link.audio.contains(CarlifeAudio.MEDIA_PAUSE))
         assertTrue(r.logs.any { it.contains("MEDIA пауза отложена") })
         assertEquals("AA на паузе: 127 ушёл", listOf(AaBridgeCore.KEYCODE_MEDIA_PAUSE), peer.keys.toList())
 
-        // хвост MEDIA во время TTS на ГУ не идёт
+        // TTS 期间 MEDIA 尾部不发送到车机
         val before = r.link.audio.count { it == CarlifeAudio.MEDIA_DATA }
         r.core.onAudioData(M.CH_AUDIO_MEDIA, ByteArray(640), 0)
         assertEquals(before, r.link.audio.count { it == CarlifeAudio.MEDIA_DATA })
@@ -1268,7 +1268,7 @@ class AaMetaTest {
         )
     }
 
-    // --- билдеры CarLife ---
+    // --- CarLife 构建器 ---
     @Test
     fun mediaInfoWritesAllRequiredFields() {
         val body = Msgs.mediaInfo(CarlifeMediaInfo("src", "", "", "", null, 0), ByteArray(0))
@@ -1307,16 +1307,16 @@ class AaMetaTest {
         assertEquals("NAVI_NEXT_TURN_INFO", Msg.name(Msg.NAVI_NEXT_TURN_INFO))
     }
 
-    // --- Honda: стрелки после SUBSCRIBE_START, перевзвод NAVI 0->1 ---
+    // --- Honda:SUBSCRIBE_START 后的箭头,NAVI 0->1 重新激活 ---
 
 
-    // --- Honda (приборка/HUD): перевзвод NAVI 0->1 перед SHOW, NAVI отпускается после TTS ---
+    // --- Honda(仪表盘/HUD):SHOW 前 NAVI 0->1 重新激活,TTS 后释放 NAVI ---
     private fun hondaRoute(honda: Boolean = true): Rig {
         val r = Rig()
         r.core.onCarlifeSubscribe(listOf(0), true)
         r.start()
         if (honda) r.core.onHuStatistic("20832117")
-        r.link.huResubscribes = honda                // ГУ Honda отвечает SUBSCRIBE_START на каждый NAVI=1
+        r.link.huResubscribes = honda                // 本田车机对每个 NAVI=1 回复 SUBSCRIBE_START
         r.core.onNavStatus(1)
         r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(30, 18))!!)
@@ -1330,13 +1330,13 @@ class AaMetaTest {
         val r = hondaRoute()
         assertEquals(listOf(1), r.link.navi())
         var m = 2000
-        repeat(25) {                                     // едем: SHOW каждые 10 с
+        repeat(25) {                                     // 行驶中:每 10 秒 SHOW
             r.now += 1000
             m -= 10
             r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(m, 200))!!)
         }
         r.now += 1000
-        r.core.onNavTurn(AaMeta.parseNavState(navState(7, "Second Ave"))!!)   // новый манёвр - SHOW
+        r.core.onNavTurn(AaMeta.parseNavState(navState(7, "Second Ave"))!!)   // 新机动动作 - SHOW
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(300, 40))!!)
         assertTrue("периодические SHOW были", r.link.turns.count { it.action == 1 } >= 4)
         assertEquals(1, r.link.turns.last().action)
@@ -1347,7 +1347,7 @@ class AaMetaTest {
 
     @Test
     fun hondaEmptyRoadGetsManeuverText() {
-        // Google Maps на выездах со двора шлёт legacy 0x8004 с road="": Honda - подпись манёвра, остальное как прислал AA
+        // Google Maps 在驶出院子时发送 road="" 的 legacy 0x8004:Honda - 机动动作标题,其余按 AA 原样
         for (honda in listOf(true, false)) for (road in listOf("", "  ", "ул. Мадояна")) {
             val r = Rig()
             r.link.huResubscribes = honda
@@ -1372,7 +1372,7 @@ class AaMetaTest {
 
     @Test
     fun hondaShowWaitsForSubscribe() {
-        // 17.10 16:18:02: NAVI=1 и манёвр одной пачкой - SHOW уходил раньше SUBSCRIBE_START
+        // 17.10 16:18:02:NAVI=1 和机动动作一包到达 - SHOW 早于 SUBSCRIBE_START 发出
         val r = Rig()
         r.link.huResubscribes = true
         r.core.onCarlifeSubscribe(listOf(0), true)
@@ -1398,7 +1398,7 @@ class AaMetaTest {
         r.core.onCarlifeSubscribe(listOf(0), true)
         r.start()
         r.core.onHuStatistic("20832117")
-        r.core.onNavStatus(1)                                   // ГУ не отвечает подпиской
+        r.core.onNavStatus(1)                                   // 车机不回复订阅
         r.core.onNavTurn(AaMeta.parseNavState(navState(8, "Main St"))!!)
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(540, 123))!!)
         assertTrue(r.link.turns.isEmpty())
@@ -1438,7 +1438,7 @@ class AaMetaTest {
 
     @Test
     fun hondaSlowFirstTurnAfterRouteStartNoRearm() {
-        // 16:15:33 NAVI=1 (маршрут), подписка ГУ через 0,7 с, первый TURN_EVENT от AA через 2,1 с
+        // 16:15:33 NAVI=1(路线),车机订阅在 0.7 秒后,AA 的第一个 TURN_EVENT 在 2.1 秒后
         val r = Rig()
         r.link.huResubscribes = true
         r.core.onCarlifeSubscribe(listOf(0), true)
@@ -1461,7 +1461,7 @@ class AaMetaTest {
         val r = hondaRoute()
         assertEquals(1, r.link.turns.last().action)
         assertEquals("NAVI=1 только что поднят маршрутом: перед первым SHOW не перевзводим", listOf(1), r.link.navi())
-        r.now += MetaRelay.NAVI_RESHOW_MS + 1000          // AA молчал
+        r.now += MetaRelay.NAVI_RESHOW_MS + 1000          // AA 沉默了
         r.core.onNavDistance(AaMeta.parseNavPosition(navPosition(30, 17))!!)
         r.pumpSubscribe()
         assertEquals(1, r.link.turns.last().action)
@@ -1485,7 +1485,7 @@ class AaMetaTest {
         AaBridgeCore.TTS_DEBOUNCE_ENABLED = false
         try {
             val r = hondaRoute()
-            r.core.onAudioData(M.CH_AUDIO_SPEECH, ByteArray(640), 0)   // TTS идёт в момент перестроения
+            r.core.onAudioData(M.CH_AUDIO_SPEECH, ByteArray(640), 0)   // 重新规划路线时 TTS 正在播放
             r.core.onNavStatus(2)
             assertEquals("NAVI держит TTS", listOf(1), r.link.navi())
             r.now += 6000

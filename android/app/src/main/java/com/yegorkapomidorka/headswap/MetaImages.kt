@@ -13,9 +13,9 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Картинки для CarLife: обложка AA (PNG 256x256, 90-127 КБ) -> JPEG < 30720 Б (CarlifeUtil.java:398),
- * стрелки манёвров PNG < 30720 Б (RGEventHUDCollection.compressByte). AA объявлена в режиме ENUM: своих картинок
- * манёвров телефон не шлёт, рисуем сами по nextTurn.
+ * CarLife 用图片：AA 封面（PNG 256x256，90-127 KB）-> JPEG < 30720 字节（CarlifeUtil.java:398），
+ * 转向箭头 PNG < 30720 字节（RGEventHUDCollection.compressByte）。AA 以 ENUM 模式声明：手机不发送
+ * 自绘的转向图片，我们根据 nextTurn 自行绘制。
  */
 object MetaImages {
     const val MAX_BYTES = 30720
@@ -23,14 +23,14 @@ object MetaImages {
     private const val ART_SMALL = 160
     private const val ICON = 128
 
-    /** Обложка -> JPEG; null, если картинка не декодируется или не влезает в лимит [maxBytes] даже 160x160 q10. */
+    /** 封面 -> JPEG；如果图片无法解码或即使 160x160 q10 也超出 [maxBytes] 限制，则返回 null。 */
     fun albumJpeg(src: ByteArray, maxBytes: Int = MAX_BYTES): ByteArray? {
         val bmp = BitmapFactory.decodeByteArray(src, 0, src.size) ?: return null
         try {
             for (side in intArrayOf(ART_SIDE, ART_SMALL)) {
                 val scaled = if (bmp.width > side || bmp.height > side) Bitmap.createScaledBitmap(bmp, side, side, true) else bmp
                 try {
-                    // JPEG без альфы: прозрачное на чёрный фон
+                    // JPEG 无 alpha：透明区域垫黑色背景
                     val opaque = Bitmap.createBitmap(scaled.width, scaled.height, Bitmap.Config.ARGB_8888)
                     Canvas(opaque).apply {
                         drawColor(Color.BLACK)
@@ -56,7 +56,7 @@ object MetaImages {
         }
     }
 
-    /** Стрелка манёвра nextTurn (коды CarLife): белая с тёмной обводкой на прозрачном фоне, PNG 128x128. */
+    /** nextTurn 转向箭头（CarLife 编码）：透明背景上的白色箭头加深色描边，PNG 128x128。 */
     fun turnIcon(nextTurn: Int): ByteArray {
         val bmp = Bitmap.createBitmap(ICON, ICON, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
@@ -155,13 +155,13 @@ object MetaImages {
 
     private class PointF2(val x: Float, val y: Float)
 
-    /** Точка на расстоянии len от p в направлении angle (0 вверх, + по часовой). */
+    /** 从 p 出发沿 angle 方向（0 向上，顺时针为正）距离 len 的点。 */
     private fun dir(p: PointF2, angle: Int, len: Float): Pair<Float, Float> {
         val a = Math.toRadians(angle.toDouble())
         return Pair(p.x + len * sin(a).toFloat(), p.y - len * cos(a).toFloat())
     }
 
-    /** Наконечник: треугольник с вершиной чуть дальше (x, y) по направлению angle. */
+    /** 箭头头部：顶点在 (x, y) 沿 angle 方向稍远处的三角形。 */
     private fun head(x: Float, y: Float, angle: Int): Path {
         val a = Math.toRadians(angle.toDouble())
         val fx = sin(a).toFloat()

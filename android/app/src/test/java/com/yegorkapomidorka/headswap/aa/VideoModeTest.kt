@@ -34,7 +34,7 @@ class VideoModeTest {
             assertEquals(m.name, r.w, m.outW)
             assertEquals(m.name, r.h, m.outH)
             assertEquals(m.name, r.bitrate, m.bitrate)
-            // выход CarLife = кадр AA без margin-ов (WIDE_976 - исключение: область 1920x836 масштабируется в 2240x976)
+            // CarLife 输出 = 去掉 margin 后的 AA 帧（WIDE_976 例外：1920x836 区域缩放到 2240x976）
             if (m != VideoMode.WIDE_976) {
                 assertEquals(m.name, m.aaW - m.marginW, m.outW)
                 assertEquals(m.name, m.aaH - m.marginH, m.outH)
@@ -46,7 +46,7 @@ class VideoModeTest {
     @Test
     fun r1024() {
         val m = VideoMode.R1024
-        // из кадра AA 1280x720 вырезается центр 1024x600, масштаба нет: тач 1:1 с клампом в область
+        // 从 AA 帧 1280x720 中裁出中心 1024x600，无缩放：触摸 1:1 并钳制到该区域
         assertEquals(1023 to 599, m.mapTouch(1100, 700))
         assertEquals(57 to 301, m.mapTouch(57, 301))
         assertEquals(128f / 1280f, m.crop.u0, 1e-6f)
@@ -109,9 +109,9 @@ class VideoModeTest {
         val w = VideoMode.WIDE
         assertEquals(640 to 0, w.mapTouch(640, 0))
         assertEquals(640 to 479, w.mapTouch(640, 479))
-        assertEquals(38 to 441, w.mapTouch(38, 441))         // кнопка сетки на Desay G6S
+        assertEquals(38 to 441, w.mapTouch(38, 441))         // Desay G6S 上的网格按钮
         assertEquals(1279 to 240, w.mapTouch(1279, 240))
-        // за пределами кадра ГУ - clamp в область интерфейса 1280x480
+        // 超出车机帧范围 - 钳制到 1280x480 界面区域
         assertEquals(0 to 0, w.mapTouch(-5, -300))
         assertEquals(1279 to 479, w.mapTouch(2000, 900))
         assertEquals(1919 to 719, VideoMode.WIDE_HD.mapTouch(2000, 900))
@@ -163,7 +163,7 @@ class VideoModeTest {
         assertEquals(1f, k.crop.u1, 1e-6f)
         assertTrue(k.needsTranscode)
         assertEquals(VideoMode.R720, k.effective(transcode = false))
-        // рабочая область AA 1920x836 масштабируется в кадр ГУ 2240x976: тач пересчитывается и клампится в область
+        // AA 工作区 1920x836 缩放到车机帧 2240x976：触摸被重算并钳制到该区域
         assertEquals(1919 to 835, k.mapTouch(3000, 2000))
         assertEquals(960 to 418, k.mapTouch(1120, 488))
         assertEquals(0 to 0, k.mapTouch(0, 0))
@@ -181,7 +181,7 @@ class VideoModeTest {
         val wide = hex(M.serviceDiscoveryResponse(VideoMode.WIDE.sdOptions(fullAudio = false)).payload)
         // VideoConfiguration: res=2 fps=2 margin_w=0 margin_h=240 (20 f0 01) density 160 par 10000 codec 3
         assertTrue(wide, wide.contains("08021002180020f00128a00140904e5003"))
-        // touchscreen остаётся 1280x720 (поле 2: 1280 = 80 0a, 720 = d0 05)
+        // touchscreen 保持 1280x720（字段 2：1280 = 80 0a, 720 = d0 05）
         assertTrue(wide, wide.contains("1206" + "08800a" + "10d005"))
     }
 
@@ -208,7 +208,7 @@ class VideoModeTest {
         val core = AaBridgeCore({ _, _ -> })
         val peer = FakePeer()
         core.peer = peer
-        core.onCarlifeTouch(0, 640, 0)                       // по умолчанию R720: 1:1
+        core.onCarlifeTouch(0, 640, 0)                       // 默认 R720：1:1
         core.videoMode = VideoMode.WIDE
         core.onCarlifeTouch(0, 640, 0)
         core.onCarlifeTouch(2, 640, 479)
@@ -236,7 +236,7 @@ class VideoModeTest {
             assertEquals(m.name, m.density, m.sdOptions(false).density)
             assertEquals(m.name, m.density, m.sdOptions(false, AaDensity.AUTO).density)
         }
-        // авто = прежний SDR байт в байт
+        // 自动 = 与原有 SDR 逐字节一致
         assertEquals(hex(M.serviceDiscoveryResponse(VideoMode.R720.sdOptions(false)).payload),
             hex(M.serviceDiscoveryResponse(VideoMode.R720.sdOptions(false, AaDensity.AUTO)).payload))
     }
@@ -247,9 +247,9 @@ class VideoModeTest {
             val auto = m.sdOptions(true)
             val o = m.sdOptions(true, 200)
             assertEquals(m.name, 200, o.density)
-            assertEquals(m.name, auto.copy(density = 200), o)      // разрешение, margin-ы, звук - как в авто
+            assertEquals(m.name, auto.copy(density = 200), o)      // 分辨率、margin、声音 - 与自动模式一致
         }
-        // R720 с 200: VideoConfiguration ... density 200 (c8 01) вместо 160 (a0 01)
+        // R720 用 200：VideoConfiguration ... density 200 (c8 01) 代替 160 (a0 01)
         val r720 = hex(M.serviceDiscoveryResponse(VideoMode.R720.sdOptions(false, 200)).payload)
         assertTrue(r720, r720.contains("0802100218002000" + "28c801"))
         val r800 = hex(M.serviceDiscoveryResponse(VideoMode.R800.sdOptions(false, 100)).payload)
@@ -258,7 +258,7 @@ class VideoModeTest {
 
     @Test
     fun densityOverrideDoesNotTouchCropOrTouch() {
-        // кроп и тач - свойства режима, override в них не участвует; проверяем на ядре моста с override
+        // 裁剪与触摸是模式的属性，override 不参与其中；在带 override 的桥接核心上验证
         for (m in VideoMode.values()) {
             val crop = m.crop
             val touch = listOf(0 to 0, m.outW / 2 to m.outH / 2, m.outW - 1 to m.outH - 1).map { (x, y) -> m.mapTouch(x, y) }
@@ -290,16 +290,16 @@ class VideoModeTest {
         assertEquals(listOf(100, 120, 140, 160, 180, 200, 220, 240, 260, 280), AaDensity.VALUES)
         assertEquals(AaDensity.AUTO, AaDensity.parse(0))
         assertEquals(200, AaDensity.parse(200))
-        assertEquals(AaDensity.AUTO, AaDensity.parse(210))      // вне сетки
-        assertEquals(AaDensity.AUTO, AaDensity.parse(320))      // вне диапазона
+        assertEquals(AaDensity.AUTO, AaDensity.parse(210))      // 不在网格上
+        assertEquals(AaDensity.AUTO, AaDensity.parse(320))      // 超出范围
         assertEquals(AaDensity.AUTO, AaDensity.parse(80))
-        // из авто - соседнее значение от density режима
+        // 从自动 - 取模式 density 的相邻值
         assertEquals(180, AaDensity.step(AaDensity.AUTO, 160, up = true))
         assertEquals(140, AaDensity.step(AaDensity.AUTO, 160, up = false))
         assertEquals(100, AaDensity.step(AaDensity.AUTO, 120, up = false))
-        assertEquals(280, AaDensity.step(AaDensity.AUTO, 320, up = false))      // R1440: авто выше максимума
+        assertEquals(280, AaDensity.step(AaDensity.AUTO, 320, up = false))      // R1440：自动值高于最大值
         assertEquals(AaDensity.AUTO, AaDensity.step(AaDensity.AUTO, 320, up = true))
-        // на краях стоим
+        // 在边界处保持不动
         assertEquals(280, AaDensity.step(280, 160, up = true))
         assertEquals(100, AaDensity.step(100, 160, up = false))
         assertEquals(220, AaDensity.step(200, 160, up = true))

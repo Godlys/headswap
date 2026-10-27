@@ -3,7 +3,7 @@ package com.yegorkapomidorka.headswap
 import com.yegorkapomidorka.headswap.aa.AaDensity
 import com.yegorkapomidorka.headswap.aa.VideoGeometry
 
-/** Состояние для экрана; пишут сервис и сессия, читает activity (один процесс). */
+/** 供屏幕显示的状态；由服务和会话写入，activity 读取（同一进程）。 */
 object CarLifeState {
     @Volatile var status: String = "не запущено"
     @Volatile var accessory: String = "-"
@@ -12,26 +12,26 @@ object CarLifeState {
     @Volatile var video: String = "-"
     @Volatile var touch: String = "-"
 
-    /** Видео-режим текущей/последней сессии (фактический, с учётом passthrough); null - сессии не было. */
+    /** 当前/最近一次会话的视频模式（实际值，考虑 passthrough）；null 表示没有会话。 */
     @Volatile var videoMode: VideoGeometry? = null
 
-    /** Ручной DPI AA той же сессии (AaDensity.AUTO = density режима). */
+    /** 同一会话的手动 AA DPI（AaDensity.AUTO = 模式的 density）。 */
     @Volatile var densityOverride: Int = AaDensity.AUTO
     @Volatile var running: Boolean = false
 
-    /** Текущая сессия идёт по Wi-Fi (TCP), а не по кабелю; false - сессии нет или она по USB. */
+    /** 当前会话通过 Wi-Fi（TCP）而非数据线进行；false 表示没有会话或通过 USB。 */
     @Volatile var wirelessSession: Boolean = false
 
-    /** Беспровод (бета, ветка B): что сейчас происходит, для экрана; null - режим не включён. */
+    /** 无线（测试版，分支 B）：当前进展，用于屏幕显示；null 表示该模式未启用。 */
     @Volatile var wireless: String? = null
 
-    /** Bluetooth-проба ветки A: что прислала ГУ по RFCOMM `carlife`; null - проба не запускалась. */
+    /** 分支 A 的 Bluetooth 探测：车机通过 RFCOMM `carlife` 发回的内容；null 表示探测未运行。 */
     @Volatile var btProbe: String? = null
 
-    /** Авторежим беспровода: выбранная машина рядом по Bluetooth (пишет BridgeService). */
+    /** 无线自动模式：通过 Bluetooth 检测到所选车辆在附近（由 BridgeService 写入）。 */
     @Volatile var carAuto: Boolean = false
 
-    /** Запрос сети Wi-Fi машины: idle / requesting / available / unavailable (пишет BridgeService). */
+    /** 请求车辆 Wi-Fi 网络：idle / requesting / available / unavailable（由 BridgeService 写入）。 */
     @Volatile var carNet: String = "idle"
 
     fun resetSession() {

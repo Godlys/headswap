@@ -15,8 +15,8 @@ import android.os.SystemClock
 import android.view.Surface
 
 /**
- * H.264-энкодер (Surface input) и рисовалка заглушки моста (текст, пока AA не подключился).
- * Кадры отдаются в Annex-B с 4-байтными стартовыми кодами; codec config приходит отдельно (onConfig).
+ * H.264 编码器（Surface 输入）和桥接占位画面的绘制器（AA 未连接时显示文本）。
+ * 帧以 Annex-B 格式、带 4 字节起始码输出；codec config 单独通过 onConfig 回调给出。
  */
 class VideoSource(
     val width: Int,
@@ -34,7 +34,7 @@ class VideoSource(
     @Volatile var framesRendered = 0L
         private set
 
-    /** Текст заглушки: крупная надпись и живой индикатор вместо видео AA. */
+    /** 占位画面文本：大号文字和动态指示器，代替 AA 视频。 */
     @Volatile var banner: String? = null
 
     @Volatile private var running = false
@@ -67,7 +67,7 @@ class VideoSource(
             s = c.createInputSurface()
             c.start()
         } catch (e: Exception) {
-            // codec ещё null: stop() вышел бы сразу, аппаратный энкодер освобождаем здесь
+            // codec 还是 null：stop() 会立即返回，在这里释放硬件编码器
             try {
                 s?.release()
             } catch (_: Exception) {
@@ -107,7 +107,7 @@ class VideoSource(
         }
     }
 
-    /** Битрейт на лету (воздух: политика битрейта ведёт и заглушку). false = кодека нет или параметр не принят. */
+    /** 动态调整比特率（无线：比特率策略同样作用于占位画面）。false = 没有编解码器或参数未被接受。 */
     fun setBitrate(bps: Int): Boolean {
         val c = codec ?: return false
         return try {
@@ -178,8 +178,8 @@ class VideoSource(
         var next = SystemClock.elapsedRealtime()
         try {
             while (running) {
-                // программный Canvas: lockHardwareCanvas на Surface энкодера валит media.codec на Xiaomi с vndk v30
-                // (Redmi 9T/9S, POCO X3 Pro: SIGSEGV в FenceTime::Snapshot::getFlattenedSize, за ним abort нашего процесса)
+                // 软件 Canvas：在小米 vndk v30 上，对编码器 Surface 调用 lockHardwareCanvas 会弄崩 media.codec
+                // （Redmi 9T/9S、POCO X3 Pro：FenceTime::Snapshot::getFlattenedSize 中 SIGSEGV，随后我们的进程 abort）
                 val canvas = s.lockCanvas(null)
                 try {
                     draw(canvas)
@@ -196,7 +196,7 @@ class VideoSource(
         }
     }
 
-    /** Текущий кадр заглушки в Bitmap: с него транскодер начинает зум-растворение в картинку AA. Любая нить. */
+    /** 占位画面的当前帧转成 Bitmap：转码器从它开始淡入 AA 画面（缩放溶解）。任意线程可调用。 */
     fun snapshot(): Bitmap? {
         val msg = banner ?: return null
         val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -209,11 +209,11 @@ class VideoSource(
     private fun drawBanner(c: Canvas, width: Int, height: Int, msg: String, n: Long, text: Paint, fill: Paint) {
         val w = width.toFloat()
         val h = height.toFloat()
-        // плоские цвета: на CBR 4 Мбит/с градиенты слабого энкодера идут полосами
+        // 纯色：在 CBR 4 Mbps 下，弱编码器的渐变会出现色带
         c.drawColor(BG)
         drawLogo(c, w / 2, h * 0.34f, minOf(h * 0.36f, w * 0.3f), n / fps.toFloat(), fill)
 
-        // словесный знак: Head белым, swap янтарным
+        // 文字标志：Head 白色，swap 琥珀色
         text.textAlign = Paint.Align.LEFT
         text.typeface = WORDMARK
         text.textSize = h * 0.085f
@@ -228,7 +228,7 @@ class VideoSource(
         text.color = AMBER
         c.drawText(swap, x, yWord, text)
 
-        // статус моста: по нему видно, чего ждём (сервер ГУ, разблокировка, кадр)
+        // 桥接状态：可以看到正在等待什么（车机服务器、解锁、帧）
         text.typeface = Typeface.DEFAULT_BOLD
         text.textAlign = Paint.Align.CENTER
         text.color = STATUS
@@ -242,8 +242,8 @@ class VideoSource(
     }
 
     /**
-     * Перенос по словам на минимум строк, но строки примерно равной ширины:
-     * на 4:3 «...перезапустите сервер ГУ» иначе оставляет «ГУ» одно на второй строке.
+     * 按单词换行，使行数最少但各行宽度大致相等：
+     * 在 4:3 屏幕上「…请重启车机服务器」否则会把「车机」单独留在第二行。
      */
     private fun wrapBalanced(msg: String, maxW: Float, p: Paint): List<String> {
         val words = msg.split(' ')
@@ -264,7 +264,7 @@ class VideoSource(
         }
         val base = greedy(maxW)
         if (base.size < 2) return base
-        // сужаем лимит, пока число строк не растёт: последняя строка добирает слова у предыдущих
+        // 不断收窄限制直到行数不再增加：最后一行会从前面各行吸收单词
         var best = base
         var limit = p.measureText(msg) / base.size
         while (limit < maxW) {
@@ -279,9 +279,9 @@ class VideoSource(
     }
 
     /**
-     * Глиф иконки (ic_launcher_foreground.xml, 48×48): дуги-стрелки раз в [SWAP_S] меняются местами
-     * поворотом на 180° вокруг экрана, на каждом обмене от логотипа расходится янтарное кольцо.
-     * Состояние только от t: snapshot() с любой нити рисует тот же кадр.
+     * 图标字形（ic_launcher_foreground.xml，48×48）：弧形箭头每隔 [SWAP_S] 通过围绕屏幕旋转 180° 交换位置，
+     * 每次交换时从标志向外扩散一个琥珀色圆环。
+     * 状态仅由 t 决定：snapshot() 从任意线程绘制出相同的帧。
      */
     private fun drawLogo(c: Canvas, cx: Float, cy: Float, size: Float, t: Float, p: Paint) {
         val phase = t % SWAP_S
@@ -294,7 +294,7 @@ class VideoSource(
         c.translate(cx - 24f * s, cy - 24f * s)
         c.scale(s, s)
 
-        // волна обмена: кольцо от радиуса дуг наружу, тает к концу цикла
+        // 交换波纹：圆环从弧的半径向外扩散，在循环结束时淡出
         val r = phase / SWAP_S
         p.style = Paint.Style.STROKE
         p.strokeWidth = 1.2f
@@ -311,7 +311,7 @@ class VideoSource(
         drawArrow(c, ARC_AMBER, HEAD_AMBER, AMBER, p)
         c.restore()
 
-        // экран в центре неподвижен
+        // 中央屏幕保持不动
         p.style = Paint.Style.STROKE
         p.color = Color.WHITE
         p.strokeWidth = 2f
@@ -341,16 +341,16 @@ class VideoSource(
     companion object {
         const val MIME = "video/avc"
 
-        private val BG = Color.rgb(0x0E, 0x14, 0x1A) // фон иконки
+        private val BG = Color.rgb(0x0E, 0x14, 0x1A) // 图标背景
         private val AMBER = Color.rgb(0xF2, 0xB3, 0x3D)
         private val STATUS = Color.rgb(0xB8, 0xC4, 0xCC)
         private val WORDMARK: Typeface = Typeface.create("sans-serif-black", Typeface.NORMAL)
 
-        /** Цикл обмена стрелок и длительность самого поворота внутри него, секунды. */
+        /** 箭头交换的周期及其中旋转本身的持续时间，单位秒。 */
         private const val SWAP_S = 2.2f
         private const val SPIN_S = 0.8f
 
-        // дуги — окружность r=15 вокруг (24,24): 195°..318° и её отражение 15°..138°
+        // 弧线 — 围绕 (24,24) 半径 r=15 的圆：195°..318° 及其镜像 15°..138°
         private val ARC_WHITE = Path().apply { addArc(RectF(9f, 9f, 39f, 39f), 195f, 123f) }
         private val ARC_AMBER = Path().apply { addArc(RectF(9f, 9f, 39f, 39f), 15f, 123f) }
         private val HEAD_WHITE = triangle(39.24f, 10.28f, 40.5f, 19.9f, 31.06f, 17.64f)

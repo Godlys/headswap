@@ -20,7 +20,7 @@ class FakeTranscoder : VideoTranscoder {
     val syncs = AtomicInteger()
     val stops = AtomicInteger()
 
-    /** Вызовы моста в порядке прихода: config, frame:idr, frame:p, reset, sync, intro, stop. */
+    /** 按到达顺序记录的桥接调用：config、frame:idr、frame:p、reset、sync、intro、stop。 */
     val journal = CopyOnWriteArrayList<String>()
     override fun feedConfig(annexB: ByteArray) {
         journal.add("config")
@@ -116,18 +116,18 @@ class AaTranscodeCoreTest {
 
     @Test
     fun startCreatesTranscoderRequestsSyncFeedsKnownConfig() {
-        core.onCodecConfig(aaCfg)                              // config пришёл до START
+        core.onCodecConfig(aaCfg)                              // config 先于 START 到达
         core.onCarlifeStart()
         assertEquals(1, link.created)
         assertTrue(core.isTranscoding)
         assertEquals(1, tr.syncs.get())
         assertArrayEquals(aaCfg, tr.configs.last())
-        // повторный START: тот же транскодер
+        // 重复 START：仍用同一个转码器
         core.onCarlifeStart()
         assertEquals(1, link.created)
     }
 
-    /** Довести до AA-видео в CarLife, затем PAUSE: выход энкодера отбрасывается (как sendVideo=false на паузе). */
+    /** 先把 AA 视频送入 CarLife，然后 PAUSE：编码器输出被丢弃（如同暂停时 sendVideo=false）。 */
     private fun playThenPause() {
         core.onCarlifeStart()
         core.onCodecConfig(aaCfg)
@@ -151,10 +151,10 @@ class AaTranscodeCoreTest {
         val syncs = tr.syncs.get()
         val sent = link.sent.size
         core.onCarlifeStart()
-        assertTrue(syncs < tr.syncs.get())                     // IDR у энкодера запрошен сразу
-        core.onFrame(aaP, 3)                                   // P-кадры AA идут в декодер, IDR от AA не ждём
+        assertTrue(syncs < tr.syncs.get())                     // 立即向编码器请求了 IDR
+        core.onFrame(aaP, 3)                                   // AA 的 P 帧送入解码器，不等待 AA 的 IDR
         assertEquals(fed + 1, tr.frames.size)
-        core.onEncoderFrame(encP, false)                       // P энкодера до его IDR не шлём
+        core.onEncoderFrame(encP, false)                       // 编码器的 P 帧在其 IDR 之前不发送
         assertEquals(sent, link.sent.size)
         core.onEncoderFrame(encIdr, true)
         assertArrayEquals(encCfg + encIdr, link.sent.last())
@@ -163,7 +163,7 @@ class AaTranscodeCoreTest {
 
     @Test
     fun airStartAfterPauseOnOtherHuStillWaitsForAaIdr() {
-        link.air = true                                        // Mazda G6S по воздуху и др.: как в main
+        link.air = true                                        // Mazda G6S 等无线机型：与 main 中一致
         core.onHuInfo("Desay SV", "G6S")
         playThenPause()
         val fed = tr.frames.size
@@ -175,11 +175,11 @@ class AaTranscodeCoreTest {
 
     @Test
     fun usbStartAfterPauseStillWaitsForAaIdr() {
-        core.onHuInfo("VW BT 1420", "VW BT 1420")              // даже у Павла по USB - как было
+        core.onHuInfo("VW BT 1420", "VW BT 1420")              // 即便 Pavel 的 USB 也是如此 - 保持原状
         playThenPause()
         val fed = tr.frames.size
         core.onCarlifeStart()
-        core.onFrame(aaP, 3)                                   // USB: как было, декодер ждёт IDR от AA
+        core.onFrame(aaP, 3)                                   // USB：与原来一样，解码器等待 AA 的 IDR
         assertEquals(fed, tr.frames.size)
         assertFalse(logs.any { it.contains("AA не жду") })
     }
@@ -191,7 +191,7 @@ class AaTranscodeCoreTest {
         assertEquals(0, link.created)
         assertFalse(core.isTranscoding)
         core.onCodecConfig(aaCfg)
-        core.onFrame(aaIdr, 1)                                 // passthrough как раньше: склейка и отправка
+        core.onFrame(aaIdr, 1)                                 // passthrough 同以前：拼接后发送
         assertArrayEquals(aaCfg + aaIdr, link.sent[0])
     }
 
@@ -211,14 +211,14 @@ class AaTranscodeCoreTest {
     fun aaFramesGoToDecoderOnlyFromIdrAndConfigIsGlued() {
         core.onCarlifeStart()
         core.onCodecConfig(aaCfg)
-        core.onFrame(aaP, 1)                                   // до IDR декодеру не отдаём
+        core.onFrame(aaP, 1)                                   // IDR 之前不交给解码器
         assertEquals(0, tr.frames.size)
         core.onFrame(aaIdr, 2)
         assertEquals(1, tr.frames.size)
-        assertArrayEquals(aaCfg + aaIdr, tr.frames[0])         // IDR с SPS/PPS
+        assertArrayEquals(aaCfg + aaIdr, tr.frames[0])         // IDR 附带 SPS/PPS
         core.onFrame(aaP, 3)
         assertArrayEquals(aaP, tr.frames[1])
-        assertEquals(0, link.sent.size)                        // в CarLife идёт только выход энкодера
+        assertEquals(0, link.sent.size)                        // 发往 CarLife 的只有编码器输出
     }
 
     @Test
@@ -226,19 +226,19 @@ class AaTranscodeCoreTest {
         core.onCarlifeStart()
         core.onCodecConfig(aaCfg)
         core.onEncoderConfig(encCfg)
-        core.onEncoderFrame(encIdr, true)                      // AA IDR в декодер ещё не уходил: выход игнорируется
+        core.onEncoderFrame(encIdr, true)                      // AA IDR 尚未进入解码器：输出被忽略
         assertEquals(0, link.sent.size)
         assertEquals(AaBridgeCore.Source.PLACEHOLDER, core.activeSource)
-        core.onFrame(aaIdr, 1)                                 // теперь выход энкодера разрешён
-        core.onEncoderFrame(encP, false)                       // P до первого IDR выхода отбрасывается
+        core.onFrame(aaIdr, 1)                                 // 现在允许编码器输出
+        core.onEncoderFrame(encP, false)                       // 输出首个 IDR 之前的 P 帧被丢弃
         assertEquals(0, link.sent.size)
         core.onEncoderFrame(encIdr, true)
         assertEquals(1, link.sent.size)
-        assertArrayEquals(encCfg + encIdr, link.sent[0])       // SPS+PPS+IDR в одном сообщении
+        assertArrayEquals(encCfg + encIdr, link.sent[0])       // SPS+PPS+IDR 在同一条消息中
         assertEquals(listOf(7, 8, 5), AnnexB.nalTypes(link.sent[0]))
         assertEquals(AaBridgeCore.Source.AA, core.activeSource)
         assertEquals(1, link.hides)
-        assertEquals(1, link.takeovers)                       // первый AA-IDR атомарно отключает кадры заглушки
+        assertEquals(1, link.takeovers)                       // 首个 AA-IDR 原子地关闭占位帧
         core.onEncoderFrame(encP, false)
         assertArrayEquals(encP, link.sent[1])
     }
@@ -256,16 +256,16 @@ class AaTranscodeCoreTest {
         assertEquals(AaBridgeCore.TEXT_AA_LOST, link.texts.last())
         assertEquals(AaBridgeCore.Source.PLACEHOLDER, core.activeSource)
         val before = link.sent.size
-        core.onEncoderFrame(encP, false)                       // энкодер повторяет старый кадр: в CarLife не идёт
+        core.onEncoderFrame(encP, false)                       // 编码器重发旧帧：不发往 CarLife
         core.onEncoderFrame(encIdr, true)
         assertEquals(before, link.sent.size)
-        // сервер перезапущен: новая сессия, новый config
+        // 服务器已重启：新会话、新 config
         core.onAaConnecting()
         assertEquals(2, tr.resets.get())
         val cfg2 = Golden.hex("00000001 67 4d401f ac2c a5") + aaPps
         core.onCodecConfig(cfg2)
         core.onFrame(aaP, 5)
-        assertEquals(1, tr.frames.size)                        // P до IDR не отдан
+        assertEquals(1, tr.frames.size)                        // IDR 之前的 P 帧未送出
         core.onFrame(aaIdr, 6)
         assertArrayEquals(cfg2 + aaIdr, tr.frames.last())
         core.onEncoderFrame(encIdr, true)
@@ -301,7 +301,7 @@ class AaTranscodeCoreTest {
         core.onEncoderFrame(encP, false)
         link.accept = true
         assertEquals(syncs + 1, tr.syncs.get())
-        core.onEncoderFrame(encP, false)                       // после потери P нельзя
+        core.onEncoderFrame(encP, false)                       // 丢失 P 帧之后不能再发
         assertEquals(1, link.sent.size)
         core.onEncoderFrame(encIdr, true)
         assertEquals(2, link.sent.size)
@@ -318,12 +318,12 @@ class AaTranscodeCoreTest {
         now = 10_000
         core.onNeedAaKeyFrame()
         core.onFrame(aaP, 2)
-        assertEquals(1, tr.frames.size)                        // ждём IDR
+        assertEquals(1, tr.frames.size)                        // 等待 IDR
         now += 2000
         core.tick()
         assertEquals(1, peer.keyframes)
         core.onCarlifeKeyFrameRequest()
-        assertEquals(3, tr.syncs.get())                        // START, первый AA-IDR в декодер, запрос ГУ
+        assertEquals(3, tr.syncs.get())                        // START、首个 AA-IDR 进解码器、head unit 请求
     }
 
     @Test
@@ -333,7 +333,7 @@ class AaTranscodeCoreTest {
         core.onFrame(aaIdr, 1)
         core.onTranscodeError("тест")
         assertFalse(core.isTranscoding)
-        core.onFrame(aaP, 2)                                   // ждём IDR уже для passthrough
+        core.onFrame(aaP, 2)                                   // 等待用于 passthrough 的 IDR
         assertEquals(0, link.sent.size)
         core.onFrame(aaIdr, 3)
         assertArrayEquals(aaCfg + aaIdr, link.sent[0])
@@ -361,18 +361,18 @@ class AaTranscodeCoreTest {
         core.onFrame(aaIdr, 1)
         now = 1500
         core.tick()
-        now = 9000                                             // экран статичен, кадров нет
+        now = 9000                                             // 屏幕静止，没有帧
         core.tick()
         assertTrue(logs.any { it.contains("видео[passthrough]") && it.contains("простой AA") })
         assertEquals("в простое ничего не шлём", 1, link.sent.size)
     }
 
-    // --- контракт моста к транскодеру: порядок вызовов и реакция на колбэки (транскодер кормится асинхронно) ---
+    // --- 桥接器对转码器的契约：调用顺序与对回调的响应（转码器异步喂入）---
 
-    /** Только вызовы подачи (config/frame:*) из журнала - порядок, в котором транскодер увидит данные AA. */
+    /** 仅取日志中的喂入调用（config/frame:*）- 即转码器看到 AA 数据的顺序。 */
     private fun feedLog(t: FakeTranscoder) = t.journal.filter { it == "config" || it.startsWith("frame:") }
 
-    /** Две нити одновременно, обе должны завершиться за 2 с (иначе зависание/взаимоблокировка). */
+    /** 两个线程同时运行，都必须在 2 秒内结束（否则说明挂起/死锁）。 */
     private fun runConcurrently(a: () -> Unit, b: () -> Unit) {
         val errors = CopyOnWriteArrayList<Throwable>()
         val go = CountDownLatch(1)
@@ -393,7 +393,7 @@ class AaTranscodeCoreTest {
     fun startOrderConfigBeforeIdrAndNoPBeforeIdr() {
         core.onCarlifeStart()
         core.onCodecConfig(aaCfg)
-        core.onFrame(aaP, 1)                                   // P до первого IDR отбрасывается
+        core.onFrame(aaP, 1)                                   // 首个 IDR 之前的 P 帧被丢弃
         assertEquals(listOf("config"), feedLog(tr))
         core.onFrame(aaIdr, 2)
         core.onFrame(aaP, 3)
@@ -404,8 +404,8 @@ class AaTranscodeCoreTest {
     @Test
     fun bareIdrIsFedGluedWithKnownConfig() {
         core.onCarlifeStart()
-        core.onCodecConfig(aaCfg)                              // config пришёл раньше
-        core.onFrame(aaIdr, 1)                                 // IDR голый: только NAL 5
+        core.onCodecConfig(aaCfg)                              // config 先到达
+        core.onFrame(aaIdr, 1)                                 // 裸 IDR：只有 NAL 5
         assertEquals(listOf(5), AnnexB.nalTypes(aaIdr))
         assertEquals(1, tr.frames.size)
         assertEquals(listOf(7, 8, 5), AnnexB.nalTypes(tr.frames[0]))
@@ -418,7 +418,7 @@ class AaTranscodeCoreTest {
         core.onCodecConfig(aaCfg)
         core.onFrame(aaIdr, 1)
         core.onFrame(aaP, 2)
-        core.onNeedAaKeyFrame()                                // декодер потерял кадр
+        core.onNeedAaKeyFrame()                                // 解码器丢失了帧
         core.onFrame(aaP, 3)
         core.onFrame(aaP, 4)
         core.onFrame(aaIdr, 5)
@@ -429,7 +429,7 @@ class AaTranscodeCoreTest {
         assertArrayEquals(aaP, tr.frames[3])
     }
 
-    /** START после PAUSE: gotIdr сбрасывается, декодер ждёт IDR от AA (reset декодера на START мост не зовёт). */
+    /** PAUSE 后的 START：gotIdr 被重置，解码器等待 AA 的 IDR（桥接器在 START 时不调用解码器 reset）。 */
     @Test
     fun startAfterPauseDropsPUntilIdr() {
         core.onCarlifeStart()
@@ -447,7 +447,7 @@ class AaTranscodeCoreTest {
         assertArrayEquals(aaCfg + aaIdr, tr.frames[2])
     }
 
-    /** Реальный вызов resetDecoder из ядра - новая AA-сессия (onAaConnecting/onAaEnded): reset раньше IDR, P до IDR отброшен. */
+    /** 内核真实调用 resetDecoder - 新的 AA 会话（onAaConnecting/onAaEnded）：reset 先于 IDR，IDR 之前的 P 帧被丢弃。 */
     @Test
     fun aaReconnectResetsDecoderBeforeNextIdr() {
         core.onCarlifeStart()
@@ -456,7 +456,7 @@ class AaTranscodeCoreTest {
         core.onFrame(aaP, 2)
         core.onAaConnecting()
         assertEquals(1, tr.resets.get())
-        core.onFrame(aaP, 3)                                   // P после сброса - до IDR не идёт
+        core.onFrame(aaP, 3)                                   // 重置后的 P 帧 - 在 IDR 之前不送出
         core.onCodecConfig(aaCfg)
         core.onFrame(aaIdr, 4)
         core.onFrame(aaP, 5)
@@ -485,7 +485,7 @@ class AaTranscodeCoreTest {
         core.onFrame(aaP, 1000)
         core.onFrame(aaIdr, 1001)
         assertEquals("старый транскодер больше не кормится", fed, feedLog(old).size)
-        assertArrayEquals(aaCfg + aaIdr, link.sent.last())     // откат на passthrough
+        assertArrayEquals(aaCfg + aaIdr, link.sent.last())     // 回退到 passthrough
     }
 
     @Test
@@ -498,7 +498,7 @@ class AaTranscodeCoreTest {
             { for (i in 0 until 20) { core.onNeedAaKeyFrame(); Thread.sleep(1) } },
         )
         val fed = tr.frames.size
-        core.onFrame(aaP, 1000)                                // после последнего колбэка декодер ждёт IDR
+        core.onFrame(aaP, 1000)                                // 最后一次回调后解码器等待 IDR
         assertEquals(fed, tr.frames.size)
         core.onFrame(aaIdr, 1001)
         assertEquals(fed + 1, tr.frames.size)
@@ -515,8 +515,8 @@ class H264StreamTest {
     fun splitsAccessUnitsAndFindsConfig() {
         val sps = hex("00000001 67 42c01f da0140")
         val pps = hex("00000001 68 ce3c80")
-        val idrA = hex("00000001 65 88 aa bb")                 // first_mb_in_slice = 0
-        val idrB = hex("00000001 65 04 cc dd")                 // второй слайс той же картинки (MSB = 0)
+        val idrA = hex("00000001 65 88 aa bb")                 // first_mb_in_slice = 0（首帧宏块）
+        val idrB = hex("00000001 65 04 cc dd")                 // 同一画面的第二个 slice（MSB = 0）
         val p1 = hex("00000001 41 9a 11")
         val p2 = hex("00000001 41 9a 22")
         val stream = sps + pps + idrA + idrB + p1 + p2

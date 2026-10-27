@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 无线（测试版，B 分支）：等待汽车的状态，由 BridgeService 写入 CarLifeState.wireless -->
+<resources>
+    <string name="wl_state_waiting">正在通过 Wi-Fi 等待汽车（%1$s）</string>
+    <string name="wl_state_no_hotspot">没有热点：请打开手机的 Wi-Fi 热点</string>
+    <string name="wl_state_p2p_busy">Wi-Fi Direct 正忙：请关闭手机热点</string>
+    <string name="wl_state_connected">汽车已通过 Wi-Fi 连接</string>
+    <string name="wl_state_lost">连接已丢失，正在重新等待汽车</string>
+    <string name="wl_state_auto">汽车已通过 Bluetooth 靠近，正在通过 Wi-Fi 等待（%1$s）</string>
+    <string name="wl_hint_title">汽车就在附近，但尚未通过 Wi-Fi 连接</string>
+    <string name="wl_hint_text">将手机连接到汽车的 Wi-Fi，或打开热点。点击可打开 Wi-Fi。</string>
+    <string name="wl_bt_hint_title">重新连接汽车的 Bluetooth</string>
+    <string name="wl_bt_hint_text">汽车已通过 Bluetooth 连接，但尚未打开无线 CarLife。请在手机上关闭并重新开启 Bluetooth。</string>
+    <string name="wl_state_wifi_off">打开手机 Wi-Fi（无需加入网络）并关闭热点</string>
+    <string name="wl_wifi_off_title">打开手机 Wi-Fi</string>
+    <string name="wl_wifi_off_text">汽车通过 Wi-Fi Direct 连接：请打开 Wi-Fi（无需加入网络）并关闭热点。点击可打开 Wi-Fi。</string>
+    <string name="wl_usb_to_air_title">数据线已断开</string>
+    <string name="wl_usb_to_air_text">汽车已通过 Bluetooth 靠近，正在以无线方式连接。</string>
+    <string name="wl_state_gave_up">汽车未在 %1$d 分钟内连接</string>
+</resources>

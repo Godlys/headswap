@@ -22,21 +22,21 @@ import java.io.IOException
 import java.util.UUID
 
 /**
- * Ветка A (Bluetooth + Wi-Fi Direct): RFCOMM-серверы `carlife`, как у Baidu MD (BluetoothClient:28-29,76,119).
- * Если ГУ умеет беспроводной CarLife через Wi-Fi Direct, она сама подключается сюда. Обмен: WIRELESS_INFO_REQUEST,
- * TARGET_INFO_REQUEST, по реквизитам из TARGET_INFO телефон входит в P2P-группу ГУ ([P2pJoin]), на IP_REQUEST
- * отвечает MD_WIFI_IP с адресом в группе. Дальше ГУ подключает TCP-каналы к Tcp6Listener (пускает [ownsPeer]).
- * Bluetooth-соединение держим, пока ждём машину и идёт сессия. Секретов в лог не пишет (см. BtSummary).
+ * 分支 A（Bluetooth + Wi-Fi Direct）：与百度 MD 相同的 `carlife` RFCOMM 服务器（BluetoothClient:28-29,76,119）。
+ * 如果车机支持通过 Wi-Fi Direct 的无线 CarLife，它会自行连接过来。交互流程：WIRELESS_INFO_REQUEST、
+ * TARGET_INFO_REQUEST，手机依据 TARGET_INFO 中的凭据加入车机的 P2P 组（[P2pJoin]），收到 IP_REQUEST
+ * 时以 MD_WIFI_IP 回复组内地址。之后车机向 Tcp6Listener 建立 TCP 通道（放行 [ownsPeer]）。
+ * 等待车辆和会话进行期间保持 Bluetooth 连接。不向日志写入机密信息（见 BtSummary）。
  */
 class CarlifeBtProbe(
     private val ctx: Context,
-    /** ГУ подключилась к RFCOMM (нить bt-accept-*). */
+    /** 车机已连接 RFCOMM（线程 bt-accept-*）。 */
     private val onAccept: () -> Unit = {},
-    /** ГУ прислала реквизиты Wi-Fi Direct, mac - адрес её Bluetooth (нить bt-accept-*). */
+    /** 车机发来 Wi-Fi Direct 凭据，mac 为其 Bluetooth 地址（线程 bt-accept-*）。 */
     private val onTargetInfo: (mac: String?) -> Unit = {},
-    /** Wi-Fi Direct занят (обычно включён хотспот телефона), главная нить. */
+    /** Wi-Fi Direct 正忙（通常是手机热点已开启），主线程。 */
     private val onP2pBusy: () -> Unit = {},
-    /** Wi-Fi на телефоне выключен (false, Wi-Fi Direct не войдёт) или включён (true) на входе в группу ГУ (главная нить). */
+    /** 进入车机组时手机 Wi-Fi 已关闭（false，Wi-Fi Direct 无法加入）或已开启（true）（主线程）。 */
     private val onWifi: (on: Boolean) -> Unit = {},
 ) {
     @Volatile private var running = false
@@ -45,19 +45,19 @@ class CarlifeBtProbe(
     @Volatile private var accepts = 0
     @Volatile private var active: BluetoothSocket? = null
     private val p2p = P2pJoin(ctx, onBusy = { onP2pBusy() }, onWifi = { on -> onWifi(on) }, onJoined = { ip -> onP2pJoined(ip) }, onLost = { onP2pLost() })
-    /** Адрес телефона в группе ГУ (после входа) и запрос IP от ГУ: MD_WIFI_IP уходит, когда есть оба. */
+    /** 手机在车机组中的地址（加入后）及车机的 IP 请求：两者都具备时才发送 MD_WIFI_IP。 */
     @Volatile private var p2pIp: String? = null
     @Volatile private var ipRequested = false
     private val txLock = Any()
     private val main = Handler(Looper.getMainLooper())
-    /** Последние реквизиты от ГУ, даже пропущенные «уже в группе»: по ним входим заново после распада группы (h211). */
+    /** 车机最后一次发来的凭据，即使因"已在组中"而被跳过：组解散后据此重新加入（h211）。 */
     @Volatile private var lastTarget: P2pTarget? = null
-    /** Поколение восстановления после распада группы: новый BT-сеанс, вход в группу или стоп его отменяют. */
+    /** 组解散后的重连代数：新的 BT 会话、加入组或停止都会使其失效。 */
     @Volatile private var rejoinGen = 0
     @Volatile private var rejoining = false
     private var adapterReceiver: BroadcastReceiver? = null
 
-    /** Входящий TCP из P2P-группы ГУ: пускаем в Tcp6Listener наравне с подсетями маяка. */
+    /** 来自车机 P2P 组的入站 TCP：与信标子网同等对待，放行至 Tcp6Listener。 */
     fun ownsPeer(a: java.net.InetAddress): Boolean = p2p.owns(a)
 
     fun hasPermission(): Boolean =
@@ -74,7 +74,7 @@ class CarlifeBtProbe(
         lastTarget = null
         rejoinGen++
         rejoining = false
-        accepts = 0     // за этот запуск: в строке `stop` accepts= считаются подключения ГУ с последнего start
+        accepts = 0     // 本次启动：stop 行中 accepts= 统计自上次 start 以来的车机连接数
         val adapter = ctx.getSystemService(BluetoothManager::class.java)?.adapter
         when {
             adapter == null -> return fail("нет адаптера")
@@ -97,19 +97,19 @@ class CarlifeBtProbe(
     }
 
     /**
-     * Ожидание без толку: нет ни RFCOMM от ГУ, ни входа в группу, либо слушатели умерли. h211: ГУ закрыла RFCOMM сразу
-     * после приглашения и за ~5 с вернула ACL; старые слушатели и P2P по мёртвой цели держались минутами, а ГУ
-     * открыла SPP только после чистого перезапуска.
+     * 空等：没有来自车机的 RFCOMM，也没有加入组，或监听器已死亡。h211：车机在邀请后立即关闭了 RFCOMM
+     * 并在约 5 秒内恢复了 ACL；旧监听器和针对失效目标的 P2P 持续了数分钟，
+     * 而车机直到干净重启后才打开 SPP。
      */
     fun idle(): Boolean = active == null && p2pIp == null || synchronized(lock) { running && servers.isEmpty() }
 
-    /** stop + start: новые записи SDP, P2P по старой цели снимается. */
+    /** stop + start：更新 SDP 记录，取消针对旧目标的 P2P。 */
     fun restart(why: String) {
         stop(why)
         start()
     }
 
-    /** Состояние Bluetooth телефона в лог: по логу иначе не понять, чей BT выключали (h211). */
+    /** 将手机 Bluetooth 状态写入日志：否则仅凭日志无法判断是谁关闭了 BT（h211）。 */
     private fun watchAdapter() {
         if (adapterReceiver != null) return
         val r = object : BroadcastReceiver() {
@@ -155,7 +155,7 @@ class CarlifeBtProbe(
             val s = try {
                 ss.accept()
             } catch (e: IOException) {
-                // не stop(): слушатель умер сам (BT телефона выключили); restart по следующему ACL поднимет заново
+                // 不是 stop()：监听器自行死亡（手机的 BT 被关闭）；restart 会在下一次 ACL 时重新拉起
                 if (running) {
                     synchronized(lock) { servers.remove(ss) }
                     WLog.ev(WLog.BT, "listen-dead", "uuid" to tag, "err" to e.message)
@@ -179,10 +179,10 @@ class CarlifeBtProbe(
         val parser = BtFrameParser()
         var why = "?"
         var targetAsked = false
-        active?.let { old -> try { old.close() } catch (_: IOException) {} }      // ГУ переподключилась: старый канал закрываем
+        active?.let { old -> try { old.close() } catch (_: IOException) {} }      // 车机重新连接：关闭旧通道
         active = s
         ipRequested = false
-        rejoinGen++      // ГУ переподключила BT: TARGET_INFO придёт обычным обменом, свои запросы снимаем
+        rejoinGen++      // 车机重连了 BT：TARGET_INFO 会通过正常交互到来，取消我们自己的请求
         rejoining = false
         try {
             val inp = s.inputStream
@@ -250,14 +250,14 @@ class CarlifeBtProbe(
         if (rejoining) WLog.ev(WLog.P2P, "rejoin-joined", "ipRequested" to ipRequested)
         rejoining = false
         rejoinGen++
-        // MD_WIFI_IP только на IP_REQUEST, как Baidu (BluetoothWirlessHelper:65-69, 289-291): без запроса не шлём
+        // 与 Baidu 相同（BluetoothWirlessHelper:65-69, 289-291），MD_WIFI_IP 仅在收到 IP_REQUEST 时发送：没有请求则不发送
         sendIpIfReady()
     }
 
     /**
-     * Группа ГУ распалась (главная нить). Если Bluetooth тоже упал, ГУ переподключит его и пришлёт TARGET_INFO сама.
-     * Если жив (h211: Mazda G6S на заднем ходу снимает Wi-Fi Direct, RFCOMM держит), новый TARGET_INFO не придёт до сна
-     * машины: входим заново по последним реквизитам и просим TARGET_INFO сами, пока не войдём.
+     * 车机组已解散（主线程）。如果 Bluetooth 也掉了，车机会重新连接并自行发送 TARGET_INFO。
+     * 如果 BT 仍存活（h211：Mazda G6S 挂倒挡时移除 Wi-Fi Direct 但保持 RFCOMM），在车辆休眠前不会收到新的
+     * TARGET_INFO：我们按最后一次的凭据重新加入，并自行请求 TARGET_INFO，直到成功加入为止。
      */
     private fun onP2pLost() {
         p2pIp = null
@@ -299,9 +299,9 @@ class CarlifeBtProbe(
     }
 
     /**
-     * ГУ отвечает TARGET_INFO, а группу не поднимает (h211, h185): закрываем только активный сокет, слушатели остаются.
-     * Цикл accept принимает переподключение ГУ, и TARGET_INFO приходит обычным обменом. Попытку входа снимаем: иначе
-     * тот же TARGET_INFO после переподключения попадёт в SKIP «попытка идёт». [stop] тут нельзя: он оборвёт слушателей.
+     * 车机回复了 TARGET_INFO 却没有建立组（h211、h185）：只关闭活动 socket，监听器保留。
+     * accept 循环接受车机的重连，TARGET_INFO 通过正常交互到来。取消加入尝试：否则同一份 TARGET_INFO 在重连后
+     * 会被 SKIP"尝试正在进行中"。此处不能用 [stop]：它会中断监听器。
      */
     private fun dropBt(s: BluetoothSocket, attempts: Int) {
         rejoining = false
@@ -313,7 +313,7 @@ class CarlifeBtProbe(
         try { s.close() } catch (_: IOException) {}
     }
 
-    /** MD_WIFI_IP после IP_REQUEST и входа в группу; на повторный запрос того же адреса отвечаем снова. */
+    /** 在收到 IP_REQUEST 并加入组后发送 MD_WIFI_IP；对同一地址的重复请求会再次应答。 */
     private fun sendIpIfReady() {
         val ip = p2pIp ?: return
         val s = active ?: return

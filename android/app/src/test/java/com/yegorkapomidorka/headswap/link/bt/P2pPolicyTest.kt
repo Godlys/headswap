@@ -10,7 +10,7 @@ class P2pPolicyTest {
         assertEquals(P2pOnTarget.START, P2pPolicy.onTarget(active = false, joined = false))
     }
 
-    /** h126: попытка не вошла (BUSY), ГУ переподключила BT и прислала TARGET_INFO снова - начинаем заново, а не «уже вхожу». */
+    /** h126：尝试未成功（BUSY），车机重连了 BT 并再次发来 TARGET_INFO——从头开始，而不是“已在加入中”。 */
     @Test
     fun newTargetRestartsStuckAttempt() {
         assertEquals(P2pOnTarget.RESTART, P2pPolicy.onTarget(active = true, joined = false))
@@ -21,7 +21,7 @@ class P2pPolicyTest {
         assertEquals(P2pOnTarget.SKIP, P2pPolicy.onTarget(active = true, joined = true))
     }
 
-    /** h211: rejoin спрашивает TARGET_INFO раз в 5-10 с; тот же ответ не рвёт свежую попытку, протухшую или с другими реквизитами - рвёт. */
+    /** h211：rejoin 每 5-10 秒询问一次 TARGET_INFO；相同的应答不会打断新发起的尝试，而过期或凭据不同的应答会打断。 */
     @Test
     fun sameTargetKeepsFreshAttempt() {
         assertEquals(P2pOnTarget.SKIP, P2pPolicy.onTarget(active = true, joined = false, same = true, ageMs = 9_000L, freshMs = 30_000L))
@@ -38,7 +38,7 @@ class P2pPolicyTest {
         assertEquals(false, a.sameAs(P2pTarget("CarLife-x", "DIRECT-ab", "12345678", null)))
     }
 
-    /** h211: после распада группы при живом BT просим TARGET_INFO сами - сначала быстро, потом раз в 10 с, потом хватит. */
+    /** h211：BT 存活但组已解散后，我们自行请求 TARGET_INFO——先快后慢（每 10 秒一次），最后停止。 */
     @Test
     fun rejoinBackoff() {
         assertEquals(2_000L, P2pPolicy.rejoinDelayMs(0))
@@ -48,7 +48,7 @@ class P2pPolicyTest {
         assertEquals(null, P2pPolicy.rejoinDelayMs(P2pPolicy.REJOIN_ATTEMPTS))
     }
 
-    /** h211/h185: четыре запроса (~27 с) без входа, первая 30-секундная попытка кончилась - на шаге 4 (~37 с) рвём RFCOMM. */
+    /** h211/h185：四次请求（约 27 秒）仍未加入，第一次 30 秒的尝试已经结束——在第 4 步（约 37 秒）断开 RFCOMM。 */
     @Test
     fun rejoinDropsBtAfterFirstFailedJoin() {
         assertEquals(false, P2pPolicy.rejoinDropBt(0))

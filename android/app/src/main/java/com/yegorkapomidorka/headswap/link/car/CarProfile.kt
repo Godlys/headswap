@@ -6,25 +6,25 @@ import android.content.pm.PackageManager
 import com.yegorkapomidorka.headswap.BuildConfig
 
 /**
- * Машина, выбранная пользователем: Bluetooth-устройство ГУ и привязка CompanionDeviceManager. Живёт в отдельном
- * файле prefs. Триггер (ресивер ACL, [CarAclReceiver]) включён только пока машина выбрана и сборка с бетой беспровода.
+ * 用户选择的汽车：车机的 Bluetooth 设备和 CompanionDeviceManager 绑定。数据存放在独立的
+ * prefs 文件中。触发器（ACL 接收器，[CarAclReceiver]）仅在已选择汽车且为无线 beta 构建时才会启用。
  */
 class CarProfile(ctx: Context) {
     private val sp = ctx.applicationContext.getSharedPreferences("car_profile", Context.MODE_PRIVATE)
 
-    /** MAC как пришёл от системы (регистр разный, сравнивать через [CarMac.same]). */
+    /** MAC 按系统原样保存（大小写可能不同，比较时使用 [CarMac.same]）。 */
     val btMac: String? get() = sp.getString("btMac", null)
 
     val btName: String? get() = sp.getString("btName", null)
 
-    /** id привязки CDM (API 33+); -1 - нет (на API 29-32 id не выдаётся, привязка по MAC). */
+    /** CDM 绑定 id（API 33+）；-1 表示无（API 29-32 不发放 id，按 MAC 绑定）。 */
     val cdmAssociationId: Int get() = sp.getInt("cdmAssociationId", -1)
 
     val isSet: Boolean get() = btMac != null
 
     /**
-     * Как эта машина подключается по воздуху. Привязан к [btMac]: другая машина или сброс - снова UNKNOWN.
-     * Без выбранной машины не пишется.
+     * 这辆车如何无线连接。与 [btMac] 绑定：换了车或重置后会重新变为 UNKNOWN。
+     * 未选择汽车时不写入。
      */
     var connMode: CarConnMode
         get() = if (!isSet) CarConnMode.UNKNOWN else CarConnMode.entries.firstOrNull { it.name == sp.getString("connMode", null) } ?: CarConnMode.UNKNOWN
@@ -43,7 +43,7 @@ class CarProfile(ctx: Context) {
     }
 
     companion object {
-        /** Включить/выключить ресивер ACL. Включается, только если машина выбрана и сборка с бетой беспровода. */
+        /** 启用/禁用 ACL 接收器。仅在已选择汽车且为无线 beta 构建时启用。 */
         fun enableTrigger(ctx: Context, on: Boolean) {
             val enable = on && BuildConfig.WIRELESS_BETA && CarProfile(ctx).isSet
             ctx.packageManager.setComponentEnabledSetting(
@@ -53,7 +53,7 @@ class CarProfile(ctx: Context) {
             )
         }
 
-        /** Состояние ресивера для отчёта. DEFAULT = как в манифесте (enabled=false), то есть выключен. */
+        /** 接收器状态，用于上报。DEFAULT = 与 manifest 一致（enabled=false），即已关闭。 */
         fun triggerEnabled(ctx: Context): Boolean =
             ctx.packageManager.getComponentEnabledSetting(component(ctx)) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
 

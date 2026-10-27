@@ -18,13 +18,13 @@ import com.yegorkapomidorka.headswap.AppLog
 import com.yegorkapomidorka.headswap.R
 
 /**
- * Одноразовое окно «Отказ от спецвозможностей» для тех, кто обновился до 2.6.0: службы спецвозможностей больше нет,
- * сервер ГУ включают вручную. Новички узнают это из онбординга, им окно не нужно.
+ * 面向升级到 2.6.0 用户的单次「无障碍服务弃用」弹窗：无障碍服务已移除，
+ * 车机服务器改为手动开启。新用户会从引导流程得知此事，无需此弹窗。
  */
 object UpgradeNotice {
     enum class Launch { NONE, ONBOARDING, NOTICE }
 
-    /** Обычное открытие приложения: что показать. Флаг «показано» ставится в обоих случаях (см. MainActivity). */
+    /** 应用常规启动时：显示什么。两种情况都会置「已显示」标记（见 MainActivity）。 */
     fun onLaunch(onboardingDone: Boolean, noticeShown: Boolean): Launch = when {
         !onboardingDone -> Launch.ONBOARDING
         !noticeShown -> Launch.NOTICE
@@ -44,7 +44,7 @@ object UpgradeNotice {
         dialog.show()
     }
 
-    /** Поля вокруг панели: по бокам 16 dp, сверху и снизу 24 dp, чтобы на коротком экране панель не липла к краям. */
+    /** 面板四周留白：左右 16 dp，上下 24 dp，避免在矮屏幕上面板贴边。 */
     private fun content(c: Context, dialog: Dialog): View {
         val panel = object : LinearLayout(c) {
             override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
@@ -80,7 +80,7 @@ object UpgradeNotice {
             lp(MATCH, WRAP),
         )
 
-        // Прокручивается всё содержимое, кнопка «Понятно» остаётся внизу панели, вне прокрутки.
+        // 所有内容都可滚动，「知道了」按钮固定在面板底部，不随内容滚动。
         val scroll = ScrollView(c).apply {
             isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -109,7 +109,7 @@ object UpgradeNotice {
         )
     }
 
-    /** Блок «Плюсы» / «Минусы»; withNotif = под последним пунктом картинка-карточка уведомления. */
+    /** 「优点」/「缺点」区块；withNotif = 在最后一项下方附通知卡片示意图。 */
     private fun section(c: Context, head: Int, fg: Int, bg: Int, icon: Int, items: List<Int>, withNotif: Boolean): View {
         val box = c.vbox(6)
         box.addView(
@@ -142,7 +142,7 @@ object UpgradeNotice {
         }
     }
 
-    /** Картинка: карточка уведомления «Android Auto Developer» в шторке. Только для вида, нажатий нет. */
+    /** 示意图：通知栏中的「Android Auto Developer」通知卡片。仅供展示，不可点击。 */
     private fun notifCard(c: Context): View {
         val night = c.isNight
         val title = if (night) Color.WHITE else Color.parseColor("#1B1B1B")
@@ -166,7 +166,7 @@ object UpgradeNotice {
                 lp(0, WRAP, 1f),
             )
         }
-        // Запас под тень: иначе её обрежет прокрутка.
+        // 给阴影留出余量：否则阴影会被滚动区域裁掉。
         return FrameLayout(c).apply {
             clipChildren = false
             pad(c, 3, 2, 3, 6)

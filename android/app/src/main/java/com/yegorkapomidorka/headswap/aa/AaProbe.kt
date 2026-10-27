@@ -7,10 +7,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Отладочная проба `--es cmd aa_probe`: настоящая AA-сессия (AapSession, как в мосте) к 127.0.0.1:5277 без CarLife и USB.
- * Видео считается и отбрасывается (ack шлёт сама сессия). Через PROBE_MS сессия закрывается штатно (ByeBye, EOF, close):
- * сервер 5277 одноразовый. Нужна для проверки доступа к loopback при targetSdk 37 (Local Network Permission).
- * Не запускать при работающем мосте: сервер примет только одно соединение.
+ * 调试探测 `--es cmd aa_probe`：与桥接器相同的真实 Android Auto 会话（AapSession），连接 127.0.0.1:5277，但没有 CarLife 和 USB。
+ * 视频会被计数并丢弃（ack 由会话自身发送）。PROBE_MS 之后会话以标准方式关闭（ByeBye、EOF、close）：
+ * 服务器 5277 是一次性的。用于在 targetSdk 37（本地网络权限）下验证 loopback 访问。
+ * 桥接器运行时不要启动：服务器只接受一个连接。
  */
 object AaProbe {
     private const val TAG = "AAPROBE"
@@ -67,7 +67,7 @@ object AaProbe {
         }
         val sink = CountingSink()
         val ended = CountDownLatch(1)
-        // пишет нить сессии, читаем после ended.await (latch даёт happens-before)
+        // 由会话线程写入，await ended 后读取（latch 提供 happens-before）
         var endReason = "-"
         var endOk = false
         var discovery = false

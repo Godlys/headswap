@@ -68,7 +68,7 @@ class HotspotBeaconTest {
 
     @Test
     fun beaconAndResponderOnLoopback() {
-        val lo = LanIface("wlan9", v4("127.0.0.1"), 30, v4("127.0.0.1"))   // broadcast = loopback: маяк приходит сюда
+        val lo = LanIface("wlan9", v4("127.0.0.1"), 30, v4("127.0.0.1"))   // broadcast = loopback：信标会到达这里
         DatagramSocket(InetSocketAddress(InetAddress.getLoopbackAddress(), 0)).use { hu ->
             hu.soTimeout = 3000
             val b = HotspotBeacon(ifaces = { listOf(lo) }, intervalMs = 100, sweepMs = 60_000, beaconPort = hu.localPort, probePort = 0)
@@ -78,7 +78,7 @@ class HotspotBeaconTest {
                 val p = DatagramPacket(buf, buf.size)
                 hu.receive(p)
                 assertEquals("CarlifeHost", String(buf, 0, p.length))
-                // опрос 8999 -> JSON готовности обратно отправителю
+                // 探测 8999 -> 就绪 JSON 返回给发送方
                 var port = -1
                 for (i in 0 until 50) {
                     port = b.probePortBound
@@ -91,7 +91,7 @@ class HotspotBeaconTest {
                     val r = DatagramPacket(buf, buf.size)
                     hu.receive(r)
                     val s = String(buf, 0, r.length)
-                    if (s == "CarlifeHost") continue   // маяк продолжает идти
+                    if (s == "CarlifeHost") continue   // 信标持续发送
                     assertEquals(String(BeaconCodec.READY), s)
                     break
                 }

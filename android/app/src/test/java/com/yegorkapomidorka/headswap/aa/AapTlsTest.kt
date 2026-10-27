@@ -9,8 +9,8 @@ import java.io.FileInputStream
 import java.io.InputStream
 
 /**
- * Сертификаты берутся из app/src/main/assets (рабочий каталог unit-тестов - app/).
- * В публичном клоне ключей AA нет: тест, который их открывает, пропускается (Assume).
+ * 证书取自 app/src/main/assets（单元测试的工作目录是 app/）。
+ * 公开克隆中没有 AA 密钥：打开它们的测试会被跳过（Assume）。
  */
 object TestAssets {
     val opener: (String) -> InputStream = { path ->
@@ -33,7 +33,7 @@ class AapTlsTest {
 
     @Test
     fun jvcLoadsWithoutFallback() {
-        // странный notBefore (UTCTime с -0700): если JVM-парсер его не съест, этот тест это покажет
+        // 奇怪的 notBefore（带 -0700 时区的 UTCTime）：如果 JVM 解析器吃不下它，这个测试会暴露出来
         val l = AapCerts.loadWithFallback(TestAssets.opener, "jvc")
         assertEquals("откат на hur: ${l.error}", "jvc", l.creds.certSet)
         assertEquals(null, l.error)
@@ -46,7 +46,7 @@ class AapTlsTest {
     }
 
     private fun check(set: String, tls12: Boolean) {
-        // AapTlsSelfTest.run глотает любые Throwable (в т.ч. пропуск теста), поэтому проверяем наличие заранее
+        // AapTlsSelfTest.run 会吞掉任何 Throwable（包括测试跳过），所以先检查文件是否存在
         TestAssets.opener("aa/$set/cert.pem").close()
         val r = AapTlsSelfTest.run(TestAssets.opener, set, tls12)
         println("TLS selftest set=$set tls12=$tls12 -> ${r.ok} ${r.detail}")
@@ -61,7 +61,7 @@ class AapTlsTest {
 
     @Test
     fun clientCertificateReachesServer() {
-        // клиент jvc, сервер hur: сервер требует сертификат клиента; handshake проходит только если он принят
+        // 客户端 jvc，服务端 hur：服务端要求客户端证书；只有证书被接受，握手才能完成
         val client = AapTls(AapCerts.load(TestAssets.opener, "jvc"))
         val server = AapTls(AapCerts.load(TestAssets.opener, "hur"), serverMode = true)
         var toServer = client.handshakeStep()

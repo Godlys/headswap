@@ -5,20 +5,20 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
-/** Жизненный цикл AA-стороны моста (реализует AaConnector). */
+/** 桥接器 Android Auto 侧的生命周期（实现 AaConnector）。 */
 interface AaLifecycle {
     fun start()
 
-    /** Корректно закрыть AA (ByeBye, flush, EOF, close); onDone зовётся из отдельной нити, когда всё закрыто. */
+    /** 正确关闭 Android Auto（ByeBye、flush、EOF、close）；全部关闭完成后在独立线程中调用 onDone。 */
     fun stop(onDone: () -> Unit)
 }
 
 /**
- * AA-сторона моста на время жизни СЕРВИСА, а не одной USB-сессии CarLife. Физический обрыв USB (EIO)
- * закрывает CarLife-сессию, но AA-сессия остаётся «тёплой» graceMs: если USB вернулся, новая
- * CarLife-сессия подхватывает живую AA (core.attach + START -> keyframe), если нет или нажат Стоп -
- * AA закрывается корректно. Одноразовый сервер 5277 не должен получать новое соединение, пока
- * предыдущее живо: один коннектор на хост, а новый хост ждёт, пока предыдущий закроется (previous).
+ * 桥接器的 Android Auto 侧，其生命周期是「服务」的生命周期，而非单个 CarLife USB 会话。USB 物理断开（EIO）
+ * 会关闭 CarLife 会话，但 Android Auto 会话在 graceMs 内保持「热」状态：若 USB 恢复，新的
+ * CarLife 会话会接管存活的 Android Auto（core.attach + START → keyframe）；若未恢复或按下停止，
+ * 则正确关闭 Android Auto。一次性服务器 5277 在前一个连接存活期间不应接受新连接：
+ * 每个 host 一个连接器，新 host 等待前一个完全关闭（previous）。
  */
 class BridgeHost(
     val core: AaBridgeCore,
@@ -34,10 +34,10 @@ class BridgeHost(
     private var grace: ScheduledFuture<*>? = null
     private val tornDownLatch = CountDownLatch(1)
 
-    /** AA закрыта полностью (ByeBye, EOF, close). */
+    /** Android Auto 已完全关闭（ByeBye、EOF、close）。 */
     val isTornDown: Boolean get() = tornDownLatch.count == 0L
 
-    /** Хост закрывается или закрыт: новую CarLife-сессию надо вешать на новый хост. */
+    /** host 正在关闭或已关闭：新的 CarLife 会话必须挂到新 host 上。 */
     @get:Synchronized
     val isDead: Boolean get() = tearingDown
 
@@ -46,7 +46,7 @@ class BridgeHost(
 
     fun awaitTornDown(timeoutMs: Long): Boolean = tornDownLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
 
-    /** Новая CarLife-сессия: отменить grace, при первой - запустить AA. false = хост уже закрывается. */
+    /** 新的 CarLife 会话：取消 grace；第一次时启动 Android Auto。false = host 已在关闭。 */
     @Synchronized
     fun onUsbSessionStarted(): Boolean {
         if (tearingDown) return false
@@ -59,7 +59,7 @@ class BridgeHost(
             started = true
             val prev = previous
             if (prev != null && !prev.isTornDown) {
-                // сервер 5277 одноразовый: новое соединение только после полного закрытия предыдущего
+                // 服务器 5277 是一次性的：只有在前一个连接完全关闭后才能建立新连接
                 log("BRIDGE жду полного закрытия предыдущей AA-сессии перед новым подключением", true)
                 Thread({
                     prev.awaitTornDown(15_000)
@@ -72,7 +72,7 @@ class BridgeHost(
         return true
     }
 
-    /** CarLife-сессия закрыта. immediate (кнопка Стоп/выкл. моста) - сразу закрыть AA, иначе держать graceMs. */
+    /** CarLife 会话已关闭。immediate（停止按钮/关闭桥接器）时立即关闭 Android Auto，否则保持 graceMs。 */
     @Synchronized
     fun onUsbSessionClosed(immediate: Boolean) {
         if (tearingDown) return
@@ -94,7 +94,7 @@ class BridgeHost(
         }
     }
 
-    /** Закрыть AA сейчас (Стоп, сервис уничтожен, смена режима). */
+    /** 立即关闭 Android Auto（停止、服务被销毁、切换模式）。 */
     @Synchronized
     fun shutdown(why: String) {
         if (tearingDown) return
@@ -118,7 +118,7 @@ class BridgeHost(
     }
 
     companion object {
-        /** Сколько держать AA-сессию живой после потери USB. */
+        /** USB 丢失后保持 Android Auto 会话存活的时间。 */
         const val GRACE_MS = 8_000L
     }
 }

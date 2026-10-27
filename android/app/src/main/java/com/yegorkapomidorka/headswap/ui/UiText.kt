@@ -3,8 +3,8 @@ package com.yegorkapomidorka.headswap.ui
 import android.content.Context
 
 /**
- * Текст для пользователя без Context: ресурс + аргументы формата, либо готовая строка (например, сообщение исключения).
- * Чистая логика (HomeLogic, Readiness) отдаёт UiText, в строку его превращает UI или уведомление через [get].
+ * 无需 Context 即可持有的面向用户的文本：资源 + 格式参数，或现成字符串（例如异常消息）。
+ * 纯逻辑层（HomeLogic、Readiness）返回 UiText，由 UI 或通知通过 [get] 将其转为字符串。
  */
 sealed class UiText {
     data class Res(val id: Int, val args: List<Any> = emptyList()) : UiText()
@@ -24,7 +24,7 @@ sealed class UiText {
 
         fun raw(text: String): UiText = Raw(text)
 
-        /** Аргумент может сам быть UiText: резолвится тем же контекстом. */
+        /** 参数本身也可以是 UiText：用同一个 context 解析。 */
         private fun Any.resolve(ctx: Context): Any = if (this is UiText) get(ctx) else this
     }
 }

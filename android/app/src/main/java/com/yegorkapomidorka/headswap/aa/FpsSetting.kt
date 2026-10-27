@@ -3,8 +3,8 @@ package com.yegorkapomidorka.headswap.aa
 import com.yegorkapomidorka.headswap.R
 
 /**
- * Настройка «Частота кадров»: Авто (как просит ГУ в VIDEO_ENCODER_INIT) или фиксированная; по умолчанию 15.
- * Читается один раз на подключение (SessionConfig), в passthrough не действует.
+ * 「帧率」设置：自动（按车机在 VIDEO_ENCODER_INIT 中请求的值）或固定值；默认 15。
+ * 每次连接读取一次（SessionConfig），在 passthrough 模式下不生效。
  */
 enum class FpsSetting(val titleRes: Int, val subRes: Int, val fixed: Int?) {
     AUTO(R.string.fps_auto_title, R.string.fps_auto_sub, null),
@@ -14,27 +14,27 @@ enum class FpsSetting(val titleRes: Int, val subRes: Int, val fixed: Int?) {
     companion object {
         val DEFAULT = FPS15
 
-        /** По имени из prefs; неизвестное/пустое = по умолчанию. */
+        /** 按 prefs 中的名称解析；未知/为空 = 默认值。 */
         fun parse(key: String?): FpsSetting = values().firstOrNull { it.name == key } ?: DEFAULT
     }
 }
 
 /**
- * Гейт кадров перед энкодером: по таймстемпам решает, отдавать ли кадр. Энкодер с Surface-входом кодирует
- * каждый swap, поэтому KEY_FRAME_RATE частоту не ограничивает - её режет только этот гейт.
- * Цель >= 30 (или <= 0) - пропускает всё: вход AA быстрее 30 не бывает, а допуск по таймстемпам на 30/30 терял бы кадры
- * от джиттера входа. Ниже 30 - сетка слотов: слот каждые period, кадр берётся за полпериода до слота и позже.
- * Вызывается с одной нити (GL-реле); targetFps можно менять с любой.
+ * 编码器前的帧门控：根据时间戳决定是否放行帧。Surface 输入的编码器会对每次 swap 都编码，
+ * 所以 KEY_FRAME_RATE 限制不了帧率——只有这个门控能限制。
+ * 目标 >= 30（或 <= 0）时全部放行：Android Auto 输入不会快于 30，而在 30/30 情况下按时间戳容差反而会因输入抖动丢帧。
+ * 低于 30 时使用时隙网格：每 period 一个时隙，帧在时隙前半个周期及之后被采用。
+ * 只从一个线程调用（GL 中继）；targetFps 可从任意线程修改。
  */
 class FrameGate(initialFps: Int) {
     @Volatile var targetFps: Int = initialFps
     private var nextNs = NONE
 
-    /** true = кадр отдать, false = пропустить. */
+    /** true = 放行该帧，false = 跳过。 */
     fun shouldEmit(nowNs: Long): Boolean {
         val fps = targetFps
         if (fps <= 0 || fps >= PASS_ALL_FPS) {
-            nextNs = NONE           // при переключении на меньшую цель сетка начнётся заново
+            nextNs = NONE           // 切换到更低目标时，网格将重新开始
             return true
         }
         val period = 1_000_000_000L / fps
@@ -44,14 +44,14 @@ class FrameGate(initialFps: Int) {
         }
         if (nowNs < nextNs - period / 2) return false
         nextNs += period
-        if (nowNs - nextNs > period) nextNs = nowNs + period     // отстали больше чем на период (вход медленнее цели): сетка заново
+        if (nowNs - nextNs > period) nextNs = nowNs + period     // 落后超过一个周期（输入慢于目标）：网格重新开始
         return true
     }
 
-    /** Период целевой частоты в нс (0 = без ограничения). */
+    /** 目标频率的周期（纳秒，0 = 不限制）。 */
     fun periodNs(): Long = targetFps.let { if (it <= 0) 0L else 1_000_000_000L / it }
 
-    /** Новая AA-сессия: первый кадр отдаётся сразу. */
+    /** 新的 Android Auto 会话：第一帧立即放行。 */
     fun reset() {
         nextNs = NONE
     }

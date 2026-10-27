@@ -20,16 +20,16 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Один байтовый поток с внешним заголовком [chan u32][len u32]: USB AOA и debug-TCP.
- * Код чтения и записи перенесён из CarLifeSession без изменений поведения: одна FIFO-очередь на все каналы,
- * единственный писатель, заголовок отдельным write и тело кусками <= 16384 (Wire.writeSequence), flush на сообщение.
+ * 带外部头 [chan u32][len u32] 的单一字节流：USB AOA 和 debug-TCP。
+ * 读写代码从 CarLifeSession 原样移植、行为不变：所有通道共用一条 FIFO 队列，
+ * 唯一写入者，头部单独 write、正文按 <= 16384 分块（Wire.writeSequence），每条消息后 flush。
  */
 class StreamTransport(
     private val input: InputStream,
     private val output: OutputStream,
     override val caps: TransportCaps,
     override val label: String,
-    /** Закрыть исходный дескриптор (pfd.close); зовётся первым в close(), как раньше в сессии. */
+    /** 关闭原始描述符（pfd.close）；在 close() 中最先调用，与之前在会话中一样。 */
     private val closeFd: () -> Unit = {},
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
 ) : CarTransport {
@@ -131,7 +131,7 @@ class StreamTransport(
                     videoBytes.addAndGet(-o.inner.size.toLong())
                     videoFrames.decrementAndGet()
                 }
-                // заголовок отдельным write, тело следом кусками <= 16384 (спека §1.4)
+                // 头部单独 write，正文随后按 <= 16384 分块（规范 §1.4）
                 val t0 = System.nanoTime()
                 for (part in Wire.writeSequence(o.chan, o.inner)) output.write(part)
                 output.flush()
@@ -148,7 +148,7 @@ class StreamTransport(
     }
 
     companion object {
-        /** USB-аксессуар (AOA) или debug-TCP, открытый как ParcelFileDescriptor. */
+        /** USB 附件（AOA）或 debug-TCP，以 ParcelFileDescriptor 打开。 */
         fun fromPfd(pfd: ParcelFileDescriptor, caps: TransportCaps, label: String) = StreamTransport(
             FileInputStream(pfd.fileDescriptor), FileOutputStream(pfd.fileDescriptor), caps, label,
             closeFd = { pfd.close() },

@@ -9,9 +9,9 @@ import android.media.MediaRecorder
 import com.yegorkapomidorka.headswap.AppLog
 
 /**
- * Микрофон телефона (запасной источник для AA): AudioRecord VOICE_RECOGNITION, 16 кГц моно PCM16.
- * Блоки по 2048 сэмплов (4096 Б). Нужно разрешение RECORD_AUDIO; в фоне Android 11+ молча отдаёт тишину,
- * поэтому в лог идёт пик сигнала первых блоков: нулевой пик = система глушит микрофон.
+ * 手机麦克风（Android Auto 的备用音频源）：AudioRecord VOICE_RECOGNITION，16 kHz 单声道 PCM16。
+ * 每块 2048 个采样（4096 字节）。需要 RECORD_AUDIO 权限；Android 11+ 在后台会静默输出静音，
+ * 因此日志中记录前几块的信号峰值：峰值为零 = 系统正在静音麦克风。
  */
 class PhoneMicCapture(private val ctx: Context) : PhoneMic {
     @Volatile private var rec: AudioRecord? = null
@@ -69,11 +69,11 @@ class PhoneMicCapture(private val ctx: Context) : PhoneMic {
         var blocks = 0
         var total = 0L
         var peakAll = 0
-        // нить живёт, пока rec - её запись: после stop() и сразу start() (повторный open) running снова true,
-        // и по одному флагу старая нить крутила бы остановленный AudioRecord, не освобождая его
+        // 线程存活直到 rec 变为当前记录实例：stop() 后立即 start()（重新 open）时 running 又会变成 true，
+        // 仅凭一个标志，旧线程会一直轮询已停止的 AudioRecord 而不释放它
         while (running && rec === r) {
             val n = r.read(buf, 0, buf.size)
-            if (rec !== r) break               // stop() во время read: хвост остановленной записи не отдаём
+            if (rec !== r) break               // read 期间 stop()：不发送已停止录音的尾部数据
             if (n <= 0) {
                 if (n < 0 && running) AppLog.i("MIC phone: read вернул $n, останавливаюсь", true)
                 if (n < 0) break
@@ -100,7 +100,7 @@ class PhoneMicCapture(private val ctx: Context) : PhoneMic {
         AppLog.i("MIC phone: поток записи закончен: блоков $blocks, $total Б, максимальный пик $peakAll", true)
     }
 
-    /** Не ждёт нить записи (её sink может стоять на блокировке роутера): нить сама отпустит AudioRecord. */
+    /** 不等待录音线程（其 sink 可能阻塞在路由器的锁上）：线程自己会释放 AudioRecord。 */
     @Synchronized
     override fun stop() {
         running = false

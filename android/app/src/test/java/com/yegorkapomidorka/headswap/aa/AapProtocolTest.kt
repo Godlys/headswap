@@ -9,7 +9,7 @@ import org.junit.Test
 import com.yegorkapomidorka.headswap.aa.AapFraming as F
 import com.yegorkapomidorka.headswap.aa.AapMessages as M
 
-/** Эталоны (golden.txt) сгенерированы pc-headunit (aap/messages.py, aap/framing.py) на Python protobuf. */
+/** golden.txt 参照样本由 pc-headunit（aap/messages.py、aap/framing.py）基于 Python protobuf 生成。 */
 object Golden {
     private val map: Map<String, ByteArray> by lazy {
         val text = Golden::class.java.getResourceAsStream("/aa/golden.txt")!!.readBytes().toString(Charsets.UTF_8)
@@ -33,7 +33,7 @@ class AapFramingTest {
         val bulk = F.buildFrame(2, 0x0B, "abc".toByteArray())
         val first = F.buildFrame(2, 0x09, ByteArray(5) { 'X'.code.toByte() }, total = 12)
         val last = F.buildFrame(2, 0x0A, ByteArray(7) { 'Y'.code.toByte() })
-        assertArrayEquals(byteArrayOf(2, 0x09, 0, 5, 0, 0, 0, 12), first.copyOfRange(0, 8))     // 4-байтный total
+        assertArrayEquals(byteArrayOf(2, 0x09, 0, 5, 0, 0, 0, 12), first.copyOfRange(0, 8))     // 4 字节的 total
         val stream = bulk + first + last
         for (step in listOf(1, 2, 3, 7, stream.size)) {
             val p = F.Parser()
@@ -64,21 +64,21 @@ class AapFramingTest {
         } catch (_: NullPointerException) {
         } catch (_: IllegalArgumentException) {
         }
-        // FIRST|LAST (0x0b) - total не пишется
+        // FIRST|LAST (0x0b) - total 不写入
         assertEquals(4 + 1, F.buildFrame(2, 0x0B, byteArrayOf(1)).size)
     }
 
     @Test
     fun flagsControlOnNonControlChannel() {
         assertEquals(0x0B, F.messageFlags(0, M.SERVICE_DISCOVERY_RESPONSE))
-        assertEquals(0x0F, F.messageFlags(2, M.CHANNEL_OPEN_RESPONSE))        // control-тип 8 на ch2
-        assertEquals(0x0B, F.messageFlags(2, M.MEDIA_CONFIG))                 // 0x8003 - не control-тип
+        assertEquals(0x0F, F.messageFlags(2, M.CHANNEL_OPEN_RESPONSE))        // ch2 上的 control 类型 8
+        assertEquals(0x0B, F.messageFlags(2, M.MEDIA_CONFIG))                 // 0x8003 - 非 control 类型
         assertEquals(0x0B, F.messageFlags(1, M.SENSOR_EVENT))
     }
 
     @Test
     fun splitMessageFragmentFlagsAndReassembly() {
-        val plaintext = F.typed(M.MEDIA_DATA, ByteArray(256 * 200) { (it % 256).toByte() })          // 51202 Б
+        val plaintext = F.typed(M.MEDIA_DATA, ByteArray(256 * 200) { (it % 256).toByte() })          // 51202 字节
         val parts = F.splitMessage(plaintext, M.CH_VIDEO, M.MEDIA_DATA, 0x4000)
         assertEquals(listOf(0x09, 0x08, 0x08, 0x0A), parts.map { it.flags })
         assertEquals(plaintext.size, parts[0].total)
@@ -110,7 +110,7 @@ class AapFramingTest {
         val r = F.Reassembler { w.add(it) }
         fun b(s: String) = s.toByteArray()
         assertNull(r.push(2, 0x09, b("aa"), 6))
-        assertArrayEquals(b("bulk"), r.push(5, 0x0B, b("bulk")))           // другой канал не мешает
+        assertArrayEquals(b("bulk"), r.push(5, 0x0B, b("bulk")))           // 其他通道不受影响
         assertNull(r.push(2, 0x08, b("bb")))
         assertArrayEquals(b("aabbcc"), r.push(2, 0x0A, b("cc")))
         assertTrue(w.isEmpty())
@@ -147,7 +147,7 @@ class AapMessagesTest {
         assertEquals(0, o.chan)
         assertEquals(6, o.type)
         eq("sdr_default", o.payload)
-        // VideoConfiguration, закодированный руками: res=2 fps=2 margins 0 0 density 160 par 10000 codec 3
+        // 手工编码的 VideoConfiguration：res=2 fps=2 margins 0 0 density 160 par 10000 codec 3
         val hex = o.payload.joinToString("") { "%02x".format(it) }
         assertTrue(hex.contains("08 02 10 02 18 00 20 00 28 a0 01 40 90 4e 50 03".replace(" ", "")))
     }
@@ -157,7 +157,7 @@ class AapMessagesTest {
         eq("sdr_800", M.serviceDiscoveryResponse(AapSdOptions(resolution = "800x480", fps = 60, density = 140)).payload)
     }
 
-    /** Верхнеуровневые поля protobuf: (номер, значение); varint как Long, len-delimited как ByteArray. */
+    /** protobuf 顶层字段：(编号, 值)；varint 为 Long，len-delimited 为 ByteArray。 */
     private fun fields(b: ByteArray): List<Pair<Int, Any>> {
         val out = ArrayList<Pair<Int, Any>>()
         var i = 0
@@ -200,17 +200,17 @@ class AapMessagesTest {
         val info = fields(f.first { it.first == 17 }.second as ByteArray)
         assertEquals("Honda", strField(f, 2))
         assertEquals("Honda", strField(info, 1))
-        // производитель ГУ и модель не меняются
+        // 车机的制造商和型号不变
         assertEquals("Google", strField(f, 7))
         assertEquals("Google", strField(info, 5))
         assertEquals("Desktop Head Unit", strField(f, 3))
         assertEquals("Desktop Head Unit", strField(info, 2))
-        // новый профиль машины: vehicleId с суффиксом марки
+        // 新的车辆档案：带品牌后缀的 vehicleId
         assertEquals("headlessunit-001-honda", strField(f, 5))
         assertEquals("headlessunit-001-honda", strField(info, 4))
         assertEquals("headlessunit-001", strField(d, 5))
 
-        // moto-суффикс сохраняется, марка добавляется после него
+        // moto 后缀保留，品牌追加在其后
         val moto = fields(M.serviceDiscoveryResponse(AapSdOptions(mic = false, carMake = "Mazda")).payload)
         assertEquals("headlessunit-001-moto-mazda", strField(moto, 5))
     }
@@ -225,7 +225,7 @@ class AapMessagesTest {
             assertEquals("$make: 17.head_unit_make", "Google", strField(info, 5))
             assertEquals("$make: 17.head_unit_model", "Desktop Head Unit", strField(info, 6))
         }
-        // без марки make = Google: AA считает ГУ девелоперским и показывает сторонние видеоприложения
+        // 无品牌时 make = Google：AA 将车机视为开发者设备并显示第三方视频应用
         val d = fields(M.serviceDiscoveryResponse(AapSdOptions(carMake = null)).payload)
         val dInfo = fields(d.first { it.first == 17 }.second as ByteArray)
         assertEquals("Google", strField(d, 2))
@@ -265,7 +265,7 @@ class AapMessagesTest {
 
     @Test
     fun touchEventMultiBytes() {
-        // один палец через список: байт-в-байт как touch_down из golden (до мультитача)
+        // 通过列表传单个手指：与 golden 中的 touch_down 逐字节一致（多点触控之前）
         assertArrayEquals(
             Golden.hex("0894b4e4f4cb031a0e0a0808800510e802180010001800"),
             M.touchEvent(M.TOUCH_DOWN, 0, listOf(TouchPoint(0, 640, 360)), 123456789012L).payload,

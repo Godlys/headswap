@@ -13,11 +13,11 @@ import java.net.NetworkInterface
 import java.net.SocketTimeoutException
 
 /**
- * Отладочная проба локальной сети (команда `cmd=net_probe`): пускает ли платформа маяк и ответчик ветки B.
- * Шлёт UDP «CarlifeHost» на 7999 (broadcast каждого IPv4-интерфейса с broadcast-адресом и, если задан, unicast),
- * слушает UDP 8999 и отвечает JSON готовности. Всё в WL-лог: состояние ACCESS_LOCAL_NETWORK, интерфейсы, исход
- * каждой отправки (ok или класс исключения), принятые датаграммы (адрес, длина, есть ли строка carlifehost).
- * Входящий TCP проверяется отдельно: debug tcp6 с `--es debug_tcp6_bind 0.0.0.0`.
+ * 局域网调试探测（命令 `cmd=net_probe`）：检查平台是否放行 B 分支的 beacon 和应答端。
+ * 向 7999 端口发送 UDP “CarlifeHost”（向每个带 broadcast 地址的 IPv4 接口发广播，若指定了 unicast 也发送），
+ * 监听 UDP 8999 并回复就绪 JSON。全部写入 WL 日志：ACCESS_LOCAL_NETWORK 状态、接口、
+ * 每次发送的结果（ok 或异常类名）、收到的数据报（地址、长度、是否含 carlifehost 字符串）。
+ * 入站 TCP 单独检查：用 `--es debug_tcp6_bind 0.0.0.0` 调试 tcp6。
  */
 object NetProbe {
     const val BEACON_PORT = 7999
@@ -25,7 +25,7 @@ object NetProbe {
     private val BEACON = "CarlifeHost".toByteArray()
     private val READY = """{"carlifehost":"carlife","status":"ready"}""".toByteArray()
 
-    /** Есть ли ACCESS_LOCAL_NETWORK (до Android 17 разрешения нет, доступ к LAN открыт). */
+    /** 是否已授予 ACCESS_LOCAL_NETWORK（Android 17 之前没有该权限，可访问 LAN）。 */
     fun localNetworkGranted(ctx: Context): String =
         if (Build.VERSION.SDK_INT < 37) "n/a(api ${Build.VERSION.SDK_INT})"
         else if (ctx.checkSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK) == PackageManager.PERMISSION_GRANTED) "granted"

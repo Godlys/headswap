@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dev_title">开发者选项</string>
+
+    <string name="dev_section_mic">车机麦克风</string>
+    <string name="dev_mic_vr_title" translatable="false">MODULE_STATUS VR</string>
+    <string name="dev_mic_vr_sub">与 MIC_RECORD_* 一起发送 VR 1/0（类似百度）</string>
+
+    <string name="dev_section_meta">车机上的元数据（USB 重新连接后生效）</string>
+    <string name="dev_meta_music_title">音乐</string>
+    <string name="dev_meta_music_sub">曲目、封面和进度：MEDIA_INFO / MEDIA_PROGRESS_BAR</string>
+    <string name="dev_meta_navi_title">导航</string>
+    <string name="dev_meta_navi_sub">转弯和距离：车机订阅时发送 NAVI_NEXT_TURN_INFO</string>
+    <string name="dev_meta_icon_title">字段 6：图标</string>
+    <string name="dev_meta_icon_sub">turnIconData 字节，PNG 箭头（类似百度 8.6.7）</string>
+    <string name="dev_meta_time_title">字段 6：时间</string>
+    <string name="dev_meta_time_sub">到机动点的时间，int32，单位秒（类似 apollo-DuerOS）</string>
+    <string name="dev_meta_progress_title">以秒为单位的进度</string>
+    <string name="dev_meta_progress_sub">MEDIA_PROGRESS_BAR 以秒而非毫秒为单位（如果车机显示的时间放大了 1000 倍）</string>
+
+    <string name="dev_section_music_chunk">音乐数据包大小（实验性）</string>
+    <string name="dev_music_chunk_note">数值越小，车机上的缓冲越小，但 USB 上的数据包越多。如果声音卡顿，请切换回“按 Android Auto 发送的方式”</string>
+    <string name="dev_section_voice_chunk">语音数据包大小（实验性）</string>
+    <string name="dev_voice_chunk_note">助手回复和导航提示。自动：VW CNS2 Delphi 上为 1024 B，其他情况按 AA 发送的方式</string>
+    <string name="dev_section_tts_preroll">提示音前的静音（实验性）</string>
+    <string name="dev_tts_preroll_note">在提示音开始后补零，以便车机打开音频通路。自动：VW 上为 400 ms</string>
+    <string name="dev_section_touch_decimation">触摸抽稀（实验性）</string>
+    <string name="dev_touch_decimation_note">跳过每隔一个 MOVE 事件：车机每秒最多发送约 70 个事件，而视频最高 30 fps。手指抬起前的最后一个点绝不会丢失。</string>
+
+
+    <string name="dev_section_video">视频（重新连接后生效）</string>
+    <string name="dev_custom_res_title">自定义分辨率</string>
+    <string name="dev_custom_res_sub">代替视频设置中的模式</string>
+    <string name="dev_custom_w">宽度</string>
+    <string name="dev_custom_h">高度</string>
+    <string name="dev_custom_hint">宽度 640–2240，高度 640–1080，需为偶数</string>
+    <string name="dev_custom_from_hu">按车机请求 · %1$d×%2$d</string>
+    <string name="dev_custom_k_plate">AA 画布</string>
+    <string name="dev_custom_k_margins">边距</string>
+    <string name="dev_custom_k_scale">缩放</string>
+    <string name="dev_custom_k_bitrate">码率</string>
+    <string name="dev_custom_v_size">%1$d×%2$d</string>
+    <string name="dev_custom_v_scale_one">1:1</string>
+    <string name="dev_custom_v_scale">×%1$.2f</string>
+    <string name="dev_custom_v_bitrate">最高 %1$.1f Mbit/s</string>
+    <string name="dev_custom_err_width">宽度超出 640–2240 范围</string>
+    <string name="dev_custom_err_height">高度超出 640–1080 范围</string>
+    <string name="dev_custom_err_odd">数值必须为偶数</string>
+    <string name="dev_custom_err_portrait">不支持竖屏</string>
+    <string name="dev_custom_err_encoder">手机无法编码此分辨率</string>
+    <string name="dev_custom_err_fmt">%1$s。未保存</string>
+    <string name="dev_custom_warn_16">不是 16 的倍数：部分手机的编码器可能会拒绝此分辨率</string>
+    <string name="dev_custom_warn_scale">超过 1.3 会拉伸：画面将变得模糊</string>
+    <string name="dev_custom_warn_transcode">重新编码已关闭：将使用 1280×720</string>
+    <string name="dev_custom_note">仅在重新编码开启时生效。</string>
+
+    <string name="dev_section_actions">操作</string>
+    <string name="dev_action_scan">扫描</string>
+    <string name="dev_action_stop_bridge">停止桥接</string>
+    <string name="dev_action_aa_settings">Android Auto 设置</string>
+    <string name="dev_action_check_server">检查车机服务器</string>
+    <string name="dev_check_server_alive">车机服务器正在响应</string>
+    <string name="dev_check_server_refused">车机服务器拒绝连接</string>
+    <string name="dev_check_server_hung">车机服务器未响应握手</string>
+    <string name="dev_check_server_error">错误：%1$s</string>
+    <string name="dev_check_server_bridge">桥接正在运行：检查会中断当前会话。请先停止桥接。</string>
+    <string name="dev_check_server_usb">已连接 USB 配件（汽车）：检查会中断连接。请拔掉数据线。</string>
+    <string name="dev_check_server_running">检查已在运行</string>
+    <string name="dev_action_aa_selftest" translatable="false">AA selftest</string>
+    <string name="dev_action_mic_test" translatable="false">Mic test</string>
+
+    <string name="dev_section_status">状态</string>
+    <string name="dev_section_log">日志</string>
+    <plurals name="dev_log_lines">
+        <item quantity="one">%d 行</item>
+        <item quantity="other">%d 行</item>
+    </plurals>
+    <string name="dev_log_meta">%1$s · %2$s</string>
+
+    <string name="dev_log_share">分享日志</string>
+    <string name="dev_log_save_zip">保存 .zip</string>
+    <string name="dev_log_clear">清空</string>
+    <string name="dev_log_archive_note">压缩包包含：日志、手机型号和 Android 版本、桥接设置、车机数据。不包含联系人或位置信息。</string>
+
+    <string name="dev_section_notes">说明</string>
+    <string name="dev_notes_adb">要在 HyperOS 上使用 adb，请在开发者选项中开启“通过 USB 安装”和“USB 调试（安全设置）”。桥接不需要这些。</string>
+    <string name="dev_open_dev_settings">打开开发者选项</string>
+    <string name="dev_open_failed">无法打开：%1$s</string>
+
+    <string name="dev_clear_title">清空日志？</string>
+    <string name="dev_clear_message">屏幕上的日志将被清除，旧的 headswap-*.log 文件将被删除。当前文件会保留。</string>
+    <string name="dev_clear_confirm">清空</string>
+    <string name="dev_clear_cancel">取消</string>
+    <plurals name="dev_deleted_old_files">
+        <item quantity="one">已删除 %d 个旧文件</item>
+        <item quantity="other">已删除 %d 个旧文件</item>
+    </plurals>
+</resources>

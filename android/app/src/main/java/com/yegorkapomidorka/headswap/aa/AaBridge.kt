@@ -6,66 +6,66 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
-/** Что мост требует от CarLife-стороны (реализует CarLifeSession). */
+/** 桥接层要求 CarLife 侧提供的能力（由 CarLifeSession 实现）。 */
 interface CarlifeLink {
-    /** Одно видео-сообщение CarLife (0x20001, Annex-B). false = не принято (очередь переполнена, сессия закрыта). */
+    /** 一条 CarLife 视频消息（0x20001，Annex-B）。false = 未接受（队列已满、会话已关闭）。 */
     fun sendVideo(payload: ByteArray): Boolean
 
     /**
-     * Первый IDR из AA вместо заглушки: отправка и отключение кадров заглушки атомарно. Иначе P-кадр заглушки,
-     * проскочивший между sendVideo и hidePlaceholder, ложится на AA-IDR и ГУ рисует полосы до следующего IDR.
-     * Заглушку останавливать всё равно через hidePlaceholder.
+     * 用来自 AA 的第一个 IDR 替换占位图：发送与关闭占位图帧原子完成。否则在 sendVideo 与 hidePlaceholder 之间
+     * 漏过的占位图 P 帧会叠在 AA-IDR 之上，车机直到下一个 IDR 都会显示花屏。
+     * 停止占位图仍统一通过 hidePlaceholder。
      */
     fun sendVideoTakeover(payload: ByteArray): Boolean = sendVideo(payload)
 
-    /** Связь по воздуху (6 TCP-сокетов), а не USB / tcp-debug. */
+    /** 无线连接（6 个 TCP socket），而非 USB / tcp-debug。 */
     val isAir: Boolean get() = false
 
-    /** Текущий кадр заглушки (null = её нет): с него перекодирование начинает переход в картинку AA. */
+    /** 当前占位图帧（null = 没有）：转码从这里开始过渡到 AA 画面。 */
     fun placeholderSnapshot(): android.graphics.Bitmap? = null
 
-    /** Показывать на ГУ заглушку с текстом (кодирует VideoSource); можно звать до CarLife START - запомнится. */
+    /** 在车机上显示带文字的占位图（对 VideoSource 编码）；可在 CarLife START 之前调用——会被记住。 */
     fun showPlaceholder(text: String)
 
-    /** Остановить заглушку: дальше видео идёт из AA (sendVideo). */
+    /** 停止占位图：之后视频来自 AA（sendVideo）。 */
     fun hidePlaceholder()
 
-    /** Аудио-сообщение CarLife: канал 3 MEDIA / 4 TTS, тип (INIT/DATA/STOP), тело. false = отброшено. */
+    /** CarLife 音频消息：通道 3 MEDIA / 4 TTS，类型（INIT/DATA/STOP），数据体。false = 被丢弃。 */
     fun sendAudio(channel: Int, type: Int, payload: ByteArray): Boolean
 
-    /** MODULE_STATUS об одном модуле CarLife (CarlifeAudio.MODULE_NAVI / MODULE_MUSIC / ...), как Baidu ModuleStatusManage. false = не ушло. */
+    /** 关于某个 CarLife 模块的 MODULE_STATUS（CarlifeAudio.MODULE_NAVI / MODULE_MUSIC / ...），同百度 ModuleStatusManage。false = 未发出。 */
     fun sendModuleStatus(module: Int, status: Int): Boolean
 
-    /** Создать и запустить транскодер (AA H.264 -> декодер -> энкодер). null = MediaCodec не поднялся, работаем passthrough. */
+    /** 创建并启动转码器（AA H.264 → 解码器 → 编码器）。null = MediaCodec 未能启动，走 passthrough。 */
     fun createTranscoder(out: TranscodeOutput): VideoTranscoder? = null
 
     /**
-     * Попросить ГУ начать (true) / закончить (false) запись микрофона, как Baidu MD (VrManager): CMD
-     * MIC_RECORD_RECOG_START / MIC_RECORD_END (+ MODULE_STATUS VR). Данные придут в AaBridgeCore.onCarlifeMicData.
-     * false = сообщение не ушло (сессия закрыта).
+     * 请求车机开始（true）/结束（false）录制麦克风，同百度 MD（VrManager）：CMD
+     * MIC_RECORD_RECOG_START / MIC_RECORD_END（+ MODULE_STATUS VR）。数据会送到 AaBridgeCore.onCarlifeMicData。
+     * false = 消息未发出（会话已关闭）。
      */
     fun requestMicRecord(start: Boolean): Boolean = false
 
-    /** Ключевой кадр энкодера (размер в байтах) ушёл в CarLife; зовётся только на ГУ с лимитом размера IDR (VW ID, h196). */
+    /** 编码器关键帧（字节大小）已发往 CarLife；仅在带 IDR 大小限制的车机上调用（VW ID，h196）。 */
     fun onEncodedKeyFrame(size: Int) {}
 
-    /** Состояние видео-очереди (слив, бэклог, длина) для статистики моста; null = нет данных. */
+    /** 视频队列状态（吞吐、积压、长度），供桥接层统计用；null = 无数据。 */
     fun videoStats(): LinkVideoStats? = null
 
-    /** CMD MEDIA_INFO (0x10035); обложку (PNG из AA) перекодирует реализация, не задерживая вызывающего. false = не ушло. */
+    /** CMD MEDIA_INFO（0x10035）；封面图（AA 来的 PNG）由实现方转码，不阻塞调用方。false = 未发出。 */
     fun sendMediaInfo(info: CarlifeMediaInfo): Boolean = false
 
-    /** CMD MEDIA_PROGRESS_BAR (0x10036). */
+    /** CMD MEDIA_PROGRESS_BAR（0x10036）。 */
     fun sendMediaProgress(progressBar: Int): Boolean = false
 
-    /** CMD NAVI_NEXT_TURN_INFO (0x10030); поле 6 (иконка / time) по настройке реализации. */
+    /** CMD NAVI_NEXT_TURN_INFO（0x10030）；字段 6（图标 / time）按实现方设置。 */
     fun sendNaviTurn(info: NaviTurnInfo): Boolean = false
 
-    /** CMD GO_TO_DESKTOP (0x10021): ГУ уходит на свой рабочий стол (плитка «Выйти» в AA). */
+    /** CMD GO_TO_DESKTOP（0x10021）：车机回到自己的桌面（AA 中的「退出」磁贴）。 */
     fun goToDesktop() {}
 }
 
-/** Ссылка на мёртвую CarLife-сессию (USB оборван): всё отбрасывает. */
+/** 指向已死亡 CarLife 会话的引用（USB 断开）：一切丢弃。 */
 private object NoLink : CarlifeLink {
     override fun sendVideo(payload: ByteArray) = false
     override fun showPlaceholder(text: String) {}
@@ -75,12 +75,12 @@ private object NoLink : CarlifeLink {
     override fun goToDesktop() {}
 }
 
-/** Звонок на телефоне: IDLE — нет, RINGING — входящий звонит, ACTIVE — разговор (AudioManager MODE_IN_CALL). */
+/** 手机通话状态：IDLE — 无，RINGING — 来电响铃，ACTIVE — 通话中（AudioManager MODE_IN_CALL）。 */
 enum class PhoneCall { IDLE, RINGING, ACTIVE }
 
 /**
- * Логика моста AA -> CarLife без Android и сокетов: приём видео от AA как AaVideoSink, правила первого
- * сообщения для CarLife (SPS+PPS+IDR в одном), переключение заглушка/AA, маппинг тачей, запрос ключевого кадра.
+ * AA → CarLife 桥接逻辑（不含 Android 与 socket）：以 AaVideoSink 方式接收 AA 视频，CarLife 首条消息的
+ * 规则（SPS+PPS+IDR 合一），占位图/AA 切换，触摸映射，关键帧请求。
  */
 class AaBridgeCore(
     private val log: (String, Boolean) -> Unit,
@@ -101,7 +101,7 @@ class AaBridgeCore(
         }
     @Volatile private var link: CarlifeLink = NoLink
 
-    /** Последний CHANGE_MD_THEME от ГУ (0 светлая, 1 тёмная, 2 авто); до него - светлая. */
+    /** 车机最近一次 CHANGE_MD_THEME（0 浅色，1 深色，2 自动）；在此之前为浅色。 */
     @Volatile var huTheme: Int = THEME_LIGHT
         private set
 
@@ -113,10 +113,10 @@ class AaBridgeCore(
     private var placeholderText = TEXT_CONNECTING
     private var waitSince = 0L
     private var lastKeyframeRequest = NEVER
-    private var lastIdrSentMs = NEVER              // когда в CarLife ушёл последний IDR passthrough (h295)
-    private var h295TouchAt = NEVER                // когда тач запросил keyframe-цикл; NEVER = IDR после тача не ждём
+    private var lastIdrSentMs = NEVER              // 最近一次向 CarLife 发送 passthrough IDR 的时间（h295）
+    private var h295TouchAt = NEVER                // 触摸发起 keyframe 循环的时刻；NEVER = 触摸后不等待 IDR
     private var h295LastTrigger = NEVER
-    private var h295LastTouchAt = NEVER            // последний тач от ГУ любого action
+    private var h295LastTouchAt = NEVER            // 车机最近一次任意 action 的触摸
 
     var dropped = 0L
         private set
@@ -129,22 +129,22 @@ class AaBridgeCore(
     private var dropLogged = 0L
     private var touchDown = false
 
-    // --- видео: перекодирование (по умолчанию в приложении) или passthrough ---
-    /** Режим видео моста: true = AA -> декодер -> энкодер (кадры повторяются на статике), false = H.264 как есть. */
+    // --- 视频：转码（应用内默认）或 passthrough ---
+    /** 桥接视频模式：true = AA → 解码器 → 编码器（静态画面重复帧），false = 原样 H.264。 */
     @Volatile var transcodeEnabled = false
 
     /**
-     * Разрешение видео, снятое один раз при создании хоста (уже с учётом passthrough): им построена AA (SDR),
-     * его же берут CarLife-сессия (INIT_DONE, энкодер) и маппинг тача. Prefs отсюда не читаются.
+     * 视频分辨率，在创建 host 时采集一次（已计入 passthrough）：AA（SDR）按它构建，
+     * CarLife 会话（INIT_DONE、编码器）和触摸映射也使用它。这里不读取 Prefs。
      */
     @Volatile var videoMode: VideoGeometry = VideoMode.DEFAULT
 
-    /** Ручной DPI интерфейса AA, снятый вместе с videoMode (AaDensity.AUTO = density режима). Только SDR, на кроп и тач не влияет. */
+    /** 手动 AA 界面 DPI，与 videoMode 一起采集（AaDensity.AUTO = 模式的 density）。仅 SDR，不影响裁剪和触摸。 */
     @Volatile var densityOverride: Int = AaDensity.AUTO
     private var transcoder: VideoTranscoder? = null
     private var encCsd: ByteArray? = null
     private var outGotIdr = false
-    private val idrThrottle = IdrThrottle()            // запросы IDR при переполнении очереди CarLife
+    private val idrThrottle = IdrThrottle()            // CarLife 队列溢出时的 IDR 请求
     private var overflowIdrRequests = 0L
     private var lastStatsIdrRequests = 0L
     private var outputEnabled = false
@@ -156,37 +156,37 @@ class AaBridgeCore(
     private var encDropped = 0L
     val isTranscoding: Boolean @Synchronized get() = transcoder != null
 
-    // --- звук AA -> CarLife ---
-    /** Переключатель UI «Звук по USB». */
+    // --- 音频 AA → CarLife ---
+    /** UI 开关「USB 音频」。 */
     @Volatile var usbAudioEnabled = true
 
-    /** Ждать ли FEATURE_CONFIG ГУ перед подключением к AA (чтобы решить, объявлять ли аудио-синки). */
+    /** 连接 AA 前是否等待车机 FEATURE_CONFIG（以决定要声明哪些音频同步）。 */
     @Volatile var expectFeatureConfig = false
     @Volatile var featureConfigSeen = false
     @Volatile private var btAudio = false
-    @Volatile var huDesayG6S = false           // ГУ Desay G6S (Mazda CX-5): NAVI=1 глушит штатное радио, маршрутный NAVI не шлём
+    @Volatile var huDesayG6S = false           // 车机 Desay G6S（Mazda CX-5）：NAVI=1 会静音原厂收音机，因此不发送路线 NAVI
         private set
-    @Volatile var huHonda = false              // Honda (STATISTIC_INFO channel 2077xxxx/2083xxxx, HU_INFO пустой): roadName на приборке режется по байтам и клеткам
+    @Volatile var huHonda = false              // 本田（STATISTIC_INFO channel 2077xxxx/2083xxxx，HU_INFO 为空）：仪表盘 roadName 按字节和宫格裁剪
         private set
-    private var naviRaisedAt = NEVER          // Honda: когда последний раз ушёл MODULE_STATUS NAVI=1
-    private var naviShownSinceRaise = false   // Honda: после последнего NAVI=1 уже был SHOW (переход 0->1 приборкой «израсходован»)
-    @Volatile var huVwBt1420 = false           // VW BT 1420 (Павел, канал 20082138): по воздуху без heartbeat на PAUSE рвёт CarLife через ~1 мин
-    @Volatile var huVwCns2Delphi = false       // VW CNS2 Delphi 20082114 (h425): речь AA в голосовой сессии молчит в TTS, шлём в VR
-    private var vrReply = false                // поток ответа ассистента открыт в канале VR (VR_INIT ушёл)
-    @Volatile var huVw20082120 = false        // VW (STATISTIC_INFO channel 20082120 h93, 20082122 h222): без heartbeat рвёт USB через 3,7-5,6 с PAUSE
+    private var naviRaisedAt = NEVER          // 本田：最近一次发出 MODULE_STATUS NAVI=1 的时刻
+    private var naviShownSinceRaise = false   // 本田：最近一次 NAVI=1 之后已出现过 SHOW（0→1 的跳变已被仪表盘「消耗」）
+    @Volatile var huVwBt1420 = false           // VW BT 1420（Pavel，通道 20082138）：无线模式下 PAUSE 无 heartbeat 约 1 分钟后 CarLife 断开
+    @Volatile var huVwCns2Delphi = false       // VW CNS2 Delphi 20082114（h425）：语音会话中 AA 语音走 TTS 无声，改发 VR
+    private var vrReply = false                // 助手回复流已在 VR 通道打开（VR_INIT 已发出）
+    @Volatile var huVw20082120 = false        // VW（STATISTIC_INFO channel 20082120 h93、20082122 h222）：无 heartbeat 时 PAUSE 3.7-5.6 秒 USB 断开
         private set
-    @Volatile var huVw20082138 = false         // VW ID (channel 20082138, "VW BT 1538", h196): IDR > ~600 КиБ рвёт USB EIO
+    @Volatile var huVw20082138 = false         // VW ID（channel 20082138，"VW BT 1538"，h196）：IDR > ~600 KiB 会 USB EIO 断开
         private set
-    @Volatile var huHyundaiCn7 = false         // ГУ Hyundai CN7 (product wp_cn7cpe_cn, h218): в режиме «Авто» музыка 32 кГц с ресэмплом 48→32
+    @Volatile var huHyundaiCn7 = false         // 车机 Hyundai CN7（product wp_cn7cpe_cn，h218）：在「自动」模式下音乐 32 kHz，48→32 重采样
         private set
-    @Volatile var huPioneerRm56 = false        // ГУ Pioneer RM56E8B (Dongfeng DF6, h277): 4-5 Мбит/с рвут USB EIO за 25-30 с, живёт на ~1 Мбит/с и fps ≤ 15
+    @Volatile var huPioneerRm56 = false        // 车机 Pioneer RM56E8B（Dongfeng DF6，h277）：4-5 Mbps 会在 25-30 秒内 USB EIO 断开，稳定运行在 ~1 Mbps 且 fps ≤ 15
         private set
-    @Volatile var huHonda20772121 = false      // Honda Civic 11 (channel 20772121, h295): после камеры/меню ГУ молча сбрасывает декодер, passthrough ждёт IDR
+    @Volatile var huHonda20772121 = false      // 本田 Civic 11（channel 20772121，h295）：摄像头/菜单之后车机静默重置解码器，passthrough 等待 IDR
         private set
-    @Volatile var huMazda20622111 = false      // Mazda Connect 2 из Китая (channel 20622111, h238/h359): VIDEO_DATA > ~16 КиБ вешает чтение USB
+    @Volatile var huMazda20622111 = false      // 中国版 Mazda Connect 2（channel 20622111，h238/h359）：VIDEO_DATA > ~16 KiB 会挂起 USB 读取
         private set
     @Volatile var musicRateProvider: () -> MusicRate = { MusicRate.DEFAULT }
-    private var resampler: MusicResampler? = null    // null при 48000: PCM идёт как есть
+    private var resampler: MusicResampler? = null    // 48000 时为 null：PCM 原样发送
     private var mediaRateLogged = MEDIA_RATE
     @Volatile var mediaChunkProvider: () -> MediaChunk = { MediaChunk.DEFAULT }
     private var mediaChunkLogged = CarlifeAudio.MAX_CHUNK
@@ -196,7 +196,7 @@ class AaBridgeCore(
     private val audioInited = HashMap<Int, Boolean>()
     private val audioLogged = HashMap<Int, Long>()
 
-    /** Эквалайзер музыки (только CarLife MEDIA); настройки читаются на каждом буфере, меняются из UI на лету. */
+    /** 音乐均衡器（仅 CarLife MEDIA）；每个缓冲都读取设置，可从 UI 实时修改。 */
     private val equalizer = Equalizer(48000, 2)
     var eqProvider: () -> EqSettings = { EqLive.settings }
     private var eqLogged: EqSettings? = null
@@ -205,7 +205,7 @@ class AaBridgeCore(
     var audioDropped = 0L
         private set
 
-    // Серийность аудио, по MD Baidu: NAVI перед TTS, MEDIA отпускается PAUSE, TTS_STOP с задержкой.
+    // 音频时序，依据百度 MD：NAVI 在 TTS 之前，MEDIA 由 PAUSE 释放，TTS_STOP 带延迟。
     private val audioTimer: ScheduledExecutorService by lazy {
         Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "aa-audio-timer").also { it.isDaemon = true } }
     }
@@ -214,7 +214,7 @@ class AaBridgeCore(
         MicTimerHandle { f.cancel(false) }
     }
 
-    /** Одноразовый отменяемый таймер; задача идёт под блокировкой ядра, отменённая (даже уже вставшая в очередь) не выполняется. */
+    /** 一次性可取消定时器；任务在核心锁内执行，已取消（即使已排入队列）不会运行。 */
     private inner class AudioTimer {
         private var gen = 0
         private var handle: MicTimerHandle? = null
@@ -244,43 +244,43 @@ class AaBridgeCore(
 
     private val ttsStopTimer = AudioTimer()
 
-    /** h425: VW CNS2 Delphi копит MOVE ~190 мс и шлёт пачкой; раздаём пачку равномерно. Только при [huVwCns2Delphi]. */
+    /** h425：VW CNS2 Delphi 累积 MOVE 约 190 毫秒后成批发送；我们将整批均匀分发。仅当 [huVwCns2Delphi] 时启用。 */
     private val touchPacer = TouchBurstPacer(clockMs, audioSched) { a, x, y, px, py -> dispatchTouch(a, x, y, px, py) }
     @Volatile private var touchPacerLogged = false
 
-    /** Прореживание MOVE ([TouchDecimation]) стоит перед пейсером и прямой отправкой. */
+    /** MOVE 抽稀（[TouchDecimation]）位于 pacer 与直接发送之前。 */
     @Volatile var touchDecimationProvider: () -> TouchDecimation = { TouchDecimation.DEFAULT }
     private val touchDecimator = TouchDecimator { a, x, y, px, py -> routeTouch(a, x, y, px, py) }
     @Volatile private var touchDecimationLogged = 1
     private val mediaReleaseTimer = AudioTimer()
     private val voiceExitTimer = AudioTimer()
-    private var carlifePaused = false          // VIDEO_ENCODER_PAUSE после последнего START
-    private var exitPending = false            // «Выйти» в AA: GO_TO_DESKTOP ушёл, ждём PAUSE от ГУ, чтобы отдать AA NATIVE
-    private var huPausedAa = false             // плеер AA поставили на паузу, когда ГУ ушло на свой источник; MEDIA не пересылаем до play
-    private var resumeOnHuMusic = false        // паузу поставили мы (127 при игравшем AA): на MUSIC=1 от ГУ можно вернуть play
-    private var lastHuResumeMs = NEVER         // когда по MUSIC=1 от ГУ слали AA KEYCODE 126
-    @Volatile private var lastUserInputMs = NEVER   // последний тач DOWN / клавиша / шайба / голос с ГУ
-    @Volatile private var lastVoiceKeyMs = NEVER    // последний KEYCODE_SEARCH в AA (антидребезг h425)
-    private var lastHfpConnectMs = NEVER       // ГУ прислало BT_HFP_CONNECTION=connected (дальше AA сам запускает автоплей по BT)
-    private var lastPauseKeyMs = NEVER         // когда последний раз слали AA KEYCODE 127
-    private var naviSent = false               // MODULE_STATUS NAVI=1 ушёл (держит TTS и/или маршрут)
-    private var naviEndPending = false           // маршрут кончился, пока NAVI=1 держал TTS: NAVI=0 уйдёт после TTS STOP
-    private var ttsNaviHeld = false            // NAVI=1 нужен ради TTS (до stopAllAudio)
-    private var routeNaviHeld = false          // NAVI=1 нужен ради маршрута (MetaRelay)
-    private var mediaPaused = false            // MEDIA на ГУ стоит на PAUSE (STOP ещё не слали)
-    private var mediaGuard = false             // TTS_STOP уже ушёл, ждём +300 мс до управляющих пакетов MEDIA
-    private var pendingMediaPause = false      // желаемое состояние MEDIA = пауза, применим после TTS
+    private var carlifePaused = false          // 自最近一次 START 以来的 VIDEO_ENCODER_PAUSE
+    private var exitPending = false            // AA 中的「退出」：GO_TO_DESKTOP 已发出，等待车机 PAUSE 以向 AA 发送 NATIVE
+    private var huPausedAa = false             // 车机切到自家音源时暂停了 AA 播放器；在 play 之前不转发 MEDIA
+    private var resumeOnHuMusic = false        // 暂停是我们发起的（AA 播放时发了 127）：车机 MUSIC=1 时可恢复 play
+    private var lastHuResumeMs = NEVER         // 车机 MUSIC=1 时向 AA 发送 KEYCODE 126 的时刻
+    @Volatile private var lastUserInputMs = NEVER   // 车机最近一次触摸 DOWN / 按键 / 旋钮 / 语音
+    @Volatile private var lastVoiceKeyMs = NEVER    // AA 中最近一次 KEYCODE_SEARCH（防抖 h425）
+    private var lastHfpConnectMs = NEVER       // 车机发来 BT_HFP_CONNECTION=connected（之后 AA 会自行通过 BT 启动自动播放）
+    private var lastPauseKeyMs = NEVER         // 最近一次向 AA 发送 KEYCODE 127 的时刻
+    private var naviSent = false               // MODULE_STATUS NAVI=1 已发出（保持 TTS 和/或路线）
+    private var naviEndPending = false           // 路线已结束，而 NAVI=1 仍在保持 TTS：NAVI=0 将在 TTS STOP 后发出
+    private var ttsNaviHeld = false            // NAVI=1 为 TTS 而保持（直至 stopAllAudio）
+    private var routeNaviHeld = false          // NAVI=1 为路线而保持（MetaRelay）
+    private var mediaPaused = false            // 车机 MEDIA 处于 PAUSE（STOP 尚未发送）
+    private var mediaGuard = false             // TTS_STOP 已发出，等待 +300 毫秒后才允许 MEDIA 控制包
+    private var pendingMediaPause = false      // MEDIA 期望状态 = 暂停，将在 TTS 之后应用
     private var voice = false
     private var mediaGateDrops = 0L
     private var ttsPackets = 0
 
-    /** MEDIA инициализирован на ГУ и играет (для ответа на MODULE_CONTROL MUSIC). */
+    /** MEDIA 已在车机初始化并播放（用于响应 MODULE_CONTROL MUSIC）。 */
     val isMediaInited: Boolean @Synchronized get() = audioInited[CarlifeAudio.CH_MEDIA] == true
 
-    /** Ответ на MODULE_CONTROL MUSIC: звук по USB - по MEDIA INIT, иначе по состоянию плеера AA (ch9). */
+    /** MODULE_CONTROL MUSIC 的应答：USB 音频按 MEDIA INIT，否则按 AA 播放器状态（ch9）。 */
     val musicActive: Boolean @Synchronized get() = isMediaInited || (!audioViaUsb && meta.playing)
 
-    // --- метаданные AA (ch9/ch10) -> CarLife MEDIA_INFO / PROGRESS / NAVI_NEXT_TURN_INFO ---
+    // --- 元数据 AA（ch9/ch10）→ CarLife MEDIA_INFO / PROGRESS / NAVI_NEXT_TURN_INFO ---
     private val meta = MetaRelay(
         log = log,
         clockMs = clockMs,
@@ -294,19 +294,19 @@ class AaBridgeCore(
 
     val metaRelay: MetaRelay get() = meta
 
-    /** Звук идёт по USB: включён в UI и ГУ не просит Bluetooth. Читает AapOptions.sdProvider (какие синки объявлять). */
+    /** 音频走 USB：UI 已启用且车机未请求蓝牙。读取 AapOptions.sdProvider（要声明哪些同步）。 */
     val audioViaUsb: Boolean get() = usbAudioEnabled && !btAudio
 
     val activeSource: Source @Synchronized get() = active
     val currentPlaceholderText: String @Synchronized get() = placeholderText
     val isCarlifeStarted: Boolean @Synchronized get() = carlifeStarted
 
-    /** Есть живая (не закрытая) CarLife-сессия: USB подключён. Читается без блокировки. */
+    /** 存在存活（未关闭）的 CarLife 会话：USB 已连接。无锁读取。 */
     val hasCarlifeLink: Boolean get() = link !== NoLink
 
     /**
-     * Сменить текст заглушки на ГУ («Запускаю сервер...», «Разблокируйте телефон»); когда уже идёт видео AA, не трогаем.
-     * Запоминается и для будущей CarLife-сессии.
+     * 更换车机上的占位图文字（「正在启动服务器...」、「请解锁手机」）；AA 视频已在播放时不改动。
+     * 会记住，供未来的 CarLife 会话使用。
      */
     @Synchronized
     fun showStatus(text: String) {
@@ -316,13 +316,13 @@ class AaBridgeCore(
         log("BRIDGE заглушка: '$text'", true)
     }
 
-    // --- микрофон AA: запрос открыл телефон, звук берём у ГУ (CarLife VR) или с микрофона телефона ---
-    /** Режим микрофона читается в момент каждого open: переключатель в UI действует сразу. */
+    // --- AA 麦克风：请求由手机打开，声音取自车机（CarLife VR）或手机麦克风 ---
+    /** 每次 open 时读取麦克风模式：UI 开关立即生效。 */
     @Volatile var micModeProvider: () -> MicMode = { MicMode.AUTO }
-    /** Состояние звонка на телефоне (AudioManager.mode): на [huVwCns2Delphi] перемотка руля на время звонка = принять/положить. */
+    /** 手机通话状态（AudioManager.mode）：在 [huVwCns2Delphi] 上，通话期间方向盘切歌键 = 接听/挂断。 */
     @Volatile var phoneCallProvider: () -> PhoneCall = { PhoneCall.IDLE }
 
-    /** Микрофон телефона (AudioRecord); null = нет. Один экземпляр на всё время: router вызывает start/stop по очереди. */
+    /** 手机麦克风（AudioRecord）；null = 无。全程单一实例：router 按顺序调用 start/stop。 */
     @Volatile var phoneMic: PhoneMic? = null
 
     private val micTimer: ScheduledExecutorService by lazy {
@@ -348,12 +348,12 @@ class AaBridgeCore(
 
     override fun onMicClose(why: String) = mic.close(why)
 
-    /** PCM микрофона ГУ (VR 0x00058001, тело сообщения) -> AA. */
+    /** 车机麦克风 PCM（VR 0x00058001，消息体）→ AA。 */
     fun onCarlifeMicData(pcm: ByteArray) = mic.onHuData(pcm)
 
     /**
-     * Вызвать при старте CarLife-сессии: заглушка. Если AA уже жива и играет (USB вернулся в grace-окно),
-     * текст «ждём кадр» вместо «запустите сервер», а ключевой кадр уйдёт на CarLife START.
+     * 在 CarLife 会话启动时调用：显示占位图。如果 AA 已存活并在播放（USB 在 grace 窗口内回归），
+     * 显示「等待画面」而非「启动服务器」，关键帧将在 CarLife START 时发出。
      */
     @Synchronized
     fun attach(link: CarlifeLink) {
@@ -366,18 +366,18 @@ class AaBridgeCore(
         resumeOnHuMusic = false
         lastHuResumeMs = NEVER
         gotIdr = false
-        huDesayG6S = false                     // HU_INFO / STATISTIC_INFO придут заново в этой сессии
-        huVw20082120 = false                   // HU_INFO / STATISTIC_INFO придут заново в этой сессии
-        huHonda = false                        // STATISTIC_INFO придёт заново в этой сессии
-        huVwBt1420 = false                     // HU_INFO придёт заново в этой сессии
-        huVw20082138 = false                   // HU_INFO / STATISTIC_INFO придут заново в этой сессии
+        huDesayG6S = false                     // HU_INFO / STATISTIC_INFO 会在此会话中重新到来
+        huVw20082120 = false                   // HU_INFO / STATISTIC_INFO 会在此会话中重新到来
+        huHonda = false                        // STATISTIC_INFO 会在此会话中重新到来
+        huVwBt1420 = false                     // HU_INFO 会在此会话中重新到来
+        huVw20082138 = false                   // HU_INFO / STATISTIC_INFO 会在此会话中重新到来
         vwIdName = false
         vwIdChannel = false
-        huHyundaiCn7 = false                   // HU_INFO придёт заново в этой сессии
-        huPioneerRm56 = false                  // HU_INFO придёт заново в этой сессии
-        huHonda20772121 = false                // HU_INFO / STATISTIC_INFO придут заново в этой сессии
-        huMazda20622111 = false                // STATISTIC_INFO придёт заново в этой сессии
-        huVwCns2Delphi = false                 // STATISTIC_INFO придёт заново в этой сессии
+        huHyundaiCn7 = false                   // HU_INFO 会在此会话中重新到来
+        huPioneerRm56 = false                  // HU_INFO 会在此会话中重新到来
+        huHonda20772121 = false                // HU_INFO / STATISTIC_INFO 会在此会话中重新到来
+        huMazda20622111 = false                // STATISTIC_INFO 会在此会话中重新到来
+        huVwCns2Delphi = false                 // STATISTIC_INFO 会在此会话中重新到来
         vrReply = false
         touchDecimator.reset()
         touchDecimationLogged = 1
@@ -396,20 +396,20 @@ class AaBridgeCore(
         log("BRIDGE CarLife-сессия подключена: источник = заглушка '$placeholderText' (AA ${if (aaVideoSeen) "жива" else "нет видео"})", true)
     }
 
-    // --- события CarLife ---
+    // --- CarLife 事件 ---
     @Synchronized
     fun onCarlifeStart() {
-        // Desay G6S (Mazda) шлёт START без PAUSE на каждое нажатие NAVI/MEDIA: звук уже идёт, повторный INIT
-        // посреди трека рвёт его на ГУ (лог 2026-10-11). Звук сбрасываем только на первом START и после PAUSE.
+        // Desay G6S（Mazda）每次按下 NAVI/MEDIA 都会不带 PAUSE 地发送 START：声音已在播放，曲目中途重复
+        // INIT 会在车机上撕裂声音（日志 2026-10-11）。仅在首个 START 和 PAUSE 之后才重置声音。
         val warm = carlifeStarted && !carlifePaused
-        // Воздух, возврат после PAUSE: декодер всю паузу ел кадры AA (гейт выкидывал только выход энкодера), его
-        // состояние живо. Не ждём IDR от AA (цикл VideoFocus, 0.2-2 с тишины), а сразу берём IDR у энкодера.
-        // VW BT 1420 (лог Павла 2026-10-16) закрывал сокет через 0.16-0.42 с после такого START. Только для него:
-        // остальные ГУ (Mazda G6S по воздуху, задний ход) - как было, через IDR от AA.
+        // 无线、PAUSE 后回归：解码器在整段暂停期间一直在吃 AA 帧（gate 只丢弃编码器输出），其
+        // 状态仍存活。不等待 AA 的 IDR（VideoFocus 循环，0.2-2 秒静默），而是直接取编码器的 IDR。
+        // VW BT 1420（日志 2026-10-16）会在此类 START 后 0.16-0.42 秒关闭 socket。仅针对它：
+        // 其余车机（无线 Mazda G6S、倒车影像）维持原样，通过 AA 的 IDR。
         val resume = AIR_WARM_RESUME_ENABLED && huVwBt1420 && link.isAir && carlifeStarted && carlifePaused &&
             transcodeEnabled && transcoder != null && gotIdr && active == Source.AA
-        // START после PAUSE - та же живая сессия: отложенный TTS STOP шлём сразу, иначе resetAudio его съест,
-        // ГУ так и держит канал подсказок открытым и глушит музыку до следующей подсказки (h482, ix35 HSAE).
+        // PAUSE 后的 START 仍是同一活会话：延后的 TTS STOP 立即发送，否则 resetAudio 会吞掉它，
+        // 车机会一直保持提示通道打开并静音音乐直到下一条提示（h482，ix35 HSAE）。
         if (carlifeStarted && carlifePaused && ttsStopTimer.pending) {
             log("BRIDGE CarLife START после PAUSE: отложенный TTS STOP шлю сразу", true)
             stopAudio(CarlifeAudio.CH_TTS)
@@ -417,7 +417,7 @@ class AaBridgeCore(
         carlifeStarted = true
         carlifePaused = false
         if (warm) log("BRIDGE CarLife START без PAUSE: звук не трогаю, INIT не повторяю", true)
-        else resetAudio()                      // новый START: MEDIA/TTS init заново на первом пакете
+        else resetAudio()                      // 新 START：MEDIA/TTS 在首个数据包上重新 init
         if (resume) {
             lastKeyframeRequest = NEVER
             log("BRIDGE CarLife START после PAUSE (воздух): декодер жив, сразу IDR энкодера, AA не жду", true)
@@ -435,27 +435,27 @@ class AaBridgeCore(
         if (transcodeEnabled) startTranscoder()
         else log("BRIDGE видео: режим passthrough (H.264 AA как есть)", true)
         if (aaVideoSeen) {
-            // AA уже играет (тёплая сессия): не ждать тик, сразу цикл NATIVE -> PROJECTED (декодеру нужен IDR от AA)
+            // AA 已在播放（热会话）：不等 tick，立即走 NATIVE → PROJECTED 循环（解码器需要 AA 的 IDR）
             lastKeyframeRequest = clockMs()
             keyframeRequests++
             peer?.requestKeyFrame()
         }
         if (!warm) meta.onCarlifeStart()
-        // play на START не шлём: звук CarLife сразу отбирает у ГУ радио, а слушать радио под навигацию - сценарий (h33).
-        // Вернуть музыку - только по явному MUSIC=1 от ГУ (onCarlifeMusicControl).
+        // START 时不发送 play：CarLife 音乐会立即抢占车机收音机，而导航下听收音机也是常见场景（h33）。
+        // 恢复音乐只能等车机显式 MUSIC=1（onCarlifeMusicControl）。
         if (huPausedAa) log("BRIDGE CarLife START: AA на паузе после ухода ГУ на свой источник, музыку не запускаю", true)
     }
 
     /**
-     * MODULE_CONTROL MUSIC от ГУ; ответ - MODULE_STATUS MUSIC. status=0 - ГУ ушло на свой источник (радио): Desay G6S
-     * (Mazda) шлёт его после PAUSE, другие ГУ - без PAUSE. Плеер AA на паузу, хвост его буфера не пересылаем до
-     * следующего play, отвечаем MUSIC=0 - иначе ГУ видит CarLife-музыку активной и спорит с радио.
-     * Хвост держим и когда AA уже на паузе (Honda: MUSIC=0 после паузы ассистентом, хвост буфера давал MEDIA INIT
-     * через 40 мс), и MUSIC=0 отвечаем, даже если MEDIA PAUSE отложен до конца TTS (лог Егора 2026-10-13).
+     * 车机的 MODULE_CONTROL MUSIC；应答为 MODULE_STATUS MUSIC。status=0 — 车机切到自家音源（收音机）：Desay G6S
+     * （Mazda）在 PAUSE 之后发送，其他车机不带 PAUSE。AA 播放器暂停，其缓冲尾部在下次 play 之前不转发，
+     * 应答 MUSIC=0——否则车机会认为 CarLife 音乐处于活动状态而与收音机冲突。
+     * 尾部保留也适用于 AA 已暂停的情况（Honda：助手暂停后 MUSIC=0，缓冲尾部曾在 40 毫秒后触发 MEDIA INIT），
+     * 且即使 MEDIA PAUSE 推迟到 TTS 结束也应答 MUSIC=0（Egor 日志 2026-10-13）。
      *
-     * status=1 - Desay G6S вернулся на CarLife-музыку (пачка 10-20 MUSIC=1 рядом с START). После нашей паузы это выбор
-     * пользователя на ГУ: AA KEYCODE 126 и MUSIC=1 на всю пачку (лог h214 2026-10-17). Простой возврат на карту
-     * (NAVI) приходит без MUSIC=1 - там радио не трогаем. Свежая сессия тоже шлёт MUSIC=1, но паузы нашей там нет.
+     * status=1 — Desay G6S 回到 CarLife 音乐（START 附近连发 10-20 次 MUSIC=1）。在我们暂停之后，这是
+     * 车机上的用户选择：AA KEYCODE 126，并针对整批应答 MUSIC=1（日志 h214 2026-10-17）。单纯返回地图
+     * （NAVI）不会带 MUSIC=1——那里不碰收音机。新会话也会发 MUSIC=1，但其中没有我们发起的暂停。
      */
     @Synchronized
     fun onCarlifeMusicControl(status: Int?): Boolean {
@@ -480,12 +480,12 @@ class AaBridgeCore(
                 huPausedAa = false
                 resumeOnHuMusic = false
                 lastHuResumeMs = now
-                lastUserInputMs = now              // выбор источника на ГУ - ввод пользователя, BT-гард его не перебивает
+                lastUserInputMs = now              // 车机上的音源选择属于用户输入，BT 防护不打断它
                 log("BRIDGE ГУ вернулось на CarLife-музыку (MUSIC=1) после нашей паузы: AA KEYCODE $KEYCODE_MEDIA_PLAY", true)
                 p.sendKey(KEYCODE_MEDIA_PLAY)
                 return true
             }
-            if (now - lastHuResumeMs < HU_RESUME_ANSWER_MS) return true   // пачка MUSIC=1, пока AA раскачивается
+            if (now - lastHuResumeMs < HU_RESUME_ANSWER_MS) return true   // 连发的 MUSIC=1，在 AA 启动期间
         }
         return musicActive
     }
@@ -495,7 +495,7 @@ class AaBridgeCore(
         p.sendKey(KEYCODE_MEDIA_PAUSE)
     }
 
-    /** BT_HFP_CONNECTION от ГУ: state=2 - телефон подключился к ГУ по Bluetooth (0 - отключился). */
+    /** 车机的 BT_HFP_CONNECTION：state=2 — 手机已通过蓝牙连接车机（0 — 已断开）。 */
     @Synchronized
     fun onHuBtHfpConnection(state: Int?) {
         if (state == 2) {
@@ -506,7 +506,7 @@ class AaBridgeCore(
         }
     }
 
-    /** AA снова заиграл сам (play пользователя): звук опять пересылаем. После BT HFP без ввода с ГУ это автоплей - паузу держим. */
+    /** AA 自行恢复播放（用户 play）：声音重新转发。BT HFP 之后无车机输入则视为自动播放——保持暂停。 */
     private fun releaseHuPause(why: String) {
         if (!huPausedAa) return
         val now = clockMs()
@@ -526,13 +526,13 @@ class AaBridgeCore(
 
     private fun ago(t: Long): String = if (t == NEVER) "не было" else "${clockMs() - t} мс назад"
 
-    /** CARLIFE_DATA_SUBSCRIBE_START (on=true) / STOP от ГУ; moduleID подписки: 0 навигация, 2 музыка. */
+    /** 车机的 CARLIFE_DATA_SUBSCRIBE_START（on=true）/ STOP；订阅 moduleID：0 导航，2 音乐。 */
     @Synchronized
     fun onCarlifeSubscribe(moduleIds: List<Int>, on: Boolean) {
         for (id in moduleIds) meta.onSubscribe(id, on)
     }
 
-    /** CHANGE_MD_THEME от ГУ (h294): тёмная -> ночной режим AA, светлая -> день; авто (2) и прочее - день. */
+    /** 车机的 CHANGE_MD_THEME（h294）：深色 → AA 夜间模式，浅色 → 日间；自动（2）及其余 → 日间。 */
     fun onCarlifeTheme(mode: Int?) {
         val m = mode ?: return log("BRIDGE CHANGE_MD_THEME без themeModes, тему не меняю", true)
         val prev = huTheme
@@ -542,19 +542,19 @@ class AaBridgeCore(
         peer?.sendNightMode(night)
     }
 
-    /** VIDEO_ENCODER_PAUSE от ГУ: следующий START - полный, со сбросом звука. */
+    /** 车机的 VIDEO_ENCODER_PAUSE：下一次 START 为完整启动，带音频重置。 */
     @Synchronized
     fun onCarlifePause() {
         carlifePaused = true
         if (exitPending) {
-            // ГУ ушёл с CarLife после нашего GO_TO_DESKTOP: говорим AA, что проекции нет (NATIVE), возврат - через START
+            // 车机在我们的 GO_TO_DESKTOP 之后退出了 CarLife：告知 AA 没有投影（NATIVE），回归经由 START
             exitPending = false
             log("BRIDGE ГУ вышел из CarLife (PAUSE) после «Выйти»: AA VideoFocus NATIVE", true)
             peer?.sendVideoFocusNative()
         }
     }
 
-    /** Плитка «Выйти» в AA: VIDEO_FOCUS_REQUEST NATIVE. Просим ГУ на рабочий стол; NATIVE для AA - когда ГУ пришлёт PAUSE. */
+    /** AA 中的「退出」磁贴：VIDEO_FOCUS_REQUEST NATIVE。请求车机回到桌面；向 AA 发送 NATIVE 的时机是车机发来 PAUSE 时。 */
     @Synchronized
     override fun onAaNativeFocusRequest() {
         if (link === NoLink || !carlifeStarted) {
@@ -564,14 +564,14 @@ class AaBridgeCore(
         log("BRIDGE AA: «Выйти» (VIDEO_FOCUS NATIVE) -> CarLife GO_TO_DESKTOP", true)
         exitPending = true
         link.goToDesktop()
-        // AA ждёт ответа на NATIVE с чёрной областью лаунчера. Desay G6S (Mazda) не шлёт ни PAUSE на выходе, ни START
-        // на возврате (лог 2026-10-12), так что ответ сразу: цикл NATIVE -> PROJECTED возвращает AA на главный экран.
+        // AA 等待 NATIVE 的应答，此时显示启动器黑色区域。Desay G6S（Mazda）退出时不发 PAUSE、回归时也不发 START
+        // （日志 2026-10-12），因此立即应答：NATIVE → PROJECTED 循环将 AA 送回主屏幕。
         lastKeyframeRequest = clockMs()
         keyframeRequests++
         peer?.requestKeyFrame()
     }
 
-    /** FEATURE_CONFIG ГУ разобран; mode = значение AUDIO_TRANSMISSION_MODE (null - ключа нет). */
+    /** 已解析车机 FEATURE_CONFIG；mode = AUDIO_TRANSMISSION_MODE 的值（null = 无此键）。 */
     fun onHuFeatureConfig(audioTransmissionMode: Int?) {
         featureConfigSeen = true
         if (audioTransmissionMode == CarlifeAudio.AUDIO_MODE_BT) {
@@ -583,8 +583,8 @@ class AaBridgeCore(
     }
 
     /**
-     * HU_INFO ГУ разобран: Desay G6S опознаём по производителю и модели (другие ГУ Desay SV под запрет не попадают),
-     * Hyundai CN7 - по product.
+     * 已解析车机 HU_INFO：通过厂商和型号识别 Desay G6S（其他 Desay SV 车机不受此限制），
+     * Hyundai CN7 按 product 识别。
      */
     fun onHuInfo(manufacturer: String?, model: String?, product: String? = null) {
         if (manufacturer == DESAY_MANUFACTURER && model == DESAY_G6S_MODEL) huDesayG6S = true
@@ -595,7 +595,7 @@ class AaBridgeCore(
         if (manufacturer == PIONEER_MANUFACTURER && model == PIONEER_RM56_MODEL) {
             if (!huPioneerRm56) log("BRIDGE ГУ Pioneer RM56E8B: потолок ${PIONEER_RM56_CEILING_BPS / 1000} кбит/с, fps ≤ $PIONEER_RM56_MAX_FPS", true)
             huPioneerRm56 = true
-            // в passthrough потолок и fps не работают (h277 test1); BridgeService вернёт поле к настройке на следующей сессии
+            // passthrough 下上限和 fps 不生效（h277 test1）；BridgeService 会在下一会话将字段恢复为设置值
             if (!transcodeEnabled) {
                 transcodeEnabled = true
                 log("BRIDGE ГУ Pioneer RM56E8B: passthrough отключаю, перекодирование принудительно", true)
@@ -603,12 +603,12 @@ class AaBridgeCore(
         }
     }
 
-    private var vwIdName = false               // HU_INFO manufacturer = BT-имя ГУ "VW BT 1538"
-    private var vwIdChannel = false            // STATISTIC_INFO channel = прошивка 20082138
+    private var vwIdName = false               // HU_INFO manufacturer = 车机蓝牙名 "VW BT 1538"
+    private var vwIdChannel = false            // STATISTIC_INFO channel = 固件 20082138
 
     /**
-     * VW ID (h196) - только прошивка 20082138 И BT-имя "VW BT 1538": тот же канал у VW BT 1420 (Павел), которому
-     * потолок 2 Мбит/с не нужен (8 Мбит/с по воздуху и USB без обрывов, лог 2026-10-16).
+     * VW ID（h196）— 仅限固件 20082138 且蓝牙名为 "VW BT 1538"：VW BT 1420（Pavel）也用同一通道，
+     * 它不需要 2 Mbps 上限（无线和 USB 均 8 Mbps 无中断，日志 2026-10-16）。
      */
     private fun updateVwId() {
         val was = huVw20082138
@@ -616,7 +616,7 @@ class AaBridgeCore(
         if (huVw20082138 && !was) log("BRIDGE ГУ VW ID (20082138, VW BT 1538): потолок битрейта по размеру IDR", true)
     }
 
-    /** STATISTIC_INFO ГУ разобран: запасной признак Desay G6S и признак VW 20082120 - канал сборки прошивки. */
+    /** 已解析车机 STATISTIC_INFO：Desay G6S 的备用识别标志和 VW 20082120 的识别标志——固件构建通道。 */
     fun onHuStatistic(channel: String?) {
         if (channel == DESAY_G6S_CHANNEL) huDesayG6S = true
         if (channel == HONDA_20772121_CHANNEL) huHonda20772121 = true
@@ -638,7 +638,7 @@ class AaBridgeCore(
         updateVwId()
     }
 
-    /** Ушёл MODULE_STATUS NAVI=1 (маршрут / TTS / перевзвод). Honda: ГУ ответит SUBSCRIBE_START - стрелки ждут его. */
+    /** MODULE_STATUS NAVI=1 已发出（路线 / TTS / 重新置位）。Honda：车机会应答 SUBSCRIBE_START——箭头等待它。 */
     private fun naviRaised() {
         naviRaisedAt = clockMs()
         naviShownSinceRaise = false
@@ -646,9 +646,9 @@ class AaBridgeCore(
     }
 
     /**
-     * Honda: перед первым SHOW (новый маршрут, перестроение) и повторным после тишины приборке нужен переход MODULE_STATUS
-     * NAVI 0->1 (h137, 2026-10-16 20:43:45: NAVI=1 держал TTS, SHOW нового маршрута ушёл без перехода - стрелок не было до
-     * конца поездки). Свежий NAVI=1 (моложе NAVI_REARM_FRESH_MS, стрелок после него не было) не трогаем: переход уже был.
+     * Honda：在首次 SHOW（新路线、重新规划）以及静默后的再次 SHOW 之前，仪表盘需要 MODULE_STATUS
+     * NAVI 0→1 的跳变（h137，2026-10-16 20:43:45：NAVI=1 保持 TTS，新路线的 SHOW 未带跳变发出——直到
+     * 行程结束都没有箭头）。新鲜的 NAVI=1（晚于 NAVI_REARM_FRESH_MS，其后未曾出现箭头）不处理：跳变已经发生过。
      */
     @Synchronized
     private fun rearmNavi() {
@@ -665,9 +665,9 @@ class AaBridgeCore(
         }
     }
 
-    /** CarLife-сессия закрыта (USB EIO / detach / Стоп). AA не трогаем; from - закрываемая ссылка, чужую не отцепляем. */
+    /** CarLife 会话已关闭（USB EIO / detach / 停止）。不碰 AA；from — 要关闭的链接，不解除别人的链接。 */
     fun onCarlifeClosed(from: CarlifeLink? = null) {
-        if (closeCarlife(from)) mic.onCarlifeLost()      // вне блокировки ядра: роутер микрофона берёт свою
+        if (closeCarlife(from)) mic.onCarlifeLost()      // 在核心锁之外：麦克风 router 自行加锁
     }
 
     @Synchronized
@@ -688,7 +688,7 @@ class AaBridgeCore(
         return true
     }
 
-    /** Палец CarLife-тача: id для AA и последние координаты кадра ГУ. */
+    /** CarLife 触摸的手指：id 用于 AA，坐标是车机帧的最新坐标。 */
     private class Finger(val id: Int, var x: Int, var y: Int) {
         fun set(nx: Int, ny: Int) {
             x = nx
@@ -698,14 +698,14 @@ class AaBridgeCore(
 
     private val touchLock = Any()
 
-    /** Активные пальцы в порядке индекса MotionEvent ГУ: x,y TOUCH_ACTION - индекс 0, pointerx/pointery - индекс 1. */
+    /** 活动中的手指按车机 MotionEvent 的索引排序：x,y（TOUCH_ACTION）为索引 0，pointerx/pointery 为索引 1。 */
     private val fingers = ArrayList<Finger>(2)
 
     /**
-     * TOUCH_ACTION ГУ -> AA. action как у MotionEvent: action&255 = 0 DOWN, 1 UP, 2 MOVE, 5 POINTER_DOWN, 6 POINTER_UP,
-     * action>>8 = индекс пальца. Второй палец - в (px, py); 0,0 = координат нет (тогда последние известные).
-     * До двух пальцев; id оставшегося пальца после POINTER_UP не меняется. Координаты кадра ГУ -> кадр AA через
-     * [VideoMode.mapTouch] (без margin-ов 1:1). Один палец уходит в AA так же, как до мультитача (id 0, action_index 0).
+     * 车机 TOUCH_ACTION -> AA。action 与 MotionEvent 相同：action&255 = 0 DOWN、1 UP、2 MOVE、5 POINTER_DOWN、6 POINTER_UP，
+     * action>>8 = 手指索引。第二个手指在 (px, py) 中；0,0 = 无坐标（此时用最后已知的坐标）。
+     * 最多两个手指；POINTER_UP 后剩余手指的 id 不变。车机帧坐标 -> AA 帧坐标通过
+     * [VideoMode.mapTouch]（无 margin，1:1）。单指发往 AA 的方式与多点触控之前相同（id 0，action_index 0）。
      */
     fun onCarlifeTouch(action: Int, x: Int, y: Int, px: Int = 0, py: Int = 0) {
         val every = touchDecimationProvider().every
@@ -714,10 +714,10 @@ class AaBridgeCore(
             log("BRIDGE тач: прореживание MOVE ${if (every > 1) "×$every" else "выкл"} (настройка)", true)
         }
         touchDecimator.onTouch(action, x, y, px, py, every)
-        onHuTouch(action and 0xFF)                                            // вне touchLock: вложенных блокировок нет
+        onHuTouch(action and 0xFF)                                            // 在 touchLock 之外：没有嵌套锁
     }
 
-    /** Выход прореживателя: на Delphi через пейсер пачек, на остальных ГУ сразу в AA. */
+    /** 节流器输出：Delphi 上经批次 pacer，其余车机直接送入 AA。 */
     private fun routeTouch(action: Int, x: Int, y: Int, px: Int, py: Int) {
         if (huVwCns2Delphi) {
             touchPacer.onTouch(action, x, y, px, py)
@@ -731,12 +731,12 @@ class AaBridgeCore(
     }
 
     /**
-     * h295, Honda Civic 11 (20772121): ГУ после камеры заднего хода / меню машины молча сбрасывает декодер и ничего не шлёт
-     * (ни PAUSE, ни START), а AA в passthrough даёт IDR раз в минуты. Камера/меню - пауза в тачах CarLife, при обычной
-     * работе тапы идут чаще. DOWN после паузы >= [H295_TOUCH_IDLE_MS] при старом IDR - вероятно, чёрный экран: сразу просим
-     * у AA ключевой кадр полным циклом NATIVE -> PROJECTED (мягкий PROJECTED на Samsung IDR не давал), gate не закрываем,
-     * P-кадры идут. Пришедший IDR в [onFrame] получает SPS/PPS из CODEC_CONFIG: после сброса декодера ГУ голый IDR может не принять.
-     * Время прошлого тача читаем до обновления, поэтому второй DOWN-дубль ГУ (~2 мс) триггер не повторяет.
+     * h295，Honda Civic 11（20772121）：车机在倒车影像 / 车辆菜单之后会静默重置解码器，什么都不发
+     * （既无 PAUSE 也无 START），而 passthrough 下 AA 每分钟才给一个 IDR。倒车/菜单期间 CarLife 触摸中断，正常
+     * 工作时点击更频繁。若在旧 IDR 情况下出现 >= [H295_TOUCH_IDLE_MS] 暂停之后的 DOWN——大概率是黑屏：立即
+     * 以完整 NATIVE -> PROJECTED 循环向 AA 请求关键帧（Samsung 上软 PROJECTED 不给 IDR），gate 不关闭，
+     * P 帧继续走。到达 [onFrame] 的 IDR 会从 CODEC_CONFIG 取 SPS/PPS：车机解码器重置后可能不接受裸 IDR。
+     * 上一次触摸时间在更新之前读取，因此车机第二次 DOWN 重复（约 2 毫秒）不会再次触发。
      */
     @Synchronized
     private fun onHuTouch(act: Int) {
@@ -755,12 +755,12 @@ class AaBridgeCore(
         peer?.requestKeyFrame()
     }
 
-    /** h295: IDR после цикла так и не пришёл за [H295_WAIT_GIVEUP_MS] - не вешаем на него чужой IDR в логе и склейке. */
+    /** h295：循环之后 IDR 在 [H295_WAIT_GIVEUP_MS] 内始终没来——日志和拼接操作不把别的 IDR 挂到它名下。 */
     private fun h295GiveUp(now: Long) {
         if (h295TouchAt != NEVER && now - h295TouchAt > H295_WAIT_GIVEUP_MS) h295TouchAt = NEVER
     }
 
-    /** h295: IDR, которого ждали после тача, уходит с SPS/PPS из CODEC_CONFIG, если в кадре их нет. Иначе кадр как есть. */
+    /** h295：触摸后等待的 IDR，若帧里没有 SPS/PPS，则带上 CODEC_CONFIG 中的 SPS/PPS 发出；否则帧原样发出。 */
     private fun h295Prepare(b: ByteArray, types: List<Int>): ByteArray {
         if (h295TouchAt == NEVER || 5 !in types || (AnnexB.startsWithSps(b) && 8 in types)) return b
         val cfg = aaConfig ?: return b
@@ -796,7 +796,7 @@ class AaBridgeCore(
                 sendFingers(p, act, 0, name)
             }
             AapMessages.TOUCH_MOVE -> {
-                if (fingers.isEmpty()) fingers.add(Finger(0, x, y))   // DOWN потерян: как раньше, один палец id 0
+                if (fingers.isEmpty()) fingers.add(Finger(0, x, y))   // DOWN 丢失：和以前一样，单指 id 0
                 fingers[0].set(x, y)
                 if (fingers.size > 1 && second) fingers[1].set(px, py)
                 sendFingers(p, act, 0, name)
@@ -824,8 +824,8 @@ class AaBridgeCore(
                 sendFingers(p, act, idx, name)
                 fingers.removeAt(idx)
             }
-            else -> {                                              // UP последнего пальца
-                if (fingers.size > 1) {                            // POINTER_UP потерян: сначала снимаем второй палец
+            else -> {                                              // UP（最后一个手指）
+                if (fingers.size > 1) {                            // POINTER_UP 丢失：先抬起第二个手指
                     sendFingers(p, AapMessages.TOUCH_POINTER_UP, 1, "POINTER_UP")
                     fingers.removeAt(1)
                 }
@@ -837,7 +837,7 @@ class AaBridgeCore(
         }
     }
 
-    /** Все активные пальцы -> AA одним событием; лог как до мультитача для одного пальца. */
+    /** 所有活动手指 -> AA 作为单个事件；单指时日志与多点触控之前相同。 */
     private fun sendFingers(p: AaPeer, act: Int, index: Int, name: String) {
         val mode = videoMode
         val points = fingers.map { f ->
@@ -858,7 +858,7 @@ class AaBridgeCore(
         p.sendTouch(act, index, points)
     }
 
-    /** TOUCH_CAR_HARD_KEY_CODE ГУ (кнопки руля) -> AA: нажатие Android KeyEvent по [HARD_KEY_TO_ANDROID]. */
+    /** 车机 TOUCH_CAR_HARD_KEY_CODE（方向盘按键）-> AA：按 [HARD_KEY_TO_ANDROID] 发送 Android KeyEvent 按下。 */
     fun onCarlifeHardKey(code: Int) {
         lastUserInputMs = clockMs()
         HARD_KEY_TO_ROTARY[code]?.let { delta ->
@@ -893,11 +893,11 @@ class AaBridgeCore(
     }
 
     /**
-     * На новых рулях VW нет кнопки трубки: пока звонит или идёт звонок, перемотка отвечает за звонок.
-     * Как на телефоне: зелёная слева, красная справа. Звонит: назад = принять (CALL), вперёд = отклонить (ENDCALL).
-     * Разговор: вперёд = положить трубку.
-     * Кнопки паузы тоже нет: удержание перемотки ГУ шлёт как keycode 0, вне звонка это пауза/плей.
-     * Только VW CNS2 Delphi 20082114 ([huVwCns2Delphi], Дмитрий); на прочих ГУ всё как было.
+     * 新款 VW 方向盘上没有电话按键：来电或通话期间，由快进/快退（seek）负责电话。
+     * 和手机一样：左侧绿色，右侧红色。来电时：向后 = 接听（CALL），向前 = 拒接（ENDCALL）。
+     * 通话中：向前 = 挂断。
+     * 也没有暂停键：车机把长按快进/快退发为 keycode 0，非通话时这是暂停/播放。
+     * 仅 VW CNS2 Delphi 20082114（[huVwCns2Delphi]，Dmitry）支持；其余车机一切照旧。
      */
     private fun delphiKey(code: Int, call: PhoneCall): Int? = when {
         !huVwCns2Delphi -> null
@@ -908,8 +908,8 @@ class AaBridgeCore(
     }
 
     /**
-     * VW CNS2 Delphi (h425) шлёт VR_START дважды за 1-2 мс: второй KEYCODE_SEARCH закрывает только что открытого
-     * ассистента. Повтор кнопки голоса чаще [VOICE_KEY_DEBOUNCE_MS] глотаем.
+     * VW CNS2 Delphi（h425）在 1-2 毫秒内发送两次 VR_START：第二个 KEYCODE_SEARCH 会关闭刚打开的
+     * 助手。间隔短于 [VOICE_KEY_DEBOUNCE_MS] 的语音键重复会被吞掉。
      */
     private fun voiceKeyBounce(what: String): Boolean {
         val now = clockMs()
@@ -919,7 +919,7 @@ class AaBridgeCore(
         return dup
     }
 
-    /** MODULE_CONTROL VR=1 от ГУ (кнопка голоса) -> AA KEYCODE_SEARCH: AA открывает ассистента и сам просит микрофон. */
+    /** 车机的 MODULE_CONTROL VR=1（语音按键）-> AA KEYCODE_SEARCH：AA 打开助手并自行申请麦克风。 */
     fun onCarlifeVoiceKey() {
         lastUserInputMs = clockMs()
         val p = peer
@@ -932,7 +932,7 @@ class AaBridgeCore(
         p.sendKey(KEYCODE_SEARCH)
     }
 
-    // --- события AA ---
+    // --- AA 事件 ---
     @Synchronized
     fun onAaConnecting() {
         resetTranscodeForAa()
@@ -958,11 +958,11 @@ class AaBridgeCore(
         }
     }
 
-    // --- звук AA ---
+    // --- AA 声音 ---
     private fun carlifeChannel(aaChan: Int): Int? = when (aaChan) {
         AapMessages.CH_AUDIO_MEDIA -> CarlifeAudio.CH_MEDIA
-        AapMessages.CH_AUDIO_SPEECH -> CarlifeAudio.CH_TTS      // навигационные подсказки / голос
-        else -> null                                              // SYSTEM (5): сигналы AA на ГУ не шлём
+        AapMessages.CH_AUDIO_SPEECH -> CarlifeAudio.CH_TTS      // 导航提示 / 语音
+        else -> null                                              // SYSTEM (5)：AA 的信号不发给车机
     }
 
     private fun chName(ch: Int) = if (ch == CarlifeAudio.CH_MEDIA) "MEDIA" else "TTS"
@@ -1004,13 +1004,13 @@ class AaBridgeCore(
             val setting = if (ch == CarlifeAudio.CH_MEDIA) musicRateProvider() else MusicRate.AUTO
             val rate = when {
                 ch != CarlifeAudio.CH_MEDIA -> 16000
-                huPioneerRm56 -> MEDIA_RATE_PIONEER_RM56    // независимо от настройки: USB ГУ не тянет видео + музыку
+                huPioneerRm56 -> MEDIA_RATE_PIONEER_RM56    // 与设置无关：USB 车机同时跑视频 + 音乐扛不住
                 else -> setting.hz ?: if (huHyundaiCn7) MEDIA_RATE_CN7 else MEDIA_RATE
             }
             val channels = if (ch == CarlifeAudio.CH_MEDIA) 2 else 1
             if (ch == CarlifeAudio.CH_TTS && NAVI_STATUS_ENABLED) {
                 ttsNaviHeld = true
-                // как MD: перед TTS шлёт MODULE_STATUS NAVI=1 и держит его
+                // 像 MD 一样：在 TTS 之前发送 MODULE_STATUS NAVI=1 并保持它
                 if (!naviSent && link.sendModuleStatus(CarlifeAudio.MODULE_NAVI, 1)) {
                     naviSent = true
                     naviRaised()
@@ -1032,7 +1032,7 @@ class AaBridgeCore(
             } else {
                 mediaPaused = false
                 mediaGateDrops = 0
-                // частота фиксируется на MEDIA INIT; каждый новый INIT - поток с чистого листа
+                // 频率在 MEDIA INIT 时固定；每次新的 INIT 都是从零开始的流
                 resampler = if (rate == MEDIA_RATE) null else resampler?.takeIf { it.outRate == rate }?.also { it.reset() } ?: MusicResampler(rate)
                 if (rate != MEDIA_RATE && rate != mediaRateLogged) {
                     val why = when {
@@ -1115,8 +1115,8 @@ class AaBridgeCore(
     }
 
     /**
-     * Речь AA во время голосовой сессии -> канал VR (VR_INIT 16 кГц моно, VR_DATA), как ответ помощника Baidu.
-     * VW CNS2 Delphi (h425) речь ассистента, пришедшую в TTS сразу после записи микрофона, не играет.
+     * 语音会话期间 AA 的语音 -> VR 通道（VR_INIT 16 kHz 单声道，VR_DATA），如同 Baidu 助手的应答。
+     * VW CNS2 Delphi（h425）不播放紧跟在麦克风录音之后到达 TTS 的助手语音。
      */
     private fun sendVrReply(chan: Int, pcm: ByteArray) {
         if (!vrReply) {
@@ -1142,16 +1142,16 @@ class AaBridgeCore(
     }
 
     /**
-     * h425: VW CNS2 Delphi после ответа в канале VR оставляет кнопки громкости на голосовом канале, пока не переткнуть
-     * кабель. MODULE_STATUS VR=0 уходит при закрытии микрофона, но ответ в VR идёт уже после него: повторяем VR=0,
-     * когда и голосовая сессия AA кончилась, и поток VR закрыт.
+     * h425：VW CNS2 Delphi 在 VR 通道应答之后，会把音量键留在语音通道上，直到重新插拔
+     * 线缆。关闭麦克风时会发出 MODULE_STATUS VR=0，但 VR 应答在其之后才到：因此当 AA 语音会话
+     * 已结束且 VR 流已关闭时，再补发一次 VR=0。
      */
     private fun vrModuleOff(why: String) {
         if (!huVwCns2Delphi || voice || vrReply) return
         if (link.sendModuleStatus(CarlifeAudio.MODULE_VR, 0)) log("BRIDGE CarLife MODULE_STATUS VR=0 ($why)", true)
     }
 
-    // --- голосовая сессия Ассистента: MEDIA на паузу, данные не пересылаем; выход со сглаживанием пачки 2/2/1/2/2 ---
+    // --- 助手语音会话：MEDIA 暂停，不转发数据；退出时带批次平滑 2/2/1/2/2 ---
     @Synchronized
     override fun onVoiceSession(status: Int) {
         if (!VOICE_SESSION_ENABLED) return
@@ -1177,10 +1177,10 @@ class AaBridgeCore(
         }
     }
 
-    // --- управляющие пакеты MEDIA (PAUSE) идут по очереди: не пока TTS инициализирован или до TTS_STOP+300 мс ---
+    // --- MEDIA 控制包（PAUSE）排队发送：TTS 初始化期间或 TTS_STOP+300 毫秒之前不发 ---
     private fun mediaBlocked() = TTS_DEBOUNCE_ENABLED && (audioInited[CarlifeAudio.CH_TTS] == true || mediaGuard)
 
-    /** Желаемое состояние MEDIA = пауза: сразу или, пока занят TTS, после TTS_STOP+300 мс. */
+    /** MEDIA 的期望状态 = 暂停：立即执行，或 TTS 忙时在 TTS_STOP+300 毫秒后执行。 */
     private fun requestMediaPause(why: String) {
         if (audioInited[CarlifeAudio.CH_MEDIA] != true) {
             pendingMediaPause = false
@@ -1207,10 +1207,10 @@ class AaBridgeCore(
         musicStatus(0)
     }
 
-    /** Размер пакета речи, который задан явно или выбирается по ГУ; null = как отдаёт AA (Авто на остальных ГУ). */
+    /** 语音包大小：显式指定或按车机选择；null = 按 AA 原样给出（其余车机上为「自动」）。 */
     private fun voiceChunkOverride(): Int? = voiceChunkProvider().bytes ?: if (huVwCns2Delphi) VOICE_CHUNK_DELPHI else null
 
-    /** Размер пакета речи (VR-ответ и TTS) для текущей отправки; смену значения пишет в лог один раз. */
+    /** 当前发送用的语音包大小（VR 应答与 TTS）；值发生变化时只记一次日志。 */
     private fun voiceChunkMax(): Int {
         val size = voiceChunkOverride() ?: CarlifeAudio.MAX_CHUNK
         if (size != voiceChunkLogged) {
@@ -1221,11 +1221,11 @@ class AaBridgeCore(
     }
 
     /**
-     * Тишина сразу после TTS_INIT (VW CNS3 20082122, h222: шипение в начале подсказки). Baidu копит фразу
-     * и шлёт её пачкой по 4096 Б быстрее реального времени (NaviTTSController.splitAndSendTTSData), у ГУ
-     * есть запас; AA отдаёт речь в реальном времени с первого пакета, запаса нет. Нули дают ГУ открыть
-     * тракт на тишине и держат буфер на [ms] впереди до конца фразы. Куски нулей режутся размером пакета
-     * голоса, если он задан (настройка или авто-1024 на Delphi), иначе TTS_PREROLL_CHUNK.
+     * TTS_INIT 之后立刻发送静音（VW CNS3 20082122，h222：提示音开头有嘶嘶声）。Baidu 会攒整句
+     * 语音，并以 4096 字节的包快于实时速度发送（NaviTTSController.splitAndSendTTSData），车机端
+     * 有缓冲余量；AA 从第一个包起按实时速率吐出语音，没有余量。零数据让车机在静音上打开
+     * 通路，并使缓冲区领先 [ms]，直到整句结束。零数据块按语音包大小切分——
+     * 若该大小已指定（设置项或 Delphi 上的自动 1024），否则用 TTS_PREROLL_CHUNK。
      */
     private fun sendTtsPreroll(ms: Int) {
         val zeros = ByteArray((ms * TTS_BYTES_PER_SEC / 1000) and 1.inv())
@@ -1242,7 +1242,7 @@ class AaBridgeCore(
         log("BRIDGE TTS пре-ролл $ms мс тишины (${zeros.size} Б) после INIT", true)
     }
 
-    /** Фактический TTS_STOP (таймер debounce); после него MEDIA-пакеты ждут ещё MEDIA_AFTER_TTS_MS. */
+    /** 实际的 TTS_STOP（debounce 定时器）；之后 MEDIA 包还要再等 MEDIA_AFTER_TTS_MS。 */
     private fun ttsStopNow() {
         stopAudio(CarlifeAudio.CH_TTS)
         mediaGuard = true
@@ -1255,7 +1255,7 @@ class AaBridgeCore(
         }
     }
 
-    /** Пускать ли MEDIA_DATA дальше; нет = данные отброшены (голос / ждём INIT после TTS). */
+    /** 是否放行 MEDIA_DATA；否 = 数据被丢弃（语音中 / TTS 后等待 INIT）。 */
     private fun admitMedia(): Boolean {
         val why = when {
             VOICE_SESSION_ENABLED && voice -> "идёт голосовая сессия"
@@ -1279,7 +1279,7 @@ class AaBridgeCore(
         if (MODULE_MUSIC_ENABLED) link.sendModuleStatus(CarlifeAudio.MODULE_MUSIC, status)
     }
 
-    /** Плеер AA сменил состояние (ch9). MUSIC по нему - только когда звук не по USB: иначе им владеет MEDIA INIT/PAUSE. */
+    /** AA 播放器切换了状态（ch9）。仅当声音不走 USB 时才据此发 MUSIC：否则 MUSIC 由 MEDIA INIT/PAUSE 掌控。 */
     private fun musicByState(playing: Boolean) {
         if (playing) releaseHuPause("AA заиграл")
         else log("BRIDGE AA плеер остановился: наш KEYCODE $KEYCODE_MEDIA_PAUSE ${ago(lastPauseKeyMs)}, ввод пользователя ${ago(lastUserInputMs)}, BT HFP ${ago(lastHfpConnectMs)}", true)
@@ -1289,7 +1289,7 @@ class AaBridgeCore(
         }
     }
 
-    /** Маршрут держит / отпускает NAVI. NAVI=0 уходит, только когда его не держит и TTS. */
+    /** 路线持有 / 释放 NAVI。只有 TTS 也未持有 NAVI 时，才发出 NAVI=0。 */
     private fun routeNavi(on: Boolean) {
         if (!ROUTE_NAVI_STATUS_ENABLED) {
             routeNaviHeld = false
@@ -1335,8 +1335,8 @@ class AaBridgeCore(
     }
 
     /**
-     * TTS закончился: NAVI больше не нужен ради него. Если маршрут уже кончился (последнее «Вы прибыли» играло
-     * после INACTIVE), NAVI=0 уходит здесь, иначе приборка остаётся в навигации до конца сессии.
+     * TTS 结束：不再需要为它保持 NAVI。如果路线已经结束（最后一句「您已到达」是在 INACTIVE
+     * 之后播放的），NAVI=0 就在这里发出，否则仪表盘会一直停留在导航画面直到会话结束。
      */
     private fun releaseTtsNavi() {
         ttsNaviHeld = false
@@ -1348,7 +1348,7 @@ class AaBridgeCore(
         }
     }
 
-    /** Сброс звукового состояния CarLife-сессии (START / закрытие): ссылка уже новая или мёртвая, ничего не шлём. */
+    /** 重置 CarLife 会话的声音状态（START / 关闭）：链接已是新实例或已失效，什么也不发。 */
     private fun resetAudio() {
         audioInited.clear()
         ttsStopTimer.cancel()
@@ -1380,7 +1380,7 @@ class AaBridgeCore(
         }
     }
 
-    // --- метаданные AA ---
+    // --- AA 元数据 ---
     @Synchronized
     override fun onMediaStatus(s: AaMediaStatus) = meta.onMediaStatus(s)
 
@@ -1399,7 +1399,7 @@ class AaBridgeCore(
     @Synchronized
     override fun onNavDistance(d: AaNavDistance) = meta.onNavDistance(d)
 
-    // --- видео AA ---
+    // --- AA 视频 ---
     @Synchronized
     override fun onCodecConfig(annexB: ByteArray) {
         aaVideoSeen = true
@@ -1462,7 +1462,7 @@ class AaBridgeCore(
         }
         val out = h295Prepare(b, types)
         if (!link.sendVideo(out)) {
-            // кадр потерян: декодер ГУ поплывёт, ждём новый IDR
+            // 帧丢失：车机解码器会错乱，等待新 IDR
             gotIdr = false
             waitSince = clockMs()
             drop("кадр не принят CarLife, жду новый IDR")
@@ -1484,7 +1484,7 @@ class AaBridgeCore(
         if (dropLogged <= 3 || dropLogged % 100 == 0L) log("BRIDGE отброшен AA-кадр (#$dropped): $why", false)
     }
 
-    /** Раз в 0.5 с: ключевой кадр, если после START долго нет IDR. */
+    /** 每 0.5 秒一次：START 后长时间无 IDR 时请求关键帧。 */
     @Synchronized
     fun tick() {
         logStats()
@@ -1501,7 +1501,7 @@ class AaBridgeCore(
         }
     }
 
-    // --- перекодирование ---
+    // --- 转码 ---
     private fun startTranscoder() {
         outGotIdr = false
         outputEnabled = false
@@ -1513,7 +1513,7 @@ class AaBridgeCore(
                 log("BRIDGE !!!!!! транскодер не поднялся (MediaCodec), откат на passthrough", true)
                 val g = videoMode
                 if (g is CustomVideoMode) {
-                    // TODO: откат на R720 пересозданием хоста; пока ГУ ждёт кадр out, а получит кадр подложки AA с полями
+                    // TODO：通过重建 host 回退到 R720；目前车机在等 out 帧，却会收到带边距的 AA 占位帧
                     log("BRIDGE !!!!!! своё разрешение ${g.outW}x${g.outH} без транскодера не получится: ГУ ждёт ${g.outW}x${g.outH}, " +
                         "а уйдёт кадр AA ${g.aaResolution} с полями ${g.marginW}x${g.marginH}. Выключите «Своё разрешение» или задайте другой размер", true)
                 }
@@ -1522,7 +1522,7 @@ class AaBridgeCore(
         }
         log("BRIDGE видео: режим перекодирование (AA -> декодер -> энкодер, повтор кадра 100 мс)", true)
         aaConfig?.let { t.feedConfig(it) }
-        t.requestSyncFrame()        // энкодер: ключевой кадр на START, как только пойдут кадры
+        t.requestSyncFrame()        // 编码器：只要帧开始流入，就在 START 时出关键帧
     }
 
     private fun stopTranscoderAsync() {
@@ -1540,7 +1540,7 @@ class AaBridgeCore(
         transcoder?.resetDecoder()
     }
 
-    /** AA-кадр -> декодер. До первого IDR после START/пересоздания кадры отбрасываются (декодеру нужен IDR). */
+    /** AA 帧 -> 解码器。START / 重建后第一个 IDR 之前的帧被丢弃（解码器需要 IDR）。 */
     private fun feedTranscoder(t: VideoTranscoder, b: ByteArray, types: List<Int>, ptsUs: Long) {
         if (!gotIdr) {
             if (5 !in types) {
@@ -1559,10 +1559,10 @@ class AaBridgeCore(
             waitSince = 0
             outputEnabled = true
             log("BRIDGE AA IDR -> декодер (${payload.size} Б, nal=${AnnexB.nalTypes(payload)})", true)
-            // переход с заглушки: энкодер начнёт с её кадра и растворит его в AA (до feedFrame, чтобы GL-нить взвела его раньше первого кадра)
+            // 从占位页过渡：编码器将以其帧开始，并把它渐变为 AA（在 feedFrame 之前调用，让 GL 线程先于第一帧将它备好）
             if (active != Source.AA) link.placeholderSnapshot()?.let { t.startIntro(it) }
             t.feedFrame(payload, ptsUs)
-            t.requestSyncFrame()    // первый кадр энкодера после включения выхода сразу IDR, без ожидания до ~1 с
+            t.requestSyncFrame()    // 输出开启后编码器的第一帧立即为 IDR，无需等到约 1 秒
             return
         }
         t.feedFrame(b, ptsUs)
@@ -1574,7 +1574,7 @@ class AaBridgeCore(
         log("BRIDGE энкодер: SPS+PPS ${csd.size} Б nal=${AnnexB.nalTypes(csd)}", false)
     }
 
-    /** Кадр энкодера -> CarLife. Первое сообщение источника = SPS+PPS+IDR (SPS/PPS склеиваем), P до IDR выбрасываем. */
+    /** 编码器帧 -> CarLife。源的第一条消息 = SPS+PPS+IDR（SPS/PPS 拼接），IDR 之前的 P 帧丢弃。 */
     @Synchronized
     override fun onEncoderFrame(data: ByteArray, key: Boolean) {
         if (!outputEnabled || !carlifeStarted) {
@@ -1617,7 +1617,7 @@ class AaBridgeCore(
             return
         }
         if (!link.sendVideo(data)) {
-            // кадр не принят (очередь CarLife переполнена): дальше P нельзя, до следующего IDR всё выбрасывается выше
+            // 帧未被接收（CarLife 队列已满）：之后不能发 P 帧，下一个 IDR 之前全部由上文丢弃
             outGotIdr = false
             encDropped++
             requestIdrOnOverflow()
@@ -1630,8 +1630,8 @@ class AaBridgeCore(
     }
 
     /**
-     * IDR у энкодера после отказа очереди CarLife - не чаще раза в 1.5 с (IdrThrottle). Иначе большие IDR (30-160 КБ)
-     * сами забивают медленный канал. Отказали - ждём уже запрошенный или ближайший естественный IDR (интервал 1 с).
+     * CarLife 队列拒绝之后，编码器的 IDR 频率不超过每 1.5 秒一次（IdrThrottle）。否则大 IDR（30-160 KB）
+     * 会自己堵死慢速通道。被拒后——等待已请求的或最近的自然 IDR（间隔 1 秒）。
      */
     private fun requestIdrOnOverflow() {
         val t = transcoder ?: return
@@ -1640,7 +1640,7 @@ class AaBridgeCore(
         t.requestSyncFrame()
     }
 
-    /** Битрейт энкодера на лету (адаптация под слив ГУ). false = транскодера нет (passthrough или ещё не создан). */
+    /** 动态调整编码器码率（适配车机的消费速率）。false = 没有转码器（passthrough 或尚未创建）。 */
     @Synchronized
     fun setEncoderBitrate(bps: Int): Boolean {
         val t = transcoder ?: return false
@@ -1648,7 +1648,7 @@ class AaBridgeCore(
         return true
     }
 
-    /** Целевой fps транскодера на лету (FRAME_RATE_CHANGE от ГУ). false = транскодера нет (passthrough или ещё не создан). */
+    /** 动态调整转码器目标 fps（来自车机的 FRAME_RATE_CHANGE）。false = 没有转码器（passthrough 或尚未创建）。 */
     @Synchronized
     fun setTargetFps(fps: Int): Boolean {
         val t = transcoder ?: return false
@@ -1671,7 +1671,7 @@ class AaBridgeCore(
         waitSince = clockMs()
     }
 
-    /** ГУ просит ключевой кадр (VIDEO_ENCODER_RESET и т.п.). */
+    /** 车机请求关键帧（VIDEO_ENCODER_RESET 等）。 */
     @Synchronized
     fun onCarlifeKeyFrameRequest() {
         val t = transcoder
@@ -1684,7 +1684,7 @@ class AaBridgeCore(
         log("BRIDGE ГУ просит ключевой кадр (${if (t != null) "sync frame энкодера" else "ждём IDR от AA"})", true)
     }
 
-    /** Раз в 5 с: режим, fps на выходе, статистика транскодера; в passthrough - длительность простоя AA (keepalive не шлём). */
+    /** 每 5 秒一次：模式、输出 fps、转码器统计；passthrough 下——AA 空闲时长（不发 keepalive）。 */
     private fun logStats() {
         if (!carlifeStarted) return
         val now = clockMs()
@@ -1717,7 +1717,7 @@ class AaBridgeCore(
     }
 
     companion object {
-        /** CarlifeThemeState.themeModes (SkinDisplayModeManager в CarLife 8.6.7). */
+        /** CarlifeThemeState.themeModes（CarLife 8.6.7 中的 SkinDisplayModeManager）。 */
         const val THEME_LIGHT = 0
         const val THEME_DARK = 1
         const val THEME_AUTO = 2
@@ -1726,51 +1726,51 @@ class AaBridgeCore(
             THEME_LIGHT -> "светлая"; THEME_DARK -> "тёмная"; THEME_AUTO -> "авто"; else -> "?"
         }
 
-        /** action&255 TOUCH_ACTION, которые уходят в AA (у AA те же коды PointerAction). */
+        /** action&255 中发送给 AA 的 TOUCH_ACTION（AA 有相同的 PointerAction 代码）。 */
         private val TOUCH_NAMES = mapOf(
             AapMessages.TOUCH_DOWN to "DOWN", AapMessages.TOUCH_UP to "UP", AapMessages.TOUCH_MOVE to "MOVE",
             AapMessages.TOUCH_POINTER_DOWN to "POINTER_DOWN", AapMessages.TOUCH_POINTER_UP to "POINTER_UP",
         )
 
-        // Флаги нового звукового поведения (по умолчанию включены): в машине отключаются по одному.
-        /** MODULE_STATUS NAVI=1 перед первым TTS_INIT, NAVI=0 при остановке звука. */
+        // 新声音行为的开关（默认开启）：在车上逐个关闭。
+        /** 第一个 TTS_INIT 之前发 MODULE_STATUS NAVI=1，声音停止时发 NAVI=0。 */
         @Volatile @JvmStatic var NAVI_STATUS_ENABLED = true
 
-        /** Debounce TTS_STOP (1500 мс) и очередь управляющих пакетов MEDIA до TTS_STOP+300 мс. */
+        /** TTS_STOP 去抖（1500 毫秒），MEDIA 控制包排队至 TTS_STOP+300 毫秒。 */
         @Volatile @JvmStatic var TTS_DEBOUNCE_ENABLED = true
 
-        /** Голосовая сессия Ассистента: MEDIA на паузу, MEDIA_DATA не пересылать, выход через 500 мс. */
+        /** 助手语音会话：MEDIA 暂停，不转发 MEDIA_DATA，500 毫秒后退出。 */
         @Volatile @JvmStatic var VOICE_SESSION_ENABLED = true
 
-        /** MODULE_STATUS MUSIC(3) вместе с MEDIA INIT/PAUSE/STOP и ответ на MODULE_CONTROL (CarLifeSession). */
+        /** MODULE_STATUS MUSIC(3) 随 MEDIA INIT/PAUSE/STOP 一起发送，并应答 MODULE_CONTROL（CarLifeSession）。 */
         @Volatile @JvmStatic var MODULE_MUSIC_ENABLED = true
 
-        /** onAudioStop(MEDIA) шлёт MEDIA_PAUSE (как MD) вместо MEDIA_STOP; выключено = старое поведение. */
+        /** onAudioStop(MEDIA) 发送 MEDIA_PAUSE（像 MD 那样）而非 MEDIA_STOP；关闭 = 旧行为。 */
         @Volatile @JvmStatic var MEDIA_PAUSE_ENABLED = true
 
         /**
-         * MODULE_STATUS NAVI=1 на весь маршрут (MetaRelay): без него приборка Honda Vezel пишет «Turn by turn waiting
-         * for your smartphone». Desay G6S (Mazda CX-5) с NAVI=1 глушит штатное радио при входе в CarLife (лог Ивана
-         * 2026-10-12), там NAVI=1 только вокруг TTS (huDesayG6S). Выключено = NAVI=1 только вокруг TTS на всех ГУ.
+         * MODULE_STATUS NAVI=1 覆盖整个路线（MetaRelay）：没有它，Honda Vezel 的仪表盘会显示「Turn by turn waiting
+         * for your smartphone」。Desay G6S（Mazda CX-5）在进入 CarLife 时 NAVI=1 会压低原厂收音机（Ivan 的日志，
+         * 2026-10-12），那里只在 TTS 前后发 NAVI=1（huDesayG6S）。关闭 = 所有车机都只在 TTS 前后发 NAVI=1。
          */
         @Volatile @JvmStatic var ROUTE_NAVI_STATUS_ENABLED = true
 
-        /** ГУ ушло на свой источник (MODULE_CONTROL MUSIC=0): AA на паузу; на START play не шлём. */
+        /** 车机切回自己的音源（MODULE_CONTROL MUSIC=0）：AA 暂停；START 时不发 play。 */
         @Volatile @JvmStatic var HU_MUSIC_FOLLOW_ENABLED = true
 
-        /** Desay G6S: MUSIC=1 после нашей паузы по MUSIC=0 - AA play (KEYCODE 126) и ответ MUSIC=1. */
+        /** Desay G6S：我们因 MUSIC=0 暂停之后收到 MUSIC=1——发 AA play（KEYCODE 126）并应答 MUSIC=1。 */
         @Volatile @JvmStatic var HU_MUSIC_RESUME_ENABLED = true
 
-        /** Сколько отвечать MUSIC=1 на пачку MUSIC=1 после нашего play, пока MEDIA INIT ещё не пришёл. */
+        /** 在我们的 play 之后、MEDIA INIT 尚未到达期间，对一串 MUSIC=1 应答 MUSIC=1 的时长。 */
         const val HU_RESUME_ANSWER_MS = 3_000L
 
         /**
-         * Mazda CX-5: AA сам запускает музыку через 5-9 с после BT_HFP_CONNECTION. Пока ГУ на своём источнике, такой play
-         * (в окне после HFP, без ввода с ГУ) паузу не снимает, а снова получает KEYCODE 127.
+         * Mazda CX-5：AA 会在 BT_HFP_CONNECTION 之后 5-9 秒自行启动音乐。车机还停在自家音源上时，这种 play
+         *（在 HFP 之后的窗口内、无车机输入）不会解除暂停，而是再次收到 KEYCODE 127。
          */
         @Volatile @JvmStatic var BT_AUTOPLAY_GUARD_ENABLED = true
 
-        /** Воздух, VW BT 1420: START после PAUSE сразу с IDR энкодера (декодер жив), без ожидания IDR от AA. */
+        /** 无线模式，VW BT 1420：PAUSE 之后的 START 直接用编码器的 IDR（解码器仍存活），不等待 AA 的 IDR。 */
         @Volatile @JvmStatic var AIR_WARM_RESUME_ENABLED = true
 
         const val BT_AUTOPLAY_WINDOW_MS = 20_000L
@@ -1782,16 +1782,16 @@ class AaBridgeCore(
         const val VOICE_EXIT_DELAY_MS = 500L
         private const val TTS_DIAG_PACKETS = 3
         /**
-         * Пре-ролл тишины TTS по умолчанию (Авто) на VW 20082120/20082122/20082134 (h222); 16 кГц моно 16 бит, куски как у Baidu.
-         * 400 мс взяты без измерений (шипение начала подсказки на CNS3), длительность подбирается настройкой [TtsPreroll].
+         * VW 20082120/20082122/20082134（h222）上默认（自动）的 TTS 静音预填充；16 kHz 单声道 16 位，分块同 Baidu。
+         * 400 毫秒未经测量取定（CNS3 提示音开头有嘶嘶声），时长由设置 [TtsPreroll] 调整。
          */
         const val TTS_PREROLL_MS = 400
         private const val TTS_BYTES_PER_SEC = 16000 * 2
         private const val TTS_PREROLL_CHUNK = 4096
-        /** Авто-размер пакета речи на VW CNS2 Delphi (h425): заикание ответа ассистента ушло при MAX_CHUNK/10; AA отдаёт речь по 2048 Б. */
+        /** VW CNS2 Delphi（h425）上的自动语音包大小：MAX_CHUNK/10 时助手应答的结巴消失；AA 按 2048 字节吐出语音。 */
         private const val VOICE_CHUNK_DELPHI = 1024
 
-        /** Android KEYCODE_SEARCH: в AA запускает голосового ассистента. */
+        /** Android KEYCODE_SEARCH：在 AA 中启动语音助手。 */
         const val KEYCODE_SEARCH = 84
         const val VOICE_KEY_DEBOUNCE_MS = 500L
         const val KEYCODE_MEDIA_PLAY = 126
@@ -1801,12 +1801,12 @@ class AaBridgeCore(
         const val KEYCODE_ENDCALL = 6
         const val HARD_KEY_SEEK_SUB = 0x0F
         const val HARD_KEY_SEEK_ADD = 0x10
-        /** VW CNS2 Delphi 20082114: удержание вперёд/назад приходит как keycode 0 (Дмитрий, 24.10). */
+        /** VW CNS2 Delphi 20082114：长按向前/向后会以 keycode 0 到达（Dmitry，24.10）。 */
         const val HARD_KEY_SEEK_HOLD = 0
 
         /**
-         * CarLife hard key (HUJ/CommonParams) -> Android KeyEvent; все значения есть в AapMessages.KEYCODES_SUPPORTED.
-         * Громкость, HOME, MEDIA/RADIO/NAVI и цифры не мапим: их обрабатывает само ГУ либо аналога нет.
+         * CarLife 硬按键（HUJ/CommonParams）-> Android KeyEvent；所有值都在 AapMessages.KEYCODES_SUPPORTED 中。
+         * 音量、HOME、MEDIA/RADIO/NAVI 和数字键不做映射：车机自己处理，或者没有对应项。
          */
         val HARD_KEY_TO_ANDROID: Map<Int, Int> = mapOf(
             0x10 to 87,     // SEEK_ADD -> MEDIA_NEXT
@@ -1821,16 +1821,16 @@ class AaBridgeCore(
             0x16 to 22,     // MOVE_RIGHT -> DPAD_RIGHT
             0x17 to 19,     // MOVE_UP -> DPAD_UP
             0x18 to 20,     // MOVE_DOWN -> DPAD_DOWN
-            0x21 to KEYCODE_SEARCH, // VR_START -> голосовой ассистент
-            0x1E to 3,      // MAIN -> HOME (панель приложений)
-            0x09 to 209,    // MEDIA -> MUSIC (медиаплеер)
-            0x0B to 65538,  // NAVI -> AA NAVIGATION (код из KEY_BINDING_REQUEST AA)
+            0x21 to KEYCODE_SEARCH, // VR_START -> 语音助手
+            0x1E to 3,      // MAIN -> HOME（应用面板）
+            0x09 to 209,    // MEDIA -> MUSIC（媒体播放器）
+            0x0B to 65538,  // NAVI -> AA NAVIGATION（来自 KEY_BINDING_REQUEST AA 的代码）
         )
 
-        /** Поворот шайбы (Mazda Commander и т.п.) -> rotary AA: фокус по спискам, выбор — OK (DPAD_CENTER). */
+        /** 旋钮（Mazda Commander 等）-> AA rotary：在列表间移动焦点，OK（DPAD_CENTER）确认。 */
         val HARD_KEY_TO_ROTARY: Map<Int, Int> = mapOf(
-            0x06 to 1,      // SELECTOR_NEXT -> по часовой
-            0x07 to -1,     // SELECTOR_PREVIOUS -> против часовой
+            0x06 to 1,      // SELECTOR_NEXT -> 顺时针
+            0x07 to -1,     // SELECTOR_PREVIOUS -> 逆时针
         )
 
         const val TEXT_CONNECTING = "Подключаю Android Auto..."
@@ -1839,50 +1839,50 @@ class AaBridgeCore(
         const val TEXT_AA_LOST = "Android Auto отключился, переподключаю..."
         const val DESAY_MANUFACTURER = "Desay SV Automotive"
         const val DESAY_G6S_MODEL = "G6S"
-        const val DESAY_G6S_CHANNEL = "20622116"          // STATISTIC_INFO.channel у Mazda CX-5; Vezel - 20832125, другая Mazda - 21520001
-        /** Префиксы STATISTIC_INFO.channel у Honda (CarLife 1.1.0, HU_INFO пустой, BT «Honda HFT»): 2077xxxx (Civic 11, UR-V), 2083xxxx (Vezel и др.). */
+        const val DESAY_G6S_CHANNEL = "20622116"          // Mazda CX-5 的 STATISTIC_INFO.channel；Vezel - 20832125，另一台 Mazda - 21520001
+        /** 本田 STATISTIC_INFO.channel 的前缀（CarLife 1.1.0，HU_INFO 为空，BT「Honda HFT」）：2077xxxx（Civic 11、UR-V），2083xxxx（Vezel 等）。 */
         val HONDA_CHANNEL_PREFIXES = listOf("2077", "2083")
-        /** Honda: NAVI=1 моложе этого и без стрелок после него - переход 0->1 ещё свежий, перед первым SHOW не перевзводим. */
-        const val NAVI_REARM_FRESH_MS = 5000L    // первый TURN_EVENT от AA после старта маршрута приходит через ~2 с
+        /** 本田：NAVI=1 晚于此时长且其后没有出现箭头——0->1 跳变仍是新鲜的，在首个 SHOW 之前不重新置位。 */
+        const val NAVI_REARM_FRESH_MS = 5000L    // 路线开始后 AA 的首个 TURN_EVENT 约 2 秒到达
 
         fun isHondaChannel(channel: String?) =
             channel != null && channel.length == 8 && HONDA_CHANNEL_PREFIXES.any { channel.startsWith(it) }
-        const val HONDA_20772121_CHANNEL = "20772121"     // Honda Civic 11 2023 (Китай, h295): после камеры/меню ГУ не просит IDR
-        /** Mazda Connect 2 (Китай, CarLife 1.0, HU_INFO из заглушек, h238/h359): VIDEO_DATA 16163 Б прошёл, 16518 и 19104 Б - ГУ перестала читать USB. */
+        const val HONDA_20772121_CHANNEL = "20772121"     // 本田 Civic 11 2023（中国，h295）：摄像头/菜单之后车机不请求 IDR
+        /** Mazda Connect 2（中国，CarLife 1.0，HU_INFO 为占位值，h238/h359）：VIDEO_DATA 16163 字节可通过，16518 和 19104 字节——车机停止读取 USB。 */
         const val MAZDA_20622111_CHANNEL = "20622111"
         const val MAZDA_20622111_MAX_VIDEO_PACKET = 15_000
-        const val MAZDA_20622111_ART_BYTES = 12_000          // обложка в MEDIA_INFO: весь пакет должен остаться < 15000 Б
-        const val MAZDA_20622111_CEILING_BPS = 1_500_000  // IDR поменьше на случай, если ГУ не склеивает куски
-        const val VW_20082120_CHANNEL = "20082120"        // VW, protocol 1.0, versionName="RADIO" (h93)
-        const val VW_CNS3_20082122_CHANNEL = "20082122"   // VW CNS3 (Tharu и др.): рвёт USB через ~5,6 с PAUSE без heartbeat (h222)
-        const val VW_CNS3_20082134_CHANNEL = "20082134"   // VW CNS3 Tiguan L Pro: рвёт CarLife по Wi-Fi через ~5,1-5,7 с PAUSE (h224)
-        const val VW_CNS2_20082114_CHANNEL = "20082114"   // VW CNS2 Delphi (Tharu 2020): рвёт USB через 6-8 с PAUSE (h425)
-        const val VW_20082138_CHANNEL = "20082138"        // VW ID (h196): HU_INFO manufacturer=model="VW BT 1538"
-        const val VW_BT_1420_MANUFACTURER = "VW BT 1420"  // VW (Павел): HU_INFO manufacturer=model, канал 20082138
+        const val MAZDA_20622111_ART_BYTES = 12_000          // MEDIA_INFO 中的封面：整个包必须保持在 < 15000 字节
+        const val MAZDA_20622111_CEILING_BPS = 1_500_000  // IDR 更小，以防车机不拼接分片
+        const val VW_20082120_CHANNEL = "20082120"        // VW，协议 1.0，versionName="RADIO"（h93）
+        const val VW_CNS3_20082122_CHANNEL = "20082122"   // VW CNS3（Tharu 等）：无 heartbeat 的 PAUSE 约 5.6 秒后断开 USB（h222）
+        const val VW_CNS3_20082134_CHANNEL = "20082134"   // VW CNS3 Tiguan L Pro：无 heartbeat 的 PAUSE 约 5.1-5.7 秒后断开 Wi-Fi CarLife（h224）
+        const val VW_CNS2_20082114_CHANNEL = "20082114"   // VW CNS2 Delphi（Tharu 2020）：PAUSE 6-8 秒后断开 USB（h425）
+        const val VW_20082138_CHANNEL = "20082138"        // VW ID（h196）：HU_INFO manufacturer=model="VW BT 1538"
+        const val VW_BT_1420_MANUFACTURER = "VW BT 1420"  // VW（Pavel）：HU_INFO manufacturer=model，通道 20082138
         const val VW_20082138_MANUFACTURER = "VW BT 1538"
-        const val HYUNDAI_CN7_PRODUCT = "wp_cn7cpe_cn"    // HU_INFO.product Hyundai Elantra CN7 (h218): manufacturer QTI, model "sm6150_au for arm64"
-        const val PIONEER_MANUFACTURER = "Pioneer"        // HU_INFO Pioneer RM56E8B (Dongfeng DF6, h277): manufacturer="Pioneer" model="RM56E8B"
+        const val HYUNDAI_CN7_PRODUCT = "wp_cn7cpe_cn"    // HU_INFO.product 现代 Elantra CN7（h218）：manufacturer QTI，model "sm6150_au for arm64"
+        const val PIONEER_MANUFACTURER = "Pioneer"        // 车机 Pioneer RM56E8B（东风 DF6，h277）：manufacturer="Pioneer" model="RM56E8B"
         const val PIONEER_RM56_MODEL = "RM56E8B"
-        const val PIONEER_RM56_CEILING_BPS = 800_000      // 4-5 Мбит/с рвут USB за 25-30 с, 2 Мбит/с - 195 с, 800 кбит/с - 1301 с; test1: 1 Мбит/с + музыка 32 кГц (~1 Мбит/с PCM) рвёт за 23-140 с
+        const val PIONEER_RM56_CEILING_BPS = 800_000      // 4-5 Mbps 在 25-30 秒内断开 USB，2 Mbps - 195 秒，800 kbps - 1301 秒；test1：1 Mbps + 32 kHz 音乐（约 1 Mbps PCM）在 23-140 秒内断开
         const val PIONEER_RM56_MAX_FPS = 10
         const val MEDIA_RATE = 48000
         const val MEDIA_RATE_CN7 = 32000
-        const val MEDIA_RATE_PIONEER_RM56 = 22050         // h277: музыка 32 кГц добавляла на USB ~1 Мбит/с, 22,05 кГц - вдвое меньше
+        const val MEDIA_RATE_PIONEER_RM56 = 22050         // h277：32 kHz 音乐在 USB 上增加约 1 Mbps，22.05 kHz - 少一半
         const val KEYFRAME_WAIT_MS = 1500L
         const val KEYFRAME_RETRY_MS = 4000L
 
-        /** h295: тач на ГУ 20772121 при IDR старше этого порога в passthrough - вероятно, ГУ сбросил декодер (камера/меню). */
+        /** h295：passthrough 下 IDR 老于该阈值时车机 20772121 上的触摸——很可能车机重置了解码器（摄像头/菜单）。 */
         const val H295_IDR_STALE_MS = 2500L
         const val H295_TRIGGER_MIN_MS = 3000L
-        const val H295_TOUCH_IDLE_MS = 4000L      // пауза в тачах от ГУ перед триггером (камера/меню)
-        const val H295_WAIT_GIVEUP_MS = 10_000L   // после цикла ждём IDR для лога и склейки SPS/PPS не дольше этого
+        const val H295_TOUCH_IDLE_MS = 4000L      // 触发前车机触摸的停顿（摄像头/菜单）
+        const val H295_WAIT_GIVEUP_MS = 10_000L   // 循环之后等待 IDR 用于日志和 SPS/PPS 拼接，不超过此时长
         private const val NEVER = Long.MIN_VALUE / 4
     }
 }
 
 /**
- * Держит AA-сессию моста: подключается к серверу ГУ, при отказе (connection refused) повторяет раз в
- * 3 с, при завершении сессии сообщает ядру и переподключается. Сервер ГУ включает и перезапускает пользователь.
+ * 维持桥接的 AA 会话：连接到车机服务器，连接被拒（connection refused）时每 3 秒重试一次，
+ * 会话结束时通知核心并重新连接。车机服务器由用户启动和重启。
  */
 class AaConnector(
     private val core: AaBridgeCore,
@@ -1907,7 +1907,7 @@ class AaConnector(
         t.start()
     }
 
-    /** Корректно закрыть AA (ByeBye, EOF, close) и завершить нить; onDone вызывается из отдельной нити. */
+    /** 正确关闭 AA（ByeBye、EOF、close）并结束线程；onDone 从单独线程调用。 */
     fun stop() = stop {}
 
     override fun stop(onDone: () -> Unit) {
@@ -1923,7 +1923,7 @@ class AaConnector(
         }, "aa-connector-stop").start()
     }
 
-    /** Подряд идущие подключения, закрытые AA до установления сессии (connect+EOF). */
+    /** 连续发生的、在会话建立前被 AA 关闭的连接（connect+EOF）。 */
     @Volatile var bareEofs = 0
         private set
 
@@ -1931,7 +1931,7 @@ class AaConnector(
         if (n <= 0) retryMs else minOf(retryMs shl minOf(n - 1, 4), BARE_EOF_BACKOFF_MAX_MS).coerceAtLeast(retryMs)
 
     private fun loop() {
-        failures.reset()      // отказы прошлой поездки в эту не переносим
+        failures.reset()      // 上次行程的失败不计入本次
         try {
             connectLoop()
         } finally {
@@ -1941,7 +1941,7 @@ class AaConnector(
 
     private fun connectLoop() {
         var unavailableLogged = false
-        // решение о звуке зависит от FEATURE_CONFIG ГУ (BT-режим): ждём его до 2.5 с перед первым подключением
+        // 声音方案取决于车机的 FEATURE_CONFIG（BT 模式）：首次连接前最多等它 2.5 秒
         if (core.usbAudioEnabled && core.expectFeatureConfig) {
             var waited = 0
             while (!core.featureConfigSeen && waited < 2500 && !stopping) {
@@ -1951,9 +1951,9 @@ class AaConnector(
             log("BRIDGE FEATURE_CONFIG ${if (core.featureConfigSeen) "получен" else "не пришёл за $waited мс"}, звук по USB: ${core.audioViaUsb}", true)
         }
         while (!stopping) {
-            // ручная проба сервера (AaServerCheck, кнопка в «Для разработчиков») не должна держать сервер 5277, когда подключаемся мы
+            // 手动探测服务器（AaServerCheck，「开发者选项」里的按钮）在我们连接时不应占用 5277 服务器
             AaServerCheck.beforeBridgeConnect()
-            if (stopping) break      // Стоп мог прийти за время ожидания: подключаться уже нельзя, сессию на handshake не оборвать штатно
+            if (stopping) break      // 等待期间可能收到停止指令：不能再连接了，handshake 中的会话无法正常中断
             val ended = CountDownLatch(1)
             var endReason = ""
             core.onAaConnecting()
@@ -1969,7 +1969,7 @@ class AaConnector(
             while (!ended.await(500, TimeUnit.MILLISECONDS)) {
                 if (stopping) s.requestStop("мост остановлен")
                 core.tick()
-                // пассивная диагностика для главного экрана: сессия установилась - сервер жив, прежние отказы не в счёт
+                // 为主屏幕做的被动诊断：会话已建立——服务器存活，之前的失败不计入
                 if (s.established) {
                     if (!establishedNoted) failures.onEstablished()
                     establishedNoted = true
@@ -1985,7 +1985,7 @@ class AaConnector(
                 s.connected && endReason.startsWith(AapSession.NO_VERSION_RESPONSE_REASON) -> failures.onNoVersionResponse()
                 else -> failures.reset()
             }
-            // на ГУ «Запустите сервер ГУ» только когда он правда не отвечает; короткий отказ после ByeBye - «Подключаю»
+            // 仅在车机确实无响应时才显示「启动车机服务器」；ByeBye 之后的短暂拒绝——显示「正在连接」
             if (failures.needsStart()) core.showStatus(AaBridgeCore.TEXT_START_SERVER)
             if (!s.connected) {
                 if (!unavailableLogged) {
@@ -2001,7 +2001,7 @@ class AaConnector(
                 if (s.established) {
                     bareEofs = 0
                 } else {
-                    // сервер принял TCP и сразу закрыл (h224): он жив, частые повторы лишь выкидывают AA на экран. Ждём дольше.
+                    // 服务器接受了 TCP 又立即关闭（h224）：它活着，频繁重试只会把 AA 弹回屏幕。等久一点。
                     bareEofs++
                 }
             }
@@ -2014,10 +2014,10 @@ class AaConnector(
     }
 
     companion object {
-        /** Потолок паузы между подключениями после голых EOF: 3, 6, 12, 24, 30 с. */
+        /** 裸 EOF 后连接间隔的上限：3、6、12、24、30 秒。 */
         const val BARE_EOF_BACKOFF_MAX_MS = 30_000L
 
-        /** Причина конца сессии при ECONNREFUSED (другие сбои connect - таймаут, EPERM - отказом сервера не считаем). */
+        /** ECONNREFUSED 时会话结束的原因（其他 connect 故障——超时、EPERM——不视为服务器拒绝）。 */
         private const val REFUSED_REASON = AapSession.UNAVAILABLE_REASON + "ConnectException"
     }
 }

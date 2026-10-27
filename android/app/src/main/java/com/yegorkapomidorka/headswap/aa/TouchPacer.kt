@@ -1,12 +1,11 @@
 package com.yegorkapomidorka.headswap.aa
 
 /**
- * Сглаживание пачек тача (h425, VW CNS2 Delphi 20082114). ГУ копит MOVE ~196 мс и отдаёт пачкой по 9-14 событий
- * за 5-20 мс: точки целые, время сбито, в AA скролл идёт рывками с частотой ~5 Гц. Первый MOVE пачки уходит сразу,
- * остальные раздаём равномерно на интервал между пачками: k-й - в момент начало + k * интервал / размер пачки. Размер
- * берём у текущей пачки и пересчитываем на каждое её событие: к первой отправке пачка обычно уже вся в очереди, а угадывать
- * по прошлой нельзя - на краях жеста пачки короче. Интервал - среднее по пачкам без пауз пальца. Цена - постоянная
- * задержка следования за пальцем на одну пачку. DOWN / UP / второй палец: сначала досылаем очередь, потом событие как есть.
+ * 触摸突发（burst）平滑（h425，VW CNS2 Delphi 20082114）。车机累积 MOVE 约 196 毫秒，然后在 5-20 毫秒内
+ * 以 9-14 个事件一批发出：点的坐标完整但时间被打乱，Android Auto 中滚动以约 5 Hz 的频率卡顿。每批的第一个
+ * MOVE 立即发出，其余的均匀分摊到两批之间的间隔：第 k 个在 开始 + k * 间隔 / 批次大小 时刻发出。批次大小取当前批
+ * 并随每个事件重新计算：首次发送时整批通常已全部入队，而按上一批猜测不可靠——手势边缘处批次更短。间隔取
+ * 无手指停顿各批次的平均值。代价是指尖跟踪固定延迟一批。DOWN / UP / 第二根手指：先补发队列，再原样发出该事件。
  */
 class TouchBurstPacer(
     private val clockMs: () -> Long,
@@ -22,10 +21,10 @@ class TouchBurstPacer(
     private var lastArrival = NEVER
     private var burstStart = NEVER
     private var burstSize = 0
-    private var sent = 0                       // сколько событий текущей пачки уже отправлено
+    private var sent = 0                       // 当前批次已发送的事件数
     private var interval = DEFAULT_INTERVAL_MS
 
-    /** Сколько пачек разглажено (для лога). */
+    /** 已平滑的批次数量（用于日志）。 */
     var bursts = 0
         private set
 
@@ -45,10 +44,10 @@ class TouchBurstPacer(
             if (burstStart != NEVER) {
                 if (burstSize > 1) bursts++
                 val gap = now - burstStart
-                // палец стоял (пачку-другую ГУ не прислала): в среднее не берём
+                // 手指停住了（车机一两批没发）：不计入平均值
                 if (gap <= interval * 3 / 2) interval = ((interval + gap + 1) / 2).coerceIn(MIN_INTERVAL_MS, MAX_INTERVAL_MS)
             }
-            // хвост прошлой пачки не успели раздать: досылаем, чтобы задержка не копилась
+            // 上一批的尾部还没来得及分发：补发，避免延迟累积
             flushLocked()
             burstStart = now
             burstSize = 1
@@ -61,7 +60,7 @@ class TouchBurstPacer(
         armLocked()
     }
 
-    /** Сессия закрыта: очередь и таймер выбрасываем. */
+    /** 会话已关闭：丢弃队列和定时器。 */
     fun reset() = synchronized(lock) {
         queue.clear()
         cancelTickLocked()
@@ -69,7 +68,7 @@ class TouchBurstPacer(
         interval = DEFAULT_INTERVAL_MS
     }
 
-    /** Таймер на следующее событие очереди по текущему размеру пачки; новое событие пачки переставляет его раньше. */
+    /** 为队列中下一个事件按当前批次大小设置定时器；批次新事件会将其提前。 */
     private fun armLocked() {
         cancelTickLocked()
         if (queue.isEmpty()) return
@@ -109,7 +108,7 @@ class TouchBurstPacer(
     }
 
     companion object {
-        // лог h425 22.10 (66 пачек): внутри пачки зазоры 0-4 мс, между пачками от 176 мс, интервал медиана 196 мс, p10-p90 191-199
+        // h425 日志 22.10（66 批）：批内间隔 0-4 ms，批间至少 176 ms，间隔中位数 196 ms，p10-p90 191-199
         const val BURST_GAP_MS = 7L
         const val DEFAULT_INTERVAL_MS = 196L
         const val MIN_INTERVAL_MS = 30L

@@ -1,133 +1,133 @@
-# Headswap — Android Auto on CarLife head units
+# Headswap — 在 CarLife 车机上运行 Android Auto
 
-**English.** Headswap is an Android app that runs Android Auto on head units that only support Baidu CarLife 2.0 over USB (common on Chinese-market cars). The phone talks to Android Auto's "head unit server" on 127.0.0.1:5277 as if it were a head unit, re-encodes the 1280x720 video, and presents itself to the car as a CarLife phone over USB (AOA). Touch is mapped 1:1, audio and microphone go over USB. No dongles. Verified on a 2024 Honda Vezel. Unofficial, not affiliated with Google, Baidu or Honda. GPL-3.0.
+**简体中文版。** Headswap 是一款 Android 应用，可让仅支持百度 CarLife 2.0（USB 连接，常见于中国市场的汽车）的车机运行 Android Auto。手机以「车机」的身份连接 Android Auto 的 head unit server（127.0.0.1:5277），将 1280x720 视频重新编码，并通过 USB（AOA）以 CarLife 手机的身份呈现给汽车。触摸映射为 1:1，音频和麦克风走 USB。无需任何外接硬件。已在 2024 款本田 Vezel 上验证。非官方项目，与 Google、百度或本田均无关联。GPL-3.0 协议。
 
-![Android Auto на штатной ГУ Honda Vezel](docs/screenshot.jpg)
+![Android Auto 在本田 Vezel 原厂车机上](docs/screenshot.jpg)
 
-## Что это и зачем
+## 这是什么，为什么
 
-На многих машинах китайского рынка в штатной ГУ есть только Baidu CarLife, а Android Auto нет. Обычно это лечат донглами или заменой ГУ. Headswap обходится без них: приложение на самом телефоне делает Android Auto «головным устройством» для самого себя и перекладывает картинку и управление в CarLife, который ГУ понимает.
+许多中国市场的汽车原厂车机只有百度 CarLife，没有 Android Auto。通常的解决办法是外接硬件或更换车机。Headswap 无需这些：手机上的应用让 Android Auto 自己充当「车机」，再把画面和控制转发给车机认识的 CarLife。
 
-## Как работает
+## 工作原理
 
 ```
-телефон:  Android Auto  <->  Headswap  <->  USB (AOA, CarLife 2.0)  <->  ГУ с CarLife
-          (сервер ГУ,         (мост)
+手机:  Android Auto  <->  Headswap  <->  USB (AOA, CarLife 2.0)  <->  带 CarLife 的车机
+          (车机服务器,          (桥接)
            127.0.0.1:5277)
 ```
 
-- Приложение подключается к «серверу головного устройства» Android Auto (режим разработчика AA) по TCP как head unit: версия, TLS, сервисы, видео H.264 1280x720.
-- Для ГУ оно выступает телефоном CarLife: переключается в USB-аксессуар (AOA), проходит рукопожатие CarLife 2.0 и отдаёт видео в канал VIDEO.
-- Видео перекодируется, кадр повторяется каждые 100 мс. Без этого ГУ рвёт USB на статичном экране.
-- Касания идут 1:1: координаты ГУ пересчитываются в кадр 1280x720 и уходят в AA как тач-события.
-- Звук AA и микрофон машины идут по USB (каналы CarLife), не по Bluetooth.
-- Сервер ГУ в Android Auto пользователь включает сам, один раз: приложение только открывает настройки AA (⋮ → «Вкл. сервер головного устр-ва»). Сервер одноразовый, поэтому Headswap его не выключает и сессию AA без нужды не закрывает.
+- 应用以车机身份通过 TCP 连接 Android Auto 的「车机服务器」（AA 开发者模式）：版本协商、TLS、服务发现、H.264 1280x720 视频。
+- 对车机而言，它是一台 CarLife 手机：切换为 USB 配件（AOA），完成 CarLife 2.0 握手，并把视频送入 VIDEO 通道。
+- 视频被重新编码，每 100 毫秒重复一次画面。否则车机在静止画面上会断开 USB。
+- 触摸 1:1 映射：车机坐标换算到 1280x720 画面后作为触摸事件发给 AA。
+- AA 音频和车内麦克风走 USB（CarLife 通道），不走蓝牙。
+- Android Auto 的车机服务器由用户手动开启一次：应用只负责打开 AA 设置（⋮ →「开启车机服务器」）。服务器是一次性的，所以 Headswap 不会关闭它，也非必要不结束 AA 会话。
 
-## Совместимость
+## 兼容性
 
-Подтверждённые автомобили (штатные ГУ с Baidu CarLife, все для рынка Китая):
+已确认的车型（带百度 CarLife 的原厂车机，均为中国市场版本）：
 
-| Машина | Baidu CarLife |
+| 车型 | Baidu CarLife |
 | --- | --- |
-| Dongfeng Peugeot 5008 2024 | — |
-| Honda Breeze, 2 поколение | — |
-| Honda CR-V, 6 поколение, дорестайл | — |
-| Honda CR-V 2026 1.5T | 2.0 |
-| Honda CR-V 2026 гибрид (работает с оговорками) | — |
-| Honda Vezel 2022–2024 (GAC Honda) | 2.0 |
-| Hyundai Elantra, 7 поколение, дорестайл | — |
-| Hyundai ix35 2021 | — |
-| Jetta VS5/VS7 (только с Baidu CarLife, версия с J-Link не поддерживается) | 2.0 |
-| Kia K3 2023 | — |
-| Kia Sportage Ace | — |
-| Mazda CX-5 2025–2026 | 2.0 |
-| Mazda CX-50 | — |
-| Mitsubishi Outlander 4 2022 | — |
-| Skoda Kamiq GT 2021 | — |
-| Skoda Octavia Pro | 2.0 |
-| Toyota Corolla Cross 2024–2025 | 2.0 |
-| Toyota Levin | — |
-| Volkswagen Golf 8, комплектация Pro, 2021 | — |
-| Volkswagen ID.Unyx | — |
-| Volkswagen Lamando L | — |
-| Volkswagen Sagitar 2021–2022, дорестайл | 2.0 |
-| Volkswagen T-Roc рестайлинг 2026 | — |
-| Volkswagen Tharu XR 2025–2026 | 2.1 |
-| Volkswagen Tiguan L Pro / Teramont Pro | — |
+| 东风标致 5008 2024 | — |
+| 本田皓影，第 2 代 | — |
+| 本田 CR-V，第 6 代，改款前 | — |
+| 本田 CR-V 2026 1.5T | 2.0 |
+| 本田 CR-V 2026 混动（有保留地工作） | — |
+| 本田 Vezel 2022–2024（广汽本田） | 2.0 |
+| 现代伊兰特，第 7 代，改款前 | — |
+| 现代 ix35 2021 | — |
+| 捷达 VS5/VS7（仅百度 CarLife 版，J-Link 版不支持） | 2.0 |
+| 起亚 K3 2023 | — |
+| 起亚 Sportage Ace | — |
+| 马自达 CX-5 2025–2026 | 2.0 |
+| 马自达 CX-50 | — |
+| 三菱欧蓝德 4 2022 | — |
+| 斯柯达 Kamiq GT 2021 | — |
+| 斯柯达明锐 Pro | 2.0 |
+| 丰田卡罗拉 Cross 2024–2025 | 2.0 |
+| 丰田 Levin | — |
+| 大众高尔夫 8，Pro 配置，2021 | — |
+| 大众 ID.Unyx | — |
+| 大众凌渡 L | — |
+| 大众速腾 2021–2022，改款前 | 2.0 |
+| 大众 T-Roc 改款 2026 | — |
+| 大众途岳 XR 2025–2026 | 2.1 |
+| 大众途观 L Pro / 途昂 Pro | — |
 
-Актуальный список — на [странице проекта](https://yegorkapomidorka.com/headswap/).
+最新列表见[项目页面](https://yegorkapomidorka.com/headswap/)。
 
-Отчёты о других машинах приветствуются (Telegram и 4PDA ниже). Минимальная версия Android: 10 (API 29).
+欢迎提交其他车型的报告（Telegram 和 4PDA 见下文）。最低 Android 版本：10（API 29）。
 
-## Установка (для пользователей)
+## 安装（面向用户）
 
-1. Скачайте APK: https://yegorkapomidorka.com/headswap/
-2. В Android Auto включите режим разработчика (Настройки -> 10 тапов по «Версия») и в меню «три точки» пункт «Сервер головного устройства» (Start head unit server). Включать нужно вручную (кнопка «Открыть Android Auto» в приложении): службы спецвозможностей больше нет.
-3. Подключите телефон к ГУ по USB.
+1. 下载 APK：https://yegorkapomidorka.com/headswap/
+2. 在 Android Auto 中开启开发者模式（设置 -> 连点「版本」10 次），然后在「三点」菜单中开启「车机服务器」（Start head unit server）。需要手动开启（应用内的「打开 Android Auto」按钮）：无障碍服务已经没有了。
+3. 用 USB 线把手机连接到车机。
 
-Обновления: в версиях новее 1.1.10 Headswap сам находит новую версию в [релизах на GitHub](https://github.com/YegorkaPomidorka/headswap/releases) и ставит её поверх старой, настройки сохраняются. Отключается в Настройках → Обновления. При первом обновлении Android попросит разрешить установку приложений из Headswap.
+更新：在 1.1.10 之后的版本中，Headswap 会自动在 [GitHub Releases](https://github.com/YegorkaPomidorka/headswap/releases) 中查找新版本并覆盖安装，设置会保留。可在 设置 → 更新 中关闭。首次更新时 Android 会请求允许从 Headswap 安装应用。
 
-## Сборка из исходников
+## 从源码构建
 
-Нужен JDK 17.
+需要 JDK 17。
 
 ```
 cd android
 ./gradlew assembleDebug
 ```
 
-Release-подпись читается из `~/.android-keys/headswap-release.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`). Без этого файла собирается только debug.
+Release 签名从 `~/.android-keys/headswap-release.properties` 读取（`storeFile`、`storePassword`、`keyAlias`、`keyPassword`）。没有这个文件只能构建 debug 包。
 
-### Сертификат head unit
+### 车机证书
 
-Приложение не содержит сертификат в репозитории. Android Auto принимает от head unit только сертификат, подписанный Google Automotive Link. Публичные сертификат и ключ, которые используются в открытых проектах, лежат в:
+应用不包含仓库中的证书。Android Auto 只接受由 Google Automotive Link 签发的车机证书。开放项目中使用的公开证书和密钥位于：
 
-- [opencardev/aasdk](https://github.com/opencardev/aasdk) (продолжение [f1xpl/aasdk](https://github.com/f1xpl/aasdk)): JVC Kenwood, `src/Messenger/Cryptor.cpp` (строки 253-299), он же в `cert/headunit.crt` и `cert/headunit.key`;
-- [andreknieriem/headunit-revived](https://github.com/andreknieriem/headunit-revived): `app/src/main/res/raw/cert` и `privkey`.
+- [opencardev/aasdk](https://github.com/opencardev/aasdk)（[f1xpl/aasdk](https://github.com/f1xpl/aasdk) 的延续）：JVC Kenwood，`src/Messenger/Cryptor.cpp`（第 253-299 行），同样位于 `cert/headunit.crt` 和 `cert/headunit.key`；
+- [andreknieriem/headunit-revived](https://github.com/andreknieriem/headunit-revived)：`app/src/main/res/raw/cert` 和 `privkey`。
 
-Положите PEM-файлы так:
+将 PEM 文件放到如下位置：
 
 ```
 android/app/src/main/assets/aa/jvc/cert.pem
 android/app/src/main/assets/aa/jvc/key.pem
 ```
 
-и/или (набор из headunit-revived)
+和/或（headunit-revived 的证书组）
 
 ```
 android/app/src/main/assets/aa/hur/cert.pem
 android/app/src/main/assets/aa/hur/key.pem
 ```
 
-Для эмулятора на ПК то же самое в `pc-headunit/certs/jvc/` (и `hur/`). `*.pem` и `*.key` в `.gitignore`.
+PC 模拟器使用同样的文件，位于 `pc-headunit/certs/jvc/`（和 `hur/`）。`*.pem` 和 `*.key` 在 `.gitignore` 中。
 
-## Структура репозитория
+## 仓库结构
 
-- `android/`: приложение (Kotlin, пакет `com.yegorkapomidorka.headswap`): мост AA <-> CarLife (`BridgeService`, `CarLifeSession`, `CarLifeState`, `AppLog`), клиент AA (`aa/`), интерфейс (`ui/`).
-- `pc-headunit/`: эмулятор ГУ Android Auto на Python для отладки на ПК, см. [pc-headunit/README.md](pc-headunit/README.md).
-- `docs/`: спецификации протоколов: [aa-headunit.md](docs/aa-headunit.md) (Android Auto со стороны ГУ), [carlife-protocol.md](docs/carlife-protocol.md) (CarLife по AOA), [carlife-v2-handshake.md](docs/carlife-v2-handshake.md) (рукопожатие CarLife 2.0).
+- `android/`：应用（Kotlin，包名 `com.yegorkapomidorka.headswap`）：AA <-> CarLife 桥接（`BridgeService`、`CarLifeSession`、`CarLifeState`、`AppLog`）、AA 客户端（`aa/`）、界面（`ui/`）。
+- `pc-headunit/`：用于 PC 调试的 Python Android Auto 车机模拟器，见 [pc-headunit/README.md](pc-headunit/README.md)。
+- `docs/`：协议规范：[aa-headunit.md](docs/aa-headunit.md)（车机侧的 Android Auto）、[carlife-protocol.md](docs/carlife-protocol.md)（通过 AOA 的 CarLife）、[carlife-v2-handshake.md](docs/carlife-v2-handshake.md)（CarLife 2.0 握手）。
 
-## Ограничения
+## 限制
 
-- Звонки только через Bluetooth HFP: по USB они не идут.
-- Сервер ГУ в Android Auto одноразовый: после обрыва сессии его надо включить заново вручную.
-- HyperOS запрещает `adb input`, поэтому часть отладочных приёмов недоступна.
-- Протокол CarLife 2.0 реализован ровно настолько, насколько его требует проверенная ГУ (без аутентификации и шифрования). ГУ, которые их требуют, не заработают.
-- Android Auto может в любой момент поменять поведение сервера ГУ: это недокументированный режим разработчика.
+- 通话只能通过蓝牙 HFP：不经过 USB。
+- Android Auto 的车机服务器是一次性的：会话中断后需要手动重新开启。
+- HyperOS 禁止 `adb input`，因此部分调试手段不可用。
+- CarLife 2.0 协议仅按已验证车机所需的最小程度实现（无认证和加密）。要求认证和加密的车机将无法工作。
+- Android Auto 随时可能改变车机服务器的行为：这是一个未文档化的开发者模式。
 
-## Ссылки
+## 链接
 
-- Сайт и APK: https://yegorkapomidorka.com/headswap/
-- Релизы на GitHub (те же APK, из них обновляется приложение): https://github.com/YegorkaPomidorka/headswap/releases
-- Telegram: https://t.me/headswap
-- Тема на 4PDA: https://4pda.to/forum/index.php?showtopic=1127415
+- 网站和 APK：https://yegorkapomidorka.com/headswap/
+- GitHub Releases（同样的 APK，应用从中自更新）：https://github.com/YegorkaPomidorka/headswap/releases
+- Telegram：https://t.me/headswap
+- 4PDA 帖子：https://4pda.to/forum/index.php?showtopic=1127415
 
-## Дисклеймер
+## 免责声明
 
-Неофициальный проект. Не связан с Google, Baidu и Honda; Android Auto, CarLife и Honda являются товарными знаками их владельцев. Используйте на свой риск. Не отвлекайтесь за рулём.
+非官方项目。与 Google、百度、本田无关；Android Auto、CarLife 和本田均为其各自所有者的商标。使用风险自负。驾驶时请勿分心。
 
-## Лицензия
+## 许可证
 
-GNU GPL v3.0, см. [LICENSE](LICENSE). © 2026 Yegor (yegorkapomidorka).
+GNU GPL v3.0，见 [LICENSE](LICENSE)。© 2026 Yegor (yegorkapomidorka)。
 
-Исключение: `pc-headunit/proto/*.proto` основаны на определениях протокола из [headunit-revived](https://github.com/andreknieriem/headunit-revived) (AGPL-3.0). Всё остальное - GPL-3.0.
+例外：`pc-headunit/proto/*.proto` 基于 [headunit-revived](https://github.com/andreknieriem/headunit-revived)（AGPL-3.0）的协议定义。其余均为 GPL-3.0。

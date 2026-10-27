@@ -17,9 +17,9 @@ import com.yegorkapomidorka.headswap.aa.AapFraming as F
 import com.yegorkapomidorka.headswap.aa.AapMessages as M
 
 /**
- * Живая AapSession против скриптованного "телефона" (сервер AAP, написан отдельно от AapSession)
- * по loopback-сокету: version, TLS-сервер с запросом клиентского сертификата, service discovery,
- * каналы, видео с фрагментацией, ping, фокус, touch, ByeBye в обе стороны и чистый конец сокета.
+ * 通过 loopback socket，让真实的 AapSession 与脚本化的“手机”（独立于 AapSession 编写的 AAP 服务器）对跑：
+ * version、要求客户端证书的 TLS 服务器、service discovery、通道、带分片的视频、ping、焦点、touch、
+ * 双向 ByeBye，以及干净的 socket 收尾。
  */
 class AapSessionTest {
     open class Sink : AaVideoSink {
@@ -39,7 +39,7 @@ class AapSessionTest {
         }
     }
 
-    /** Приёмник с микрофоном: принимает open, считает open/close. */
+    /** 带麦克风的接收器：接受 open，统计 open/close。 */
     class MicSink : Sink(), AaMicSink {
         val opens = java.util.concurrent.atomic.AtomicInteger()
         val closes = CopyOnWriteArrayList<String>()
@@ -98,7 +98,7 @@ class AapSessionTest {
             }
         }
 
-        /** Следующее сообщение от HU (touch-события складываются отдельно). */
+        /** 来自 HU 的下一条消息（touch 事件单独收集）。 */
         fun recvMsg(stopWhen: (() -> Boolean)? = null): Triple<Int, Int, ByteArray>? {
             while (true) {
                 if (stopWhen != null && stopWhen()) return null
@@ -157,13 +157,13 @@ class AapSessionTest {
 
         private fun script() {
             sock.soTimeout = 15000
-            // version
+            // version 协商
             val f = recvFrame()
             assertEquals(0, f.chan)
             assertEquals(0x03, f.flags)
             assertArrayEquals(Golden.hex("0001 0001 0002"), f.body)
             sendPlain(M.VERSION_RESPONSE, Golden.hex("0001 0007 0000"))
-            // TLS в plain-кадрах
+            // TLS 走 plain 帧
             var firstOut = tls.handshakeStep(null)
             check(firstOut.isEmpty())
             while (!tls.handshakeDone) {
@@ -176,42 +176,42 @@ class AapSessionTest {
             assertEquals(0, auth.chan)
             assertArrayEquals(Golden["auth_complete"], F.buildFrame(0, auth.flags, auth.body))
 
-            // service discovery
+            // 服务发现
             sendMsg(0, M.SERVICE_DISCOVERY_REQUEST, AapPb().str(4, "Pixel").str(5, "Google").toByteArray())
             val sd = expect(0, M.SERVICE_DISCOVERY_RESPONSE)
             assertArrayEquals(Golden[if (fullAudio) "sdr_full" else "sdr_default"], sd)
             assertEquals(0x0B, rxFlags[0 to 6])
             if (end == "no_video") {
-                // видео не открывается: через preVideoTimeoutMs HU сам завершает сессию чистым ByeBye
+                // 视频未打开：超过 preVideoTimeoutMs 后 HU 自行以干净的 ByeBye 结束会话
                 assertArrayEquals(Golden["byebye_request"], expect(0, M.BYEBYE_REQUEST))
                 sendMsg(0, M.BYEBYE_RESPONSE, ByteArray(0))
                 return
             }
             if (end == "write_fail") {
-                // с этого момента запись HU падает; HU должен закрыть сессию сам и не слать ByeBye
+                // 从此刻起 HU 的写入开始失败；HU 应自行关闭会话且不发 ByeBye
                 onBeforeFail()
                 sendMsg(0, M.PING_REQUEST, AapPb().v(1, 1L).toByteArray())
-                // свою сторону не закрываем, пока HU не закроет сокет сам: иначе наш EOF обгоняет сбой записи
+                // 在 HU 自行关闭 socket 之前不关闭己方：否则我们的 EOF 会先于写入失败到达
                 while (sock.getInputStream().read(buf) >= 0) {
                 }
                 return
             }
 
-            // каналы
+            // 通道
             for (chan in if (fullAudio) listOf(1, 2, 3, 4, 5, 6, 7, 9, 10) else listOf(1, 2, 3, 5, 7, 9, 10)) {
                 sendMsg(chan, M.CHANNEL_OPEN_REQUEST, AapPb().v(1, 0).v(2, chan).toByteArray())
                 assertArrayEquals(Golden["channel_open_response"], expect(chan, M.CHANNEL_OPEN_RESPONSE))
                 assertEquals(if (chan != 0) 0x0F else 0x0B, rxFlags[chan to 8])
                 if (chan == 1) assertArrayEquals(Golden["driving_status"], expect(1, M.SENSOR_EVENT))
             }
-            // сенсоры, input
+            // 传感器、input
             sendMsg(1, M.SENSOR_START_REQUEST, AapPb().v(1, 13).v(2, 0).toByteArray())
             assertArrayEquals(Golden["sensor_start_response"], expect(1, M.SENSOR_START_RESPONSE))
             sendMsg(1, M.SENSOR_START_REQUEST, AapPb().v(1, 10).v(2, 0).toByteArray())
             assertArrayEquals(Golden["sensor_start_response"], expect(1, M.SENSOR_START_RESPONSE))
             assertArrayEquals(Golden["night"], expect(1, M.SENSOR_EVENT))
-            if (::session.isInitialized) {                    // сценарии с AaConnector сессию не передают
-                session.sendNightMode(true)                   // CHANGE_MD_THEME тёмная после старта сенсора
+            if (::session.isInitialized) {                    // 带 AaConnector 的场景不传 session
+                session.sendNightMode(true)                   // 传感器启动后 CHANGE_MD_THEME 为深色
                 assertArrayEquals(M.nightModeEvent(true).payload, expect(1, M.SENSOR_EVENT))
                 session.sendNightMode(false)
                 assertArrayEquals(Golden["night"], expect(1, M.SENSOR_EVENT))
@@ -219,7 +219,7 @@ class AapSessionTest {
             sendMsg(3, M.INPUT_BINDING_REQUEST, AapPb().v(1, 3).v(1, 4).v(1, 84).toByteArray())
             assertArrayEquals(Golden["binding_response"], expect(3, M.INPUT_BINDING_RESPONSE))
 
-            // видео: config + кадр в 3 фрагмента + маленький кадр
+            // 视频：config + 拆成 3 个分片的帧 + 小帧
             sendMsg(2, M.MEDIA_SETUP, AapPb().v(1, 3).toByteArray())
             assertArrayEquals(Golden["media_config_video"], expect(2, M.MEDIA_CONFIG))
             assertArrayEquals(Golden["video_focus_unsol"], expect(2, M.MEDIA_VIDEO_FOCUS_NOTIFICATION))
@@ -234,14 +234,14 @@ class AapSessionTest {
             }
             sendMsg(2, M.MEDIA_VIDEO_FOCUS_REQUEST, AapPb().v(2, 1).toByteArray())
             assertArrayEquals(Golden["video_focus_sol"], expect(2, M.MEDIA_VIDEO_FOCUS_NOTIFICATION))
-            // mode=2 (NATIVE, «Выйти»): HU не отвечает (иначе следующим пришло бы не ch5 MEDIA_CONFIG), а зовёт sink
-            // (только с голым sink: мост на него отвечает keyframe-циклом, это проверяет AaBridgeTest)
+            // mode=2（NATIVE，“退出”）：HU 不回复（否则下一条到的就不是 ch5 MEDIA_CONFIG），而是调用 sink
+            // （仅用裸 sink：桥接器会以 keyframe 循环回应它，这由 AaBridgeTest 验证）
             if (exitTap) sendMsg(2, M.MEDIA_VIDEO_FOCUS_REQUEST, AapPb().v(2, 2).v(3, 0).toByteArray())
 
-            // сторож тишины работает только до VIDEO MEDIA_START: пауза дольше его таймаута сессию не убивает
+            // 静默看门狗只在 VIDEO MEDIA_START 之前生效：超过其超时时间的暂停不会杀死会话
             if (idleAfterVideoMs > 0) Thread.sleep(idleAfterVideoMs)
 
-            // аудио
+            // 音频
             sendMsg(5, M.MEDIA_SETUP, AapPb().v(1, 1).toByteArray())
             assertArrayEquals(Golden["media_config_audio"], expect(5, M.MEDIA_CONFIG))
             assertArrayEquals(Golden["audio_focus_unsolicited"], expect(0, M.AUDIO_FOCUS_NOTIFICATION))
@@ -249,7 +249,7 @@ class AapSessionTest {
             sendMsg(5, M.MEDIA_DATA, ByteArray(8) + ByteArray(640) { 1 })
             assertArrayEquals(Golden.hex("08 03 10 01"), expect(5, M.MEDIA_ACK))
             if (fullAudio) {
-                // MEDIA (ch6, 48k стерео) и SPEECH (ch4, 16k моно): setup/config/focus/start/data -> ack, затем STOP MEDIA
+                // MEDIA（ch6，48k 立体声）和 SPEECH（ch4，16k 单声道）：setup/config/focus/start/data -> ack，然后 STOP MEDIA
                 for ((chan, sid, bytes) in listOf(Triple(6, 4, 3840), Triple(4, 2, 640))) {
                     sendMsg(chan, M.MEDIA_SETUP, AapPb().v(1, 1).toByteArray())
                     assertArrayEquals(Golden["media_config_audio"], expect(chan, M.MEDIA_CONFIG))
@@ -260,7 +260,7 @@ class AapSessionTest {
                 }
                 sendMsg(6, M.MEDIA_STOP, ByteArray(0))
             }
-            // mic
+            // 麦克风
             if (mic) {
                 micDialog()
             } else {
@@ -268,7 +268,7 @@ class AapSessionTest {
                 assertArrayEquals(Golden["mic_refuse"], expect(7, M.MEDIA_MIC_RESPONSE))
             }
 
-            // control
+            // 控制消息
             sendMsg(0, M.PING_REQUEST, AapPb().v(1, 123456789L).toByteArray())
             assertArrayEquals(Golden["ping_response"], expect(0, M.PING_RESPONSE))
             sendMsg(0, M.NAV_FOCUS_REQUEST, AapPb().v(1, 2).toByteArray())
@@ -278,7 +278,7 @@ class AapSessionTest {
             sendMsg(0, M.VOICE_SESSION_NOTIFICATION, AapPb().v(1, 1).toByteArray())
 
             if (end == "bridge_grace") {
-                // AA жива после обрыва USB: ждём keyframe-цикл NATIVE -> PROJECTED и отвечаем новым config + IDR
+                // USB 断开后 AA 仍存活：等待 NATIVE -> PROJECTED 的 keyframe 循环，并以新 config + IDR 回应
                 ready.countDown()
                 assertArrayEquals(Golden.hex("08 02 10 00"), expect(2, M.MEDIA_VIDEO_FOCUS_NOTIFICATION))
                 assertArrayEquals(Golden["video_focus_unsol"], expect(2, M.MEDIA_VIDEO_FOCUS_NOTIFICATION))
@@ -286,13 +286,13 @@ class AapSessionTest {
                 assertArrayEquals(Golden["media_ack"], expect(2, M.MEDIA_ACK))
                 sendMsg(2, M.MEDIA_DATA, ByteArray(8) { if (it == 7) 9 else 0 } + IDR2)
                 assertArrayEquals(Golden["media_ack"], expect(2, M.MEDIA_ACK))
-                // дальше AA закрывается хостом после grace: чистый ByeBye
+                // 之后 AA 在宽限期后由主机关闭：干净的 ByeBye
                 assertArrayEquals(Golden["byebye_request"], expect(0, M.BYEBYE_REQUEST))
                 sendMsg(0, M.BYEBYE_RESPONSE, ByteArray(0))
                 return
             }
             if (stress) {
-                // идёт поток видео (300 кадров с фрагментацией), а "чужая" нить шлёт touch DOWN, 30 MOVE, UP
+                // 视频流持续（300 个分片帧），同时“外部”线程发送 touch DOWN、30 个 MOVE、UP
                 val toucher = Thread {
                     session.sendTouch(M.TOUCH_DOWN, 100, 200)
                     repeat(30) {
@@ -317,7 +317,7 @@ class AapSessionTest {
                 return
             }
 
-            // touch: тест дёргает sendTouch из своей нити (как UI)
+            // touch：测试在自己的线程里调用 sendTouch（如同 UI）
             if (!externalTouch) {
                 session.sendTouch(M.TOUCH_DOWN, 640, 360)
                 session.sendTouch(M.TOUCH_UP, 640, 360)
@@ -336,19 +336,19 @@ class AapSessionTest {
         }
 
         /**
-         * Микрофон принят: Open(maxUnacked=2) -> успех session_id=1; HU шлёт первые 2 кадра по 4096 Б
-         * (timestamp u64 BE мкс + PCM), остальные ждут Ack; после Ack(2) приходят ещё 2; Close -> успех.
+         * 麦克风已接受：Open(maxUnacked=2) -> 成功 session_id=1；HU 发送前 2 个各 4096 字节的帧
+         * （u64 大端微秒时间戳 + PCM），其余等待 Ack；收到 Ack(2) 后再来 2 帧；Close -> 成功。
          */
         private fun micDialog() {
             sendMsg(7, M.MEDIA_MIC_REQUEST, AapPb().bool(1, true).v(4, 2).toByteArray())
             assertArrayEquals(Golden.hex("08 00 10 01"), expect(7, M.MEDIA_MIC_RESPONSE))
-            ready.countDown()                                   // тест подаёт 16384 Б PCM
+            ready.countDown()                                   // 测试输入 16384 字节 PCM
             fun data(): Pair<Long, Int> {
                 val p = expect(7, M.MEDIA_DATA)
                 micFlags = rxFlags[7 to M.MEDIA_DATA] ?: -1
                 var ts = 0L
                 for (i in 0 until 8) ts = (ts shl 8) or (p[i].toLong() and 0xFF)
-                // PCM внутри кадра должен быть ровно тем, что подали: кадр k, байт i = (k * 7 + i) & 0xFF
+                // 帧内的 PCM 必须与输入完全一致：帧 k、字节 i = (k * 7 + i) & 0xFF
                 val base = ((ts - 5_000_000L) / 128_000L).toInt()
                 for (i in 0 until p.size - 8) {
                     assertEquals("PCM кадра #$base, байт $i", ((base * 7 + i) and 0xFF).toByte(), p[8 + i])
@@ -415,7 +415,7 @@ class AapSessionTest {
             assertNull("ошибка телефона: ${phone.error}\n" + logs.joinToString("\n"), phone.error)
             assertTrue("HU не закрыл сокет штатно (EOF)", phone.sawEof && !phone.reset)
             assertTrue("сессия закончилась не чисто: ${endInfo[0]}\n" + logs.joinToString("\n"), session.exitOk)
-            // видео: SPS/PPS в onCodecConfig, кадры без AA-заголовков, pts из timestamp
+            // 视频：SPS/PPS 进 onCodecConfig，帧不带 AA 头，pts 取自 timestamp
             assertEquals(1, sink.configs.size)
             assertArrayEquals(Phone.SPS_PPS, sink.configs[0])
             assertArrayEquals(Phone.IDR, sink.frames[0].first)
@@ -427,10 +427,10 @@ class AapSessionTest {
             if (stress) {
                 assertEquals(302, sink.frames.size)
                 assertEquals(302L, session.stats.videoData)
-                // DOWN, 30 MOVE, UP в порядке отправки, координаты целы
+                // DOWN、30 个 MOVE、UP 按发送顺序，坐标完整
                 val expected = listOf(Triple(0, 100, 200)) + (0 until 30).map { Triple(2, 100 + it, 200 + it) } + Triple(1, 130, 230)
                 assertEquals(expected, phone.touches.toList())
-                // uint64 нс: положительные и неубывающие
+                // uint64 纳秒：为正且不递减
                 assertTrue("timestamp <= 0: ${phone.touchTs}", phone.touchTs.all { it > 0 })
                 assertEquals(phone.touchTs.sorted(), phone.touchTs.toList())
             } else {
@@ -445,7 +445,7 @@ class AapSessionTest {
                 val ms = sink as MicSink
                 assertEquals(1, ms.opens.get())
                 assertEquals("close от AA один раз, без повторного close при завершении сессии", listOf("AA закрыла микрофон"), ms.closes.toList())
-                // 4 кадра по 4096 Б, timestamp каждого +128 мс от предыдущего; зашифрованный bulk-кадр 0x0b
+                // 4 个各 4096 字节的帧，每帧时间戳较上一帧 +128 毫秒；加密的 bulk 帧 0x0b
                 assertEquals(listOf(5_000_000L, 5_128_000L, 5_256_000L, 5_384_000L), phone.micFrames.map { it.first })
                 assertTrue(phone.micFrames.all { it.second == 4096 })
                 assertEquals(0x0B, phone.micFlags)
@@ -465,7 +465,7 @@ class AapSessionTest {
     @Test fun touchFromForeignThreadDuringVideoStreamKeepsTls() = scenario("jvc", false, "hu_bye", stress = true)
     @Test fun touchFromForeignThreadDuringVideoStreamTls12() = scenario("hur", true, "hu_bye", stress = true)
 
-    /** Сокет, у которого запись можно сломать на лету. */
+    /** 可在运行中破坏其写入的 socket。 */
     class FailSocket : Socket() {
         @Volatile var failWrites = false
         override fun getOutputStream(): java.io.OutputStream {

@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
-/** Очередь кормления транскодера: порядок, переполнение с ожиданием IDR, вытеснение IDR-ом, команды без отказов. */
+/** 转码器供给队列:顺序、溢出后等待 IDR、被 IDR 驱逐、命令从不被拒绝。 */
 class FeedQueueTest {
     private fun p(pts: Long) = FeedItem.Frame(byteArrayOf(1), pts, false, 0)
     private fun idr(pts: Long) = FeedItem.Frame(byteArrayOf(5), pts, true, 0)
@@ -43,7 +43,7 @@ class FeedQueueTest {
         assertEquals(Offer.ACCEPTED, q.offerFrame(p(2)))
         assertEquals(Offer.DROPPED_FULL, q.offerFrame(p(3)))
         assertEquals(Offer.DROPPED_GATED, q.offerFrame(p(4)))
-        // место освободилось, но P всё равно нельзя: после потери нужен IDR
+        // 空间已释放,但仍不能发 P 帧:丢帧后需要 IDR
         assertEquals(1L, (q.take(0) as FeedItem.Frame).ptsUs)
         assertEquals(Offer.DROPPED_GATED, q.offerFrame(p(5)))
         assertEquals(Offer.ACCEPTED, q.offerFrame(idr(6)))
@@ -129,7 +129,7 @@ class FeedQueueTest {
         q.take(0)
         assertEquals(3, q.maxPendingSeen)
         assertEquals(3, q.resetMaxPending())
-        // новое окно стартует с текущей глубины (в очереди остался один кадр)
+        // 新窗口从当前深度开始(队列中还剩一帧)
         assertEquals(1, q.maxPendingSeen)
         q.offerFrame(p(4))
         assertEquals(2, q.resetMaxPending())
@@ -198,10 +198,10 @@ class FeedQueueTest {
         assertTrue(sawStop)
         assertEquals(2 * perProducer, accepted.get() + droppedFull.get() + droppedGated.get())
         assertEquals("команды не теряются", postedCmds.get(), consumedCmds)
-        // принятые кадры либо доехали, либо вытеснены более поздним IDR
+        // 已接受的帧要么送达,要么被更晚的 IDR 驱逐
         assertTrue(consumedFrames.size <= accepted.get())
         assertTrue(consumedFrames.isNotEmpty())
-        // внутри каждого производителя порядок сохраняется
+        // 每个生产者内部顺序保持不变
         for (id in 1..2) {
             val mine = consumedFrames.filter { it / 1_000_000L == id.toLong() }
             assertEquals(mine.sorted(), mine)

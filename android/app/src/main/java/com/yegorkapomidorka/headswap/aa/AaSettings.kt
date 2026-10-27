@@ -7,56 +7,56 @@ import java.io.FileNotFoundException
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicLong
 
-/** Настройки AA-режима (отдельный файл prefs). */
+/** AA 模式设置（单独的 prefs 文件）。 */
 class AaPrefs(ctx: Context) {
     private val sp: SharedPreferences = ctx.getSharedPreferences("aa", Context.MODE_PRIVATE)
 
-    /** jvc (по умолчанию, принят AA 17.7 живьём) или hur. */
+    /** jvc（默认，已在 AA 17.7 实机上验证）或 hur。 */
     var certSet: String
         get() = sp.getString("certSet", "jvc") ?: "jvc"
         set(v) = sp.edit().putString("certSet", v).apply()
 
-    /** Звук AA -> CarLife по USB; по умолчанию вкл. */
+    /** AA -> CarLife 的 USB 音频；默认开启。 */
     var usbAudio: Boolean
         get() = sp.getBoolean("usbAudio", true)
         set(v) = sp.edit().putBoolean("usbAudio", v).apply()
 
-    /** Частота музыки в CarLife (имя MusicRate, по умолчанию Авто). Мост читает на каждый MEDIA INIT. */
+    /** CarLife 中的音乐频率（名称 MusicRate，默认“自动”）。桥接器在每次 MEDIA INIT 时读取。 */
     var musicRate: MusicRate
         get() = MusicRate.parse(sp.getString("musicRate", MusicRate.DEFAULT.name))
         set(v) = sp.edit().putString("musicRate", v.name).apply()
 
-    /** Размер пакета музыки в CarLife (имя MediaChunk, по умолчанию Авто; эксперимент, не входит в пресеты авто). Мост читает на каждый буфер. */
+    /** CarLife 中的音乐数据包大小（名称 MediaChunk，默认“自动”；实验功能，不包含在车型预设中）。桥接器在每次缓冲时读取。 */
     var mediaChunk: MediaChunk
         get() = MediaChunk.parse(sp.getString("mediaChunk", MediaChunk.DEFAULT.name))
         set(v) = sp.edit().putString("mediaChunk", v.name).apply()
 
-    /** Размер пакета речи в CarLife (имя VoiceChunk, по умолчанию Авто; эксперимент, не входит в пресеты авто). Мост читает на каждый пакет. */
+    /** CarLife 中的语音数据包大小（名称 VoiceChunk，默认“自动”；实验功能，不包含在车型预设中）。桥接器在收到每个数据包时读取。 */
     var voiceChunk: VoiceChunk
         get() = VoiceChunk.parse(sp.getString("voiceChunk", VoiceChunk.DEFAULT.name))
         set(v) = sp.edit().putString("voiceChunk", v.name).apply()
 
-    /** Пре-ролл тишины перед подсказкой TTS (имя TtsPreroll, по умолчанию Авто; эксперимент, не входит в пресеты авто). Мост читает на каждый TTS INIT. */
+    /** TTS 提示前的静音预卷（名称 TtsPreroll，默认“自动”；实验功能，不包含在车型预设中）。桥接器在每次 TTS INIT 时读取。 */
     var ttsPreroll: TtsPreroll
         get() = TtsPreroll.parse(sp.getString("ttsPreroll", TtsPreroll.DEFAULT.name))
         set(v) = sp.edit().putString("ttsPreroll", v.name).apply()
 
-    /** Прореживание MOVE тача (имя TouchDecimation, по умолчанию Выкл; эксперимент, не входит в пресеты авто). Мост читает на каждое событие. */
+    /** MOVE 触摸的抽稀（名称 TouchDecimation，默认“关”；实验功能，不包含在车型预设中）。桥接器在每次事件时读取。 */
     var touchDecimation: TouchDecimation
         get() = TouchDecimation.parse(sp.getString("touchDecimation", TouchDecimation.DEFAULT.name))
         set(v) = sp.edit().putString("touchDecimation", v.name).apply()
 
-    /** Видео моста:перекодирование (по умолчанию) или passthrough H.264 AA как есть. */
+    /** 桥接视频：转码（默认）或原样 passthrough AA 的 H.264。 */
     var transcode: Boolean
         get() = sp.getBoolean("transcode", true)
         set(v) = sp.edit().putBoolean("transcode", v).apply()
 
-    /** Разрешение видео (имя VideoMode, по умолчанию 1280×720). Читается один раз на подключение. */
+    /** 视频分辨率（名称 VideoMode，默认 1280×720）。每次连接时读取一次。 */
     var videoMode: VideoMode
         get() = VideoMode.parse(sp.getString("videoMode", VideoMode.DEFAULT.name))
         set(v) = sp.edit().putString("videoMode", v.name).apply()
 
-    /** Своё разрешение (раздел для разработчиков): вместо [videoMode], только с перекодированием. Читается один раз на подключение. */
+    /** 自定义分辨率（开发者选项）：代替 [videoMode]，仅限转码模式。每次连接时读取一次。 */
     var customRes: Boolean
         get() = sp.getBoolean("customRes", false)
         set(v) = sp.edit().putBoolean("customRes", v).apply()
@@ -69,7 +69,7 @@ class AaPrefs(ctx: Context) {
         get() = sp.getInt("customH", DEFAULT_CUSTOM_H)
         set(v) = sp.edit().putInt("customH", v).apply()
 
-    /** Размер, который ГУ просила в VIDEO_ENCODER_INIT в последней сессии; 0 = ещё не было. */
+    /** head unit 在上一会话的 VIDEO_ENCODER_INIT 中请求的尺寸；0 = 尚无。 */
     var lastHuW: Int
         get() = sp.getInt("lastHuW", 0)
         set(v) = sp.edit().putInt("lastHuW", v).apply()
@@ -78,40 +78,40 @@ class AaPrefs(ctx: Context) {
         get() = sp.getInt("lastHuH", 0)
         set(v) = sp.edit().putInt("lastHuH", v).apply()
 
-    /** Сохранить размер, запрошенный ГУ (нули и мусор не пишем). */
+    /** 保存 head unit 请求的尺寸（不写入 0 和垃圾值）。 */
     fun saveHuSize(w: Int, h: Int) {
         if (w > 0 && h > 0) sp.edit().putInt("lastHuW", w).putInt("lastHuH", h).apply()
     }
 
-    /** Итоговая геометрия видео: своё разрешение (если включено и валидно) или [videoMode]. Перекодирование учитывается через effective(). */
+    /** 最终视频几何：自定义分辨率（若启用且有效）或 [videoMode]。转码通过 effective() 体现。 */
     val videoGeometry: VideoGeometry
         get() = CustomVideoMode.resolve(customRes, customW, customH, videoMode)
 
-    /** Ручной DPI интерфейса AA (AaDensity), 0 = авто (density режима). Читается один раз на подключение. */
+    /** AA 界面的手动 DPI（AaDensity），0 = 自动（使用模式的 density）。每次连接时读取一次。 */
     var aaDensity: Int
         get() = AaDensity.parse(sp.getInt("aaDensity", AaDensity.AUTO))
         set(v) = sp.edit().putInt("aaDensity", AaDensity.parse(v)).apply()
 
-    /** Частота кадров (имя FpsSetting, по умолчанию Авто). Читается один раз на подключение. */
+    /** 帧率（名称 FpsSetting，默认“自动”）。每次连接时读取一次。 */
     var fpsSetting: FpsSetting
         get() = FpsSetting.parse(sp.getString("fpsSetting", FpsSetting.DEFAULT.name))
         set(v) = sp.edit().putString("fpsSetting", v.name).apply()
 
-    /** Марка автомобиля для SDR вместо «Google» (CAR_MAKES); null = по умолчанию. Читается на подключение. */
+    /** SDR 中代替「Google」的汽车品牌（CAR_MAKES）；null = 默认。连接时读取。 */
     var carMake: String?
         get() = sp.getString("carMake", null)?.takeIf { it in CAR_MAKES }
         set(v) = sp.edit().apply { if (v == null) remove("carMake") else putString("carMake", v) }.apply()
 
-    /** Машина из раздела «Мой автомобиль» (имя CarPreset); null = не выбрана. Сам выбор только подпись, настройки пишет [applyCar]. */
+    /** 「我的汽车」分区中的车型（名称 CarPreset）；null = 未选择。选择本身只是标签，设置由 [applyCar] 写入。 */
     var carPreset: CarPreset?
         get() = CarPreset.parse(sp.getString("carPreset", null))
         set(v) = sp.edit().apply { if (v == null) remove("carPreset") else putString("carPreset", v.name) }.apply()
 
-    /** Текущие значения настроек, которые выставляет выбор машины. */
+    /** 车型选择所设置的当前设置值。 */
     val carSettings: CarSettings
         get() = CarSettings(transcode, videoMode, aaDensity, fpsSetting, musicRate)
 
-    /** Выбрать машину и записать её рекомендованные настройки. */
+    /** 选择车型并写入其推荐设置。 */
     fun applyCar(p: CarPreset) {
         val s = p.settings
         sp.edit()
@@ -124,59 +124,59 @@ class AaPrefs(ctx: Context) {
             .apply()
     }
 
-    /** Источник звука для микрофона AA: машина / телефон / авто (ГУ, при молчании 2 с - телефон). */
+    /** AA 麦克风的声音来源：车机 / 手机 / 自动（head unit，静默 2 秒后切为手机）。 */
     var micMode: MicMode
         get() = MicMode.parse(sp.getString("micMode", MicMode.AUTO.key))
         set(v) = sp.edit().putString("micMode", v.key).apply()
 
-    /** Вместе с запросом записи у ГУ слать MODULE_STATUS VR=1/0 (как Baidu). */
+    /** 向 head unit 发送录音请求时，同时发送 MODULE_STATUS VR=1/0（同 Baidu）。 */
     var micVrStatus: Boolean
         get() = sp.getBoolean("micVrStatus", true)
         set(v) = sp.edit().putBoolean("micVrStatus", v).apply()
 
-    /** Трек, обложка и прогресс из AA -> MEDIA_INFO / MEDIA_PROGRESS_BAR. Читается на подключение. */
+    /** 来自 AA 的曲目、封面和进度 -> MEDIA_INFO / MEDIA_PROGRESS_BAR。连接时读取。 */
     var metaMusic: Boolean
         get() = sp.getBoolean("metaMusic", true)
         set(v) = sp.edit().putBoolean("metaMusic", v).apply()
 
-    /** Подсказки поворотов из AA -> NAVI_NEXT_TURN_INFO (если ГУ подписалась). Читается на подключение. */
+    /** 来自 AA 的转弯提示 -> NAVI_NEXT_TURN_INFO（若 head unit 已订阅）。连接时读取。 */
     var metaNavi: Boolean
         get() = sp.getBoolean("metaNavi", true)
         set(v) = sp.edit().putBoolean("metaNavi", v).apply()
 
-    /** Поле 6 NAVI_NEXT_TURN_INFO: bytes-иконка (как 8.6.7). */
+    /** NAVI_NEXT_TURN_INFO 的字段 6：bytes 图标（同 8.6.7）。 */
     var naviIcon: Boolean
         get() = sp.getBoolean("naviIcon", true)
         set(v) = sp.edit().putBoolean("naviIcon", v).apply()
 
-    /** Поле 6 NAVI_NEXT_TURN_INFO: int32 time (как apollo-DuerOS). */
+    /** NAVI_NEXT_TURN_INFO 的字段 6：int32 时间（同 apollo-DuerOS）。 */
     var naviTime: Boolean
         get() = sp.getBoolean("naviTime", true)
         set(v) = sp.edit().putBoolean("naviTime", v).apply()
 
     val naviField6: NaviField6 get() = NaviField6.of(naviIcon, naviTime)
 
-    /** MEDIA_PROGRESS_BAR в секундах вместо мс (если ГУ покажет прогресс в 1000 раз больше). */
+    /** MEDIA_PROGRESS_BAR 以秒代替毫秒（若 head unit 显示的进度大了 1000 倍）。 */
     var progressSeconds: Boolean
         get() = sp.getBoolean("progressSeconds", false)
         set(v) = sp.edit().putBoolean("progressSeconds", v).apply()
 
-    /** Хоть раз установилась настоящая AA-сессия: сервер ГУ у пользователя работал (для «Сервер ГУ не отвечает», а не «Запустите сервер ГУ»). */
+    /** 是否至少成功建立过一次真正的 AA 会话：用户的 head unit 服务器曾正常运转（用于区分「head unit 服务器无响应」与「请启动 head unit 服务器」）。 */
     var serverWorked: Boolean
         get() = sp.getBoolean("serverWorked", false)
         set(v) = sp.edit().putBoolean("serverWorked", v).apply()
 
-    /** Предупреждение про видео в движении в разделе «Приложения для магнитолы» уже показано (один раз). */
+    /** 「车机应用」分区中关于行车视频的警告已展示过（一次）。 */
     var appsWarningShown: Boolean
         get() = sp.getBoolean("appsWarningShown", false)
         set(v) = sp.edit().putBoolean("appsWarningShown", v).apply()
 
-    /** Пресет эквалайзера (EqPreset.key); полосы и preamp хранятся отдельно, пресет — только подпись. */
+    /** 均衡器预设（EqPreset.key）；频段和 preamp 分开存储，预设只是标签。 */
     var eqPreset: EqPreset
         get() = EqPreset.parse(sp.getString("eqPreset", EqPreset.FLAT.key))
         set(v) = sp.edit().putString("eqPreset", v.key).apply()
 
-    /** Полосы (CSV, дБ) и preamp; запись сразу применяется к мосту через EqLive. */
+    /** 频段（CSV，dB）和 preamp；写入后立即通过 EqLive 应用到桥接器。 */
     var eq: EqSettings
         get() = EqSettings(EqSettings.parseBands(sp.getString("eqBands", null)), sp.getInt("eqPreamp", 0)).normalized()
         set(v) {
@@ -185,7 +185,7 @@ class AaPrefs(ctx: Context) {
             EqLive.settings = n
         }
 
-    /** Последние значения «Своего»: возврат к нему после пробы пресетов. */
+    /** 「自定义」的最后值：试听预设后返回该值。 */
     var eqCustom: EqSettings
         get() = EqSettings(EqSettings.parseBands(sp.getString("eqCustomBands", null)), sp.getInt("eqCustomPreamp", 0)).normalized()
         set(v) {
@@ -199,13 +199,13 @@ class AaPrefs(ctx: Context) {
     }
 }
 
-/** Марки для настройки «Марка автомобиля» (канонические английские написания). */
+/** 「汽车品牌」设置用的品牌列表（规范英文拼写）。 */
 val CAR_MAKES = listOf(
     "Honda", "Mazda", "Toyota", "Nissan", "Hyundai", "Kia", "Volkswagen", "Skoda", "Ford",
     "Chevrolet", "Mitsubishi", "Subaru", "Lexus", "Changan", "Haval", "Chery", "Geely",
 )
 
-/** Состояние AA-режима для экрана; пишет сервис, читает activity (один процесс). */
+/** 供界面显示的 AA 模式状态；由服务写入，activity 读取（同一进程）。 */
 object AaState {
     @Volatile var status: String = "не запущено"
     @Volatile var running: Boolean = false
@@ -218,10 +218,10 @@ object AaState {
     @Volatile var bridgeDropped: Long = 0
     @Volatile var audioBytes: Long = 0
 
-    /** Ошибка настройки, из-за которой мост не стартует (например, нет сертификата head unit); null = всё в порядке. */
+    /** 导致桥接器无法启动的配置错误（例如缺少 head unit 证书）；null = 一切正常。 */
     @Volatile var setupError: String? = null
 
-    /** Отказы сервера ГУ при настоящих подключениях моста: источник состояния «Сервер ГУ не отвечает» на главном экране. */
+    /** 真实桥接连接中 head unit 服务器的失败：主界面「head unit 服务器无响应」状态的来源。 */
     val serverFailures = ServerFailures()
 
     fun reset() {
@@ -237,14 +237,14 @@ object AaState {
         "AA: $status\nAA cert: $cert  selftest: $selftest\nAA кадров: ${frames.get()} (config $codecConfigs, ${bytes / 1024} КиБ)\nМОСТ: в CarLife отправлено $bridgeSent, отброшено $bridgeDropped, звук ${audioBytes / 1024} КиБ"
 }
 
-/** Ни один набор сертификата head unit не найден в assets. */
+/** assets 中找不到任何 head unit 证书集。 */
 class AaCertsMissingException(message: String) : Exception(message)
 
-/** Загрузка сертификатов из assets с откатом на второй набор и крупным логом отката. */
+/** 从 assets 加载证书，失败时回退到第二套证书集并输出醒目的回退日志。 */
 object AaCreds {
     const val MISSING_TEXT = "Нет сертификата head unit: положите cert.pem и key.pem в app/src/main/assets/aa/jvc/ (см. README)"
 
-    /** @throws AaCertsMissingException если файлов сертификата нет ни в одном наборе */
+    /** @throws AaCertsMissingException 若任一证书集中都没有证书文件 */
     fun load(ctx: Context, preferred: String): AapCerts.Loaded {
         val opener: (String) -> InputStream = { ctx.assets.open(it) }
         val loaded = try {
@@ -262,7 +262,7 @@ object AaCreds {
         return loaded
     }
 
-    /** notBefore/notAfter отдельно: у JVC формат UTCTime с зоной, парсится не везде. Только для лога. */
+    /** notBefore/notAfter 单独处理：JVC 的格式是带时区的 UTCTime，并非所有解析器都支持。仅供日志。 */
     fun describeValidity(creds: AapCredentials): String = try {
         val c = creds.chain[0]
         "notBefore=${c.notBefore} notAfter=${c.notAfter}"
@@ -270,7 +270,7 @@ object AaCreds {
         "notBefore/notAfter не читаются: ${e.javaClass.simpleName}: ${e.message}"
     }
 
-    /** Самопроверка без сети: in-memory TLS-handshake обоими наборами, результат в лог. */
+    /** 离线自检：用两套证书集做内存中 TLS 握手，结果写入日志。 */
     fun selfTest(ctx: Context) {
         val opener: (String) -> InputStream = { ctx.assets.open(it) }
         val parts = ArrayList<String>()

@@ -29,50 +29,50 @@ import com.yegorkapomidorka.headswap.link.CarTransport
 import com.yegorkapomidorka.headswap.link.TransportCaps
 import com.yegorkapomidorka.headswap.link.diag.WLog
 
-/** Настройки сессии, снятые в момент старта. */
+/** 会话设置，启动时读取。 */
 class SessionConfig(
     val screenOn: Boolean = true,
-    /** Вместе с MIC_RECORD_* слать MODULE_STATUS VR 1/0, как Baidu (prepareShowVr / prepareCloseVr). */
+    /** 随 MIC_RECORD_* 一起发送 MODULE_STATUS VR 1/0，同 Baidu (prepareShowVr / prepareCloseVr)。 */
     val micVrStatus: Boolean = true,
-    /** Частота кадров: Авто (как просит ГУ) или фиксированная. В passthrough не действует. */
+    /** 帧率：自动（按 head unit 请求）或固定。passthrough 模式下不生效。 */
     val fpsSetting: FpsSetting = FpsSetting.DEFAULT,
-    /** Трек, обложка и прогресс из AA (MEDIA_INFO / MEDIA_PROGRESS_BAR). */
+    /** 来自 AA 的曲目、封面和进度 (MEDIA_INFO / MEDIA_PROGRESS_BAR)。 */
     val metaMusic: Boolean = true,
-    /** Подсказки поворотов из AA (NAVI_NEXT_TURN_INFO по подписке ГУ moduleID=0). */
+    /** 来自 AA 的转弯提示（按 head unit 的 moduleID=0 订阅发送 NAVI_NEXT_TURN_INFO）。 */
     val metaNavi: Boolean = true,
-    /** Поле 6 NAVI_NEXT_TURN_INFO: иконка и/или time. */
+    /** NAVI_NEXT_TURN_INFO 字段 6：图标和/或 time。 */
     val naviField6: NaviField6 = NaviField6.BOTH,
 )
 
 /**
- * Одна сессия с ГУ поверх транспорта (USB-поток или 6 сокетов): отвечает как MD, отдаёт мосту видео/звук/тач, пишет всё в лог.
- * Потоки: чтение и запись в транспорте (sink и onWritten сериализованы), enc-drain/render (VideoSource заглушки),
- * scheduler (статистика, watchdog тишины, отложенный MODULE_STATUS).
- * Протокол CarLife 2.0 по поведению MD Baidu CarLife 8.6.7, см. docs/carlife-v2-handshake.md.
+ * 在传输层之上（USB 流或 6 个 socket）与 head unit 的一次会话：以 MD 身份应答，向桥接层提供视频/音频/触摸，并写入全部日志。
+ * 线程：传输层读写（sink 与 onWritten 已串行化）、enc-drain/render（VideoSource 占位器）、
+ * scheduler（统计、静默 watchdog、延迟的 MODULE_STATUS）。
+ * CarLife 2.0 协议遵循 Baidu CarLife 8.6.7 MD 的行为，见 docs/carlife-v2-handshake.md。
  */
 class CarLifeSession(
     private val transport: CarTransport,
     private val cfg: SessionConfig,
     private val bridge: AaBridgeCore,
-    /** Нагрев телефона: по нему перекодирование снижает fps и битрейт. */
+    /** 手机发热：根据它，转码会降低 fps 和比特率。 */
     private val thermal: ThermalSource = ThermalSource.NONE,
-    /** Размер кадра из VIDEO_ENCODER_INIT ГУ (для подсказки «Как просит ГУ» в разделе для разработчиков). */
+    /** head unit 的 VIDEO_ENCODER_INIT 中的帧尺寸（用于开发者选项中的「按 head unit 请求」提示）。 */
     private val onHuSize: (Int, Int) -> Unit = { _, _ -> },
     private val onClosed: (String) -> Unit,
 ) : VideoSource.Listener, CarlifeLink {
 
-    /** Видео-режим хоста, снятый при подключении: одинаков для INIT_DONE, энкодера и тача в течение всей сессии. */
+    /** 连接时确定的视频模式：整个会话期间对 INIT_DONE、编码器和触摸保持一致。 */
     private val mode: VideoGeometry = bridge.videoMode
 
-    /** Транспорт сессии: usb-aoa, tcp-debug или tcp6. */
+    /** 会话传输层：usb-aoa、tcp-debug 或 tcp6。 */
     val transportKind: String get() = transport.caps.kind
 
-    /** Воздух (6 сокетов): своя лесенка битрейта, PAUSE-keepalive чаще, WL-строки видео. USB и tcp-debug - как было. */
+    /** 无线（6 个 socket）：独立的比特率阶梯、更频繁的 PAUSE keepalive、视频走 Wi-Fi 线路。USB 和 tcp-debug 维持原样。 */
     private val air = transport.caps == TransportCaps.TCP6
     private val bitratePolicy = BitratePolicy(mode.bitrate, profile = if (air) BitrateProfile.WIFI else BitrateProfile.USB)
     @Volatile private var vwIdrCutMs = NEVER_MS
     private val thermalThrottle = ThermalThrottle()
-    private var thermalStatus = 0                       // только нить cl-sched
+    private var thermalStatus = 0                       // 仅 cl-sched 线程
     private var thermalHeadroom = Float.NaN
     private var headroomAtMs = NEVER_MS
     private var thermalPassthroughLogged = false
@@ -87,14 +87,14 @@ class CarLifeSession(
     private val closed = AtomicBoolean(false)
     private val sched: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "cl-sched") }
     private val metaExec = Executors.newSingleThreadExecutor { r -> Thread(r, "cl-meta").also { it.isDaemon = true } }
-    private var lastArtSrc: ByteArray? = null          // только нить cl-meta
+    private var lastArtSrc: ByteArray? = null          // 仅 cl-meta 线程
     private var lastArtJpeg = ByteArray(0)
     private val turnIcons = HashMap<Int, ByteArray>()
     @Volatile private var metaMusicOffLogged = false
 
     private val t0 = SystemClock.elapsedRealtime()
 
-    // протокол
+    // 协议
     @Volatile private var matchSent = false
     private var huMajor = 0
     private var huMinor = 0
@@ -102,7 +102,7 @@ class CarLifeSession(
     private var pendingH = 0
     private var pendingFps = FPS
 
-    /** Целевой fps транскодера: из INIT (по настройке), в Авто меняется по FRAME_RATE_CHANGE; новый транскодер стартует с него. */
+    /** 转码器目标 fps：来自 INIT（按设置），自动模式下随 FRAME_RATE_CHANGE 变化；新转码器以此启动。 */
     @Volatile private var targetFps = FPS
     private var videoInited = false
     private var source: VideoSource? = null
@@ -110,11 +110,11 @@ class CarLifeSession(
     @Volatile private var csdPending = true
     @Volatile private var paused = false
 
-    // находки для итогового резюме
+    // 供最终摘要使用的发现
     private var huVersion = "-"
     private var sawAuthRequest = false
     private var authRandom: String? = null
-    /** brand + model + sdk из отправленного MD_INFO: ключ ветки авторизации 2.0. */
+    /** 已发送 MD_INFO 中的 brand + model + sdk：2.0 授权分支的键。 */
     private var mdInfoKey = ""
     private var huAuthResult: String? = null
     private var touchMode = "не было тачей"
@@ -129,7 +129,7 @@ class CarLifeSession(
     private var requested = "-"
     private var chosen = "-"
 
-    // видео статистика
+    // 视频统计
     @Volatile private var lastVideoTx = 0L
     private var idleBeatLogged = false
     private var vFrames = 0L
@@ -138,19 +138,19 @@ class CarLifeSession(
     private var vBeats = 0L
     private var vDropped = 0L
     private var audioTx = 0L
-    private var ttsTxSinceInit = 0       // TTS_DATA после последнего TTS_INIT: первые TTS_TX_LOGGED с временем отправки
+    private var ttsTxSinceInit = 0       // 距上次 TTS_INIT 后的 TTS_DATA：前 TTS_TX_LOGGED 条含发送时间
     @Volatile private var micRxPackets = 0L
     @Volatile private var micRxBytes = 0L
-    /** Когда сами слали MODULE_STATUS VR=1: ответный MODULE_CONTROL VR=1 сразу после него считаем эхом. */
+    /** 我们自行发送 MODULE_STATUS VR=1 时：紧随其后的应答 MODULE_CONTROL VR=1 视为回声。 */
     @Volatile private var lastOwnVrOnMs = 0L
 
-    // заглушка (VideoSource с текстом) или AA-видео; переключается ядром моста
+    // 占位器（带文字的 VideoSource）或 AA 视频；由桥核心切换
     private val videoLock = Any()
     private val srcLock = Any()
     @Volatile private var bannerText: String? = null
     @Volatile private var acceptEncoder = true
     @Volatile private var carlifeStarted = false
-    private val vrReassembler = DataReassembler()  // h425: Delphi режет VR MIC_DATA на кадры по 256 Б
+    private val vrReassembler = DataReassembler()  // h425: Delphi 将 VR MIC_DATA 切成 256 字节的帧
 
     fun start() {
         bridge.attach(this)
@@ -200,7 +200,7 @@ class CarLifeSession(
         onClosed(reason)
     }
 
-    // ---------------- чтение ----------------
+    // ---------------- 读取 ----------------
 
     private fun dispatch(chan: Int, inner: ByteArray) {
         if (Ch.isCmdStyle(chan)) {
@@ -238,7 +238,7 @@ class CarLifeSession(
         }
     }
 
-    /** Микрофон ГУ (VR 0x58001): тело = PCM16 mono 16 кГц, шифрования нет. В лог: первый пакет и каждый 200-й. */
+    /** head unit 麦克风 (VR 0x58001)：数据体 = PCM16 单声道 16 kHz，无加密。日志：第一个包和每第 200 个包。 */
     private fun onMicData(m: DataMsg) {
         micRxPackets++
         micRxBytes += m.data.size
@@ -264,7 +264,7 @@ class CarLifeSession(
                 val min = f?.let { PbReader.int(it, 2) }
                 huVersion = "$maj.$min"
                 if (matchSent) {
-                    // Baidu: ConnectClient.geHasMatch() -> второй MATCH не шлём (CarlifeConnectHsgHandler :308-310)
+                    // Baidu: ConnectClient.geHasMatch() -> 不发送第二次 MATCH (CarlifeConnectHsgHandler :308-310)
                     AppLog.i("== ПОВТОРНЫЙ HU_PROTOCOL_VERSION $huVersion, второй MATCH не шлю (как Baidu)")
                     return
                 }
@@ -274,7 +274,7 @@ class CarLifeSession(
                 AppLog.i("== ВЕРСИЯ ПРОТОКОЛА ГУ: major=$maj minor=$min")
                 WLog.ev(WLog.HS, "HU_PROTOCOL_VERSION", "version" to huVersion)
                 matchSent = true
-                // стартовая пачка сразу, ничего не ждём от ГУ: MATCH, FOREGROUND, SCREEN_ON, MD_INFO
+                // 立即发送起始数据包，不等 head unit 任何消息：MATCH, FOREGROUND, SCREEN_ON, MD_INFO
                 val info = deviceInfo()
                 mdInfoKey = HuAuth.mdInfoKey(info)
                 for (c in Handshake.startBatch(cfg.screenOn, info)) sendCmd(c.type, c.body)
@@ -282,7 +282,7 @@ class CarLifeSession(
                 try {
                     sched.schedule({ sendCmd(mod.type, mod.body) }, Handshake.MODULE_STATUS_DELAY_MS, TimeUnit.MILLISECONDS)
                 } catch (_: java.util.concurrent.RejectedExecutionException) {
-                    // сессия уже закрывается
+                    // 会话已在关闭
                 }
                 CarLifeState.status = "handshake: стартовая пачка отправлена"
             }
@@ -294,7 +294,7 @@ class CarLifeSession(
                     bridge.onHuInfo(PbReader.str(it, 13), PbReader.str(it, 14), PbReader.str(it, 15))
                 }
                 logDesay()
-                // ответа нет: Baidu только сохраняет (CarlifeDeviceInfoManager.setCarDeviceInfo)
+                // 没有应答：Baidu 仅保存 (CarlifeDeviceInfoManager.setCarDeviceInfo)
             }
             Msg.STATISTIC_INFO -> {
                 huStatistic = PbText.render(m.body, Schemas.statisticsInfo)
@@ -316,8 +316,8 @@ class CarLifeSession(
                 AppLog.i("== ГУ ШЛЁТ HU_AUTHEN_REQUEST randomValue=$authRandom")
                 AppLog.i("== AUTHEN randomValue ${if (v2) "начинается с \"2.0;\"" else "не начинается с \"2.0;\""}")
                 CarLifeState.auth = "HU_AUTHEN_REQUEST пришёл, ${if (v2) "2.0;" else "не 2.0;"}"
-                // как Baidu 8.6.7 (PrivateKeyManager.encryptContentProcess): сразу по запросу подпись приватным ключом Baidu,
-                // для "2.0;" md5-код от MD_INFO; MD_AUTHEN_RESULT{true} по-прежнему уходит после STATISTIC_INFO
+                // 同 Baidu 8.6.7 (PrivateKeyManager.encryptContentProcess)：收到请求立即用 Baidu 私钥签名，
+                // 对 "2.0;" 使用 MD_INFO 的 md5 码；MD_AUTHEN_RESULT{true} 仍在 STATISTIC_INFO 之后发送
                 val enc = if (rndStr == null) null else try {
                     HuAuth.encryptValue(rndStr, mdInfoKey)
                 } catch (e: Exception) {
@@ -346,7 +346,7 @@ class CarLifeSession(
             Msg.CARLIFE_DATA_SUBSCRIBE_START, Msg.CARLIFE_DATA_SUBSCRIBE_STOP -> {
                 val on = m.type == Msg.CARLIFE_DATA_SUBSCRIBE_START
                 val ids = Msgs.subscribeIds(m.body)
-                // навигация выключена в настройках: подписку ГУ не передаём, NAVI_NEXT_TURN_INFO не уйдёт
+                // 设置中已关闭导航：不传递 head unit 的订阅，NAVI_NEXT_TURN_INFO 不会发出
                 val pass = ids.filter { it != SUB_NAVI || cfg.metaNavi }
                 AppLog.i("== SUBSCRIBE_${if (on) "START" else "STOP"} moduleID=$ids" +
                     (if (pass.size != ids.size) ", навигация выключена в настройках" else ""))
@@ -357,7 +357,7 @@ class CarLifeSession(
                 sendCmd(Msg.VIDEO_ENCODER_JPEG_ACK, null)
             }
             Msg.REQUEST_MD_THEME_STATE -> {
-                // наша тема = последняя, что прислало ГУ (её же показывает AA), до CHANGE_MD_THEME - светлая
+                // 我们的主题 = head unit 最后发送的那个（AA 也显示它），CHANGE_MD_THEME 之前为浅色
                 val mode = bridge.huTheme
                 AppLog.i("== REQUEST_MD_THEME_STATE: отвечаю themeModes=$mode (${AaBridgeCore.themeName(mode)})")
                 sendCmd(Msg.RESPONSE_MD_THEME_STATE, Msgs.themeState(mode))
@@ -377,7 +377,7 @@ class CarLifeSession(
             Msg.VIDEO_ENCODER_START -> onVideoStart()
             Msg.VIDEO_ENCODER_PAUSE -> {
                 paused = true
-                if (pauseHeartbeatHu) { // первый heartbeat сразу; Desay по USB - как раньше, через 2 с
+                if (pauseHeartbeatHu) { // 第一个 heartbeat 立即发送；Desay 走 USB - 同以前，2 秒后
                     lastVideoTx = 0L
                     pauseHeartbeat()
                 }
@@ -390,7 +390,7 @@ class CarLifeSession(
                 bridge.onCarlifeKeyFrameRequest()
             }
             Msg.VIDEO_ENCODER_FRAME_RATE_CHANGE -> {
-                // как VideoMsgHandler.changeFrameRate: вне 3..30 молча игнор, иначе DONE с тем же fps
+                // 同 VideoMsgHandler.changeFrameRate：3..30 之外静默忽略，否则以相同 fps 回 DONE
                 val fps = PbReader.parse(m.body)?.let { PbReader.int(it, 1) } ?: -1
                 if (Handshake.frameRateChangeAllowed(fps)) {
                     onFrameRateChange(fps)
@@ -400,8 +400,8 @@ class CarLifeSession(
                 }
             }
             Msg.MODULE_CONTROL -> {
-                // ГУ спрашивает состояние модуля (moduleID=3 MUSIC; Desay G6S шлёт пачку status=1 после хендшейка и
-                // при возврате на CarLife-музыку): отвечаем по факту, играет ли MEDIA, или по решению моста
+                // head unit 查询模块状态 (moduleID=3 MUSIC；Desay G6S 在握手后以及回到 CarLife 音乐时发送一串 status=1)：
+                // 我们按 MEDIA 是否实际在播放回答，或按桥接层的决定
                 val f = PbReader.parse(m.body)
                 val module = f?.let { PbReader.int(it, 1) }
                 val status = f?.let { PbReader.int(it, 2) }
@@ -410,7 +410,7 @@ class CarLifeSession(
                     AppLog.i("== MODULE_CONTROL MUSIC status=$status, отвечаю MODULE_STATUS MUSIC=${if (on) 1 else 0}", ui = false)
                     sendModuleStatus(CarlifeAudio.MODULE_MUSIC, if (on) 1 else 0)
                 } else if (module == MODULE_VR) {
-                    // Кнопка голоса на ГУ/руле: Baidu на VR=1 открывает голосовой ввод (openVrAndDialog), 0/3 - закрывает
+                    // head unit/方向盘上的语音键：Baidu 在 VR=1 时打开语音输入 (openVrAndDialog)，0/3 时关闭
                     val sinceOwn = SystemClock.elapsedRealtime() - lastOwnVrOnMs
                     when {
                         status != 1 -> AppLog.i("== MODULE_CONTROL VR status=$status: игнор")
@@ -420,16 +420,16 @@ class CarLifeSession(
                 }
             }
             Msg.BT_HFP_CONNECTION -> {
-                // поле 1: 2 = телефон подключился к ГУ по BT, 0 = отключился; после подключения AA сам запускает автоплей
+                // 字段 1: 2 = 手机通过 BT 连接 head unit，0 = 断开；连接后 AA 自行启动自动播放
                 val state = PbReader.parse(m.body)?.let { PbReader.int(it, 1) }
                 bridge.onHuBtHfpConnection(state)
             }
             Msg.MD_EXIT -> close("ГУ прислало MD_EXIT")
-            else -> Unit // всё остальное только в логе
+            else -> Unit // 其余所有内容仅记入日志
         }
     }
 
-    /** Авто: целевой fps транскодера = max(fps ГУ, 10) на лету; фиксированная настройка: только ответ DONE. Passthrough не трогаем (выброс P-кадров ломает поток). */
+    /** 自动：转码器目标 fps = max(head unit fps, 10) 动态调整；固定设置：只回 DONE。passthrough 不处理（丢弃 P 帧会破坏流）。 */
     private fun onFrameRateChange(fps: Int) {
         if (!bridge.transcodeEnabled) {
             AppLog.i("видео: FRAME_RATE_CHANGE fps=$fps, passthrough: частота не регулируется, энкодер AA не трогаю")
@@ -461,12 +461,12 @@ class CarLifeSession(
         AppLog.i("== ГУ ПРОСИТ РАЗРЕШЕНИЕ: ${rw}x$rh fps=$rf")
         WLog.ev(WLog.HS, "VIDEO_ENCODER_INIT", "size" to "${rw}x$rh", "fps" to rf)
         if (videoInited && pendingW > 0) {
-            // как VideoMsgHandler (:84-88): повторный INIT -> только INIT_DONE с прежним размером
+            // 同 VideoMsgHandler (:84-88)：重复 INIT -> 仅以原尺寸回 INIT_DONE
             AppLog.i("== повторный INIT, отвечаю INIT_DONE ${pendingW}x$pendingH fps=$pendingFps")
             sendCmd(Msg.VIDEO_ENCODER_INIT_DONE, Msgs.videoEncoderInfo(pendingW, pendingH, pendingFps))
             return
         }
-        // размер задаёт видео-режим (по умолчанию 1280x720 fps 30: ГУ Honda принимает и показывает целиком, проверено в машине)
+        // 尺寸由视频模式决定（默认 1280x720 fps 30：Honda head unit 接受并完整显示，已在实车验证）
         val (w, h, why) = Triple(mode.outW, mode.outH, "мост: режим ${mode.label}")
         val fps = Handshake.chooseFps(cfg.fpsSetting, rf, huMaxFps())
         pendingW = w
@@ -479,7 +479,7 @@ class CarLifeSession(
         CarLifeState.video = "ГУ просит $requested, кодирую ${w}x$h"
         sendCmd(Msg.VIDEO_ENCODER_INIT_DONE, Msgs.videoEncoderInfo(w, h, fps))
         sendCmd(Msg.FOREGROUND, null)
-        // VW Tharu XR 2026 (CarLife 2.1) после INIT_DONE START не шлёт, ждёт видео и через ~5.5 с рвёт USB
+        // VW Tharu XR 2026 (CarLife 2.1) 在 INIT_DONE 后不发送 START，等待视频并在约 5.5 秒后断开 USB
         try {
             sched.schedule({
                 if (!closed.get() && !carlifeStarted) {
@@ -488,7 +488,7 @@ class CarLifeSession(
                 }
             }, Handshake.START_FALLBACK_MS, TimeUnit.MILLISECONDS)
         } catch (_: java.util.concurrent.RejectedExecutionException) {
-            // сессия уже закрывается
+            // 会话已在关闭
         }
     }
 
@@ -519,7 +519,7 @@ class CarLifeSession(
         }
     }
 
-    /** START: гейт AA сбрасывается, заглушка (если активна) стартует с SPS+PPS+IDR. */
+    /** START：AA 门控复位，占位器（若激活）以 SPS+PPS+IDR 启动。 */
     private fun onVideoStart() {
         paused = false
         if (pendingW <= 0) {
@@ -546,7 +546,7 @@ class CarLifeSession(
                 cur.requestKeyFrame()
                 return
             }
-            // Pioneer RM56E8B (h277), Mazda 20622111 (h359): и заглушка на USB не выше потолка ГУ (без setEncoderBitrate: тут держим srcLock)
+            // Pioneer RM56E8B (h277), Mazda 20622111 (h359)：USB 上的占位器也不超过 head unit 上限（不调用 setEncoderBitrate：此处持有 srcLock）
             val stubBps = when {
                 bridge.huPioneerRm56 -> minOf(mode.bitrate, AaBridgeCore.PIONEER_RM56_CEILING_BPS)
                 bridge.huMazda20622111 -> minOf(mode.bitrate, AaBridgeCore.MAZDA_20622111_CEILING_BPS)
@@ -581,7 +581,7 @@ class CarLifeSession(
         if (closed.get() || paused) return false
         synchronized(videoLock) {
             if (videoOverflow()) return false
-            // под тем же замком, что и onFrame заглушки: после AA-IDR ни один её кадр уже не уйдёт
+            // 与占位器的 onFrame 共用同一把锁：AA-IDR 之后其任一帧都不再发出
             acceptEncoder = false
             lastVideoTx = SystemClock.elapsedRealtime()
             sendVideoData(withFixedSps(payload))
@@ -590,9 +590,9 @@ class CarLifeSession(
     }
 
     /**
-     * Mazda 20622111 (h238/h359): на VIDEO_DATA больше ~16 КиБ ГУ перестаёт читать USB целиком. Кадр режется на куски
-     * по [AaBridgeCore.MAZDA_20622111_MAX_VIDEO_PACKET] байт, каждый отдельным VIDEO_DATA подряд (расчёт на то, что ГУ
-     * склеивает поток перед декодером). Остальные ГУ получают кадр одним пакетом, как раньше.
+     * Mazda 20622111 (h238/h359)：VIDEO_DATA 超过约 16 KiB 时 head unit 不再整体读取 USB。帧被切成
+     * [AaBridgeCore.MAZDA_20622111_MAX_VIDEO_PACKET] 字节的片段，每段一个连续的 VIDEO_DATA（预期 head unit
+     * 在解码器之前拼接流）。其他 head unit 仍像以前一样一帧一个包。
      */
     private fun sendVideoData(data: ByteArray) {
         val max = AaBridgeCore.MAZDA_20622111_MAX_VIDEO_PACKET
@@ -613,7 +613,7 @@ class CarLifeSession(
         }
     }
 
-    /** Весь H.264 в ГУ (мост, перехват, заглушка) идёт через AnnexB.fixSps: подпись SPS Exynos ГУ не принимает. */
+    /** 发往 head unit 的所有 H.264（桥接、接管、占位器）都经 AnnexB.fixSps：head unit 不接受 Exynos 的 SPS 签名。 */
     private fun withFixedSps(payload: ByteArray): ByteArray {
         val out = AnnexB.fixSps(payload, pendingW, pendingH)
         if (out !== payload && !spsFixLogged) {
@@ -627,9 +627,9 @@ class CarLifeSession(
     }
 
     /**
-     * Видео-очередь переполнена: уже стоящих кадров больше 30 или их байт больше ~500 мс слива (пока слив не измерен - 512 КБ).
-     * Проверяется до добавления нового кадра: в пустую очередь IDR принимается всегда. Отказ = вызывающий выбрасывает кадр
-     * и ждёт IDR (мост: outGotIdr=false; заглушка: csdPending=true), P после потерянного кадра слать нельзя.
+     * 视频队列溢出：排队帧超过 30 帧，或其字节数超过约 500 毫秒的排出量（排出量未测得时为 512 KB）。
+     * 在添加新帧之前检查：空队列中 IDR 始终被接受。拒绝 = 调用方丢弃该帧
+     * 并等待 IDR（桥接：outGotIdr=false；占位器：csdPending=true），丢失帧之后的 P 帧不能发送。
      */
     private fun videoOverflow(): Boolean {
         val over = VideoQueueLimit.overflow(transport.queuedVideoFrames, transport.queuedVideoBytes, transport.drainBytesPerSec)
@@ -647,8 +647,8 @@ class CarLifeSession(
     }
 
     /**
-     * Адаптация битрейта энкодера (раз в 100 мс): бэклог и слив -> BitratePolicy -> MediaCodec.setParameters на лету.
-     * Только перекодирование: в passthrough H.264 AA идёт как есть, битрейт не менялся бы.
+     * 编码器比特率自适应（每 100 毫秒一次）：积压和排出量 -> BitratePolicy -> 实时 MediaCodec.setParameters。
+     * 仅转码有效：passthrough 下 AA 的 H.264 原样发送，比特率不会改变。
      */
     private fun adaptBitrate() {
         try {
@@ -660,7 +660,7 @@ class CarLifeSession(
                 }
                 return
             }
-            // на воздухе политика ведёт и заглушку (CBR на потолке, пока AA стартует); на USB заглушку не трогаем
+            // 无线时策略也驱动占位器（AA 启动期间以 CBR 跑在上限）；USB 上不动占位器
             val placeholder = if (air && !bridge.isTranscoding) source else null
             if (!bridge.isTranscoding && placeholder == null) return
             val now = SystemClock.elapsedRealtime()
@@ -684,9 +684,9 @@ class CarLifeSession(
     }
 
     /**
-     * VW ID (h196): ГУ рвёт USB EIO на IDR > ~600 КиБ. Потолок перекодирования 2 Мбит/с под флагом ГУ (флаг мог прийти
-     * после старта энкодера - битрейт снижается на лету). С 4 Мбит/с сессия рвалась в первые 10-15 с, пока страховка
-     * опускала потолок; за поездку он сам сходился к 1,7 Мбит/с. Остальные ГУ не затрагиваются.
+     * VW ID (h196)：IDR 超过约 600 KiB 时 head unit 以 EIO 断开 USB。在 head unit 标志下转码上限为 2 Mbit/s（标志可能
+     * 在编码器启动后才到达 - 比特率实时下调）。4 Mbit/s 时会话在前 10-15 秒内就会断开，直到保险机制
+     * 降低上限；一趟行程中它自行收敛到 1.7 Mbit/s。其他 head unit 不受影响。
      */
     private fun applyVwCeiling() {
         if (!bridge.huVw20082138) return
@@ -697,9 +697,9 @@ class CarLifeSession(
     }
 
     /**
-     * Pioneer RM56E8B (h277): ГУ рвёт USB EIO за 25-30 с на 4-5 Мбит/с, на ~2 Мбит/с прожила 195 с, стабильно только на 800 кбит/с.
-     * Потолок 1 Мбит/с под флагом ГУ (HU_INFO приходит до INIT, но потолок применяется и на лету). Тепловой потолок
-     * ([BitratePolicy.thermalCapBps]) живёт отдельно и берётся через min в update(), поэтому с ним не конфликтует.
+     * Pioneer RM56E8B (h277)：4-5 Mbit/s 时 head unit 在 25-30 秒内以 EIO 断开 USB；约 2 Mbit/s 撑了 195 秒，仅 800 kbit/s 稳定。
+     * 在 head unit 标志下上限为 1 Mbit/s（HU_INFO 在 INIT 之前到达，但上限也可实时应用）。热上限
+     * ([BitratePolicy.thermalCapBps]) 独立存在，在 update() 中通过 min 起作用，因此与之不冲突。
      */
     private fun applyPioneerCeiling() {
         if (!bridge.huPioneerRm56) return
@@ -709,7 +709,7 @@ class CarLifeSession(
         if (bitratePolicy.current != old) bridge.setEncoderBitrate(bitratePolicy.current)
     }
 
-    /** Mazda 20622111 (h238/h359): потолок 1,5 Мбит/с, чтобы IDR реже вылезали за лимит пакета ГУ. */
+    /** Mazda 20622111 (h238/h359)：上限 1.5 Mbit/s，让 IDR 较少超出 head unit 的包限制。 */
     private fun applyMazda20622111Ceiling() {
         if (!bridge.huMazda20622111) return
         val old = bitratePolicy.current
@@ -724,10 +724,10 @@ class CarLifeSession(
         applyMazda20622111Ceiling()
     }
 
-    /** Потолок fps под ГУ (Pioneer RM56E8B: 15), null = без ограничения. */
+    /** head unit 的 fps 上限 (Pioneer RM56E8B: 15)，null = 无限制。 */
     private fun huMaxFps(): Int? = if (bridge.huPioneerRm56) AaBridgeCore.PIONEER_RM56_MAX_FPS else null
 
-    /** Страховка VW ID: IDR > 450 КБ - потолок ×0,75 (не ниже 1,5 Мбит/с), не чаще раза в секунду; кадр уже ушёл. */
+    /** VW ID 保险：IDR > 450 KB 时上限 ×0.75（不低于 1.5 Mbit/s），每秒至多一次；帧已发出。 */
     override fun onEncodedKeyFrame(size: Int) {
         if (size <= VW_20082138_IDR_LIMIT) return
         val now = SystemClock.elapsedRealtime()
@@ -740,24 +740,24 @@ class CarLifeSession(
         if (bitratePolicy.current != old) bridge.setEncoderBitrate(bitratePolicy.current)
     }
 
-    /** Аудио моста: канал MEDIA/TTS, заголовок 12 байт; time = millis & 0xFFFFFFFF в DATA, 0 в INIT/STOP (как Baidu). */
+    /** 桥接音频：MEDIA/TTS 通道，12 字节头；DATA 中 time = millis & 0xFFFFFFFF，INIT/STOP 中为 0（同 Baidu）。 */
     override fun sendAudio(channel: Int, type: Int, payload: ByteArray): Boolean {
         if (closed.get()) return false
-        if (payload.isNotEmpty() && transport.queueSize(channel) > MAX_AUDIO_QUEUE) return false   // звук не должен душить видео в очереди
+        if (payload.isNotEmpty() && transport.queueSize(channel) > MAX_AUDIO_QUEUE) return false   // 音频不应在队列中挤掉视频
         val isData = type == CarlifeAudio.MEDIA_DATA || type == CarlifeAudio.TTS_DATA || type == CarlifeAudio.VR_DATA
         val time = if (isData) (System.currentTimeMillis() and 0xFFFFFFFFL).toInt() else 0
         send(channel, Wire.dataInner(type, time, payload))
         return true
     }
 
-    /** MODULE_STATUS об одном модуле (NAVI перед TTS, MUSIC при MEDIA INIT/PAUSE), как Baidu ModuleStatusManage. */
+    /** 关于单个模块的 MODULE_STATUS（TTS 前发 NAVI，MEDIA INIT/PAUSE 时发 MUSIC），同 Baidu ModuleStatusManage。 */
     override fun sendModuleStatus(module: Int, status: Int): Boolean {
         if (closed.get()) return false
         sendCmd(Msg.MODULE_STATUS, Msgs.moduleStatusSingle(module, status))
         return true
     }
 
-    /** CMD GO_TO_DESKTOP (MD -> ГУ, пустое тело): ГУ показывает свой рабочий стол. */
+    /** CMD GO_TO_DESKTOP (MD -> head unit，空数据体)：head unit 显示自己的桌面。 */
     override fun goToDesktop() {
         if (closed.get()) return
         AppLog.i("-> ГУ: GO_TO_DESKTOP")
@@ -765,8 +765,8 @@ class CarLifeSession(
     }
 
     /**
-     * Запись микрофона на ГУ как у Baidu MD: старт = MIC_RECORD_RECOG_START (VrManager.sendStartRecogMsgToVehicle)
-     * и MODULE_STATUS VR=1 (prepareShowVr); стоп = MIC_RECORD_END (sendRecordEndMsgToVehicle) и VR=0 (prepareCloseVr).
+     * head unit 上的麦克风录音，同 Baidu MD：启动 = MIC_RECORD_RECOG_START (VrManager.sendStartRecogMsgToVehicle)
+     * 和 MODULE_STATUS VR=1 (prepareShowVr)；停止 = MIC_RECORD_END (sendRecordEndMsgToVehicle) 和 VR=0 (prepareCloseVr)。
      */
     override fun requestMicRecord(start: Boolean): Boolean {
         if (closed.get()) return false
@@ -787,9 +787,9 @@ class CarLifeSession(
         return true
     }
 
-    // ---------------- метаданные AA -> CarLife ----------------
-    // Все три сообщения идут через одну нить metaExec: порядок MEDIA_INFO -> PROGRESS сохраняется, а перекодирование
-    // обложки и рисование стрелки не держат монитор моста (зовут из нити AA-сессии под ним).
+    // ---------------- AA 元数据 -> CarLife ----------------
+    // 三个消息都经过同一条 metaExec 线程：MEDIA_INFO -> PROGRESS 的顺序得以保持，而封面转码
+    // 和箭头绘制不会占用桥接监视器（它们由持有监视器的 AA 会话线程调用）。
 
     private fun metaSubmit(what: String, task: () -> Unit): Boolean {
         if (closed.get()) return false
@@ -820,7 +820,7 @@ class CarLifeSession(
                 art.contentEquals(lastArtSrc) -> lastArtJpeg
                 else -> {
                     val t = SystemClock.elapsedRealtime()
-                    // Mazda 20622111 (h359): пакет > ~16 КиБ вешает USB, обложка 24 КБ убила сессию через 3 с после картинки
+                    // Mazda 20622111 (h359)：包超过约 16 KiB 会挂起 USB，24 KB 的封面在图片出现 3 秒后杀死了会话
                     val limit = if (bridge.huMazda20622111) AaBridgeCore.MAZDA_20622111_ART_BYTES else MetaImages.MAX_BYTES
                     val j = MetaImages.albumJpeg(art, limit) ?: ByteArray(0)
                     AppLog.i("метаданные: обложка ${PbText.blob(art)} -> ${PbText.blob(j)} за ${SystemClock.elapsedRealtime() - t} мс", ui = false)
@@ -840,7 +840,7 @@ class CarLifeSession(
 
     private var hondaRoadLogged = false
 
-    /** Honda (channel 2077xxxx/2083xxxx): roadName под ≤24 клетки / ≤31 Б, иначе приборка отбрасывает строку. Остальные ГУ - без изменений. */
+    /** Honda (channel 2077xxxx/2083xxxx)：roadName 适配到 ≤24 格 / ≤31 字节，否则仪表盘丢弃该字符串。其他 head unit - 不变。 */
     private fun fitRoad(info: NaviTurnInfo): NaviTurnInfo {
         if (!bridge.huHonda) return info
         if (!hondaRoadLogged) {
@@ -857,7 +857,7 @@ class CarLifeSession(
         if (!cfg.metaNavi) return false
         val sent = fitRoad(info)
         return metaSubmit("NAVI_NEXT_TURN_INFO") {
-            // конец маршрута (action 3) - иконка пустая, как Baidu onNaviStateChange(false)
+            // 路线结束 (action 3) - 图标为空，同 Baidu onNaviStateChange(false)
             val icon = if (!cfg.naviField6.icon || info.action == 3) ByteArray(0) else turnIcons.getOrPut(info.nextTurn) {
                 MetaImages.turnIcon(info.nextTurn).also {
                     AppLog.i("метаданные: стрелка nextTurn=${info.nextTurn} ${PbText.blob(it)}", ui = false)
@@ -867,7 +867,7 @@ class CarLifeSession(
         }
     }
 
-    /** Транскодер моста: декодер AA (кадр режима) -> кроп -> Surface энкодера (выход режима). null, если MediaCodec не поднялся. */
+    /** 桥接转码器：AA 解码器（模式帧）-> 裁剪 -> 编码器 Surface（模式输出）。MediaCodec 未启动时为 null。 */
     override fun createTranscoder(out: TranscodeOutput): VideoTranscoder? = try {
         applyHuCeilings()
         AaTranscoder(
@@ -927,7 +927,7 @@ class CarLifeSession(
         val n = t.fingers
         if (n > 1 && maxFingers < 2) AppLog.i("== МУЛЬТИТАЧ: ГУ шлёт второй палец (action=${t.action} тело=${m.body.size} байт)")
         maxFingers = maxOf(maxFingers, n)
-        // для чек-листа щипка: сырой action, пальцы, длина тела; MOVE только при смене числа пальцев, иначе лог раздует
+        // 供捏合缩放清单使用：原始 action、手指数、数据体长度；仅手指数变化时记录 MOVE，否则日志会爆炸
         if (t.masked != 2 || n != lastMoveFingers) {
             AppLog.i("TOUCH action=${t.action} пальцев=$n тело=${m.body.size} байт", false)
             lastMoveFingers = if (t.masked == 2) n else 0
@@ -944,32 +944,32 @@ class CarLifeSession(
         }
     }
 
-    // ---------------- запись ----------------
+    // ---------------- 写入 ----------------
 
     private fun sendCmd(type: Int, body: ByteArray?) = send(Ch.CMD, Wire.cmdInner(type, body))
 
     private fun send(chan: Int, inner: ByteArray) {
         if (closed.get()) return
         if (bridge.huMazda20622111 && inner.size > AaBridgeCore.MAZDA_20622111_MAX_VIDEO_PACKET + 12) {
-            // страховка h359: VIDEO_DATA уже нарезан, всё прочее больше лимита ГУ не шлём - иначе ГУ перестаёт читать USB
+            // h359 保险：VIDEO_DATA 已切片，其余超过 head unit 限制的内容不发送 - 否则 head unit 会停止读取 USB
             AppLog.i("Mazda 20622111: пакет ch$chan ${inner.size} Б больше лимита ГУ, не отправляю")
             return
         }
         transport.send(chan, inner)
     }
 
-    /** После записи в транспорт (нить писателя). */
+    /** 写入传输层之后（写线程）。 */
     private fun logTx(chan: Int, inner: ByteArray) {
         if (Ch.isCmdStyle(chan)) {
             val m = Wire.parseCmd(inner) ?: return
             val decoded = if (m.body.isEmpty()) null else PbText.render(m.body, Schemas.byType[m.type])
-            // прогресс трека - раз в секунду, обновление дистанции (action 2) - тоже: в файл, не в UI
+            // 曲目进度 - 每秒一次，距离更新 (action 2) - 同样：写入文件，不进 UI
             val quiet = m.type == Msg.MEDIA_PROGRESS_BAR ||
                 (m.type == Msg.NAVI_NEXT_TURN_INFO && PbReader.parse(m.body)?.let { PbReader.int(it, 1) } == 2)
             AppLog.msg("TX", chan, inner.size, m.type, m.declaredLen, decoded, inner, ui = !quiet)
         } else {
             val m = Wire.parseData(inner) ?: return
-            if (chan != Ch.VIDEO) { // аудио моста: INIT/STOP всегда, DATA - первые и каждый 200-й
+            if (chan != Ch.VIDEO) { // 桥接音频：INIT/STOP 始终记录，DATA 记前几个和每第 200 个
                 audioTx++
                 if (m.type == CarlifeAudio.TTS_INIT) ttsTxSinceInit = 0
                 val ttsHead = m.type == CarlifeAudio.TTS_DATA && ++ttsTxSinceInit <= TTS_TX_LOGGED
@@ -981,7 +981,7 @@ class CarLifeSession(
                 }
                 return
             }
-            if (m.data.isEmpty()) { // keepalive на PAUSE: пустой VIDEO_DATA (Desay) или VIDEO_HEARTBEAT (VW 20082120)
+            if (m.data.isEmpty()) { // PAUSE 时的 keepalive：空 VIDEO_DATA (Desay) 或 VIDEO_HEARTBEAT (VW 20082120)
                 vBeats++
                 if (vBeats <= 3) AppLog.msg("TX", chan, inner.size, m.type, m.declaredLen, null, inner)
                 return
@@ -998,14 +998,14 @@ class CarLifeSession(
         }
     }
 
-    // ---------------- видео из энкодера ----------------
+    // ---------------- 编码器视频 ----------------
 
     override fun onConfig(csd: ByteArray) {
         this.csd = csd
         val types = AnnexB.nalTypes(csd)
         var prof = ""
         if (csd.size > 8 && types.firstOrNull() == 7) {
-            // [00 00 00 01][SPS header][profile_idc][constraints][level_idc]
+            // [00 00 00 01][SPS 头][profile_idc][constraints][level_idc]
             prof = " profile_idc=${csd[5].toInt() and 0xFF} constraints=0x%02X level_idc=${csd[7].toInt() and 0xFF}".format(csd[6].toInt() and 0xFF)
         }
         AppLog.i("энкодер: codec config ${csd.size} байт nal=$types$prof")
@@ -1015,7 +1015,7 @@ class CarLifeSession(
     override fun onFrame(data: ByteArray, key: Boolean) {
         if (closed.get() || paused) return
         synchronized(videoLock) {
-            if (!acceptEncoder) return   // заглушка скрыта (идёт AA-видео): остаток кадров кодера не нужен
+            if (!acceptEncoder) return   // 占位器已隐藏（AA 视频在播放）：编码器剩余帧不再需要
             onEncoderFrame(data, key)
         }
     }
@@ -1023,10 +1023,10 @@ class CarLifeSession(
     private fun onEncoderFrame(data: ByteArray, key: Boolean) {
         if (!key && csdPending) {
             vDropped++
-            return // до первого IDR ничего не шлём (первый пакет обязан начинаться с SPS)
+            return // 第一个 IDR 之前不发送任何内容（第一个包必须以 SPS 开头）
         }
         if (videoOverflow()) {
-            // кадр потерян: P после него слать нельзя, снова ждём IDR (csdPending), запрос IDR не чаще раза в 1.5 с
+            // 帧已丢失：其后的 P 帧不能发送，重新等待 IDR (csdPending)，IDR 请求每 1.5 秒至多一次
             vDropped++
             csdPending = true
             if (placeholderIdr.tryRequest(SystemClock.elapsedRealtime())) source?.requestKeyFrame()
@@ -1047,26 +1047,26 @@ class CarLifeSession(
         CarLifeState.status = "ОШИБКА: $msg: ${t?.message}"
     }
 
-    // ---------------- таймер ----------------
+    // ---------------- 定时器 ----------------
 
     private var lastStatsAt = 0L
     private var lastStatsFrames = 0L
 
-    // Пустых keepalive при идущем видео НЕТ: кадры обеспечивает энкодер (repeat-previous-frame-after 100 мс).
-    // На PAUSE (ГУ в своём меню/на своём источнике) канал иначе молчит:
-    // - Desay G6S (Mazda CX-5) через ~22 с тишины рвёт USB (EIO, лог Ивана 2026-10-12): пустой VIDEO_DATA 0x20001,
-    //   как Baidu sendEmptyPacketBackground, раз в 2 с по USB и раз в ~1 с на воздухе (ГУ на Wi-Fi рвут видео-сокет быстрее);
-    // - VW channel 20082120 рвёт канал через 3,6-4 с после PAUSE даже при 0x20001 раз в 1-2 с (h93, логи 2026-10-15 USB
-    //   и 2026-10-16 Wi-Fi), реконнект с FOREGROUND выдёргивал юзера из меню ГУ в CarLife: VIDEO_HEARTBEAT 0x20002 сразу
-    //   и раз в 100 мс, как Baidu Recorder.sendEmptyPacketBackground (~50 мс). VW CNS3 channel 20082122 так же,
-    //   через ~5,6 с (h222, 2026-10-17 USB).
-    // - Desay G6S на воздухе (h211, задний ход): пустой VIDEO_DATA раз в 900 мс не держит, через 24-28 с ГУ снимает
-    //   Wi-Fi Direct; переживали только паузы до 25 с. Baidu на паузе шлёт именно VIDEO_HEARTBEAT (Recorder:906-926),
-    //   ставим его раз в 100 мс, по USB у Desay остаётся VIDEO_DATA.
+    // 视频播放期间没有空的 keepalive：帧由编码器提供 (repeat-previous-frame-after 100 毫秒)。
+    // PAUSE 时（head unit 在自己的菜单/自己的音源上）通道否则会静默：
+    // - Desay G6S (Mazda CX-5) 约 22 秒静默后断开 USB (EIO, Ivan 的日志 2026-10-12)：空 VIDEO_DATA 0x20001，
+    //   同 Baidu sendEmptyPacketBackground，USB 每 2 秒一次，无线约每 1 秒一次（Wi-Fi 上的 head unit 断开视频 socket 更快）；
+    // - VW channel 20082120 在 PAUSE 后 3.6-4 秒断开通道，即使每 1-2 秒发一次 0x20001 (h93, 日志 2026-10-15 USB
+    //   和 2026-10-16 Wi-Fi)，带 FOREGROUND 的重连会把用户从 head unit 菜单拽回 CarLife：VIDEO_HEARTBEAT 0x20002 立即
+    //   发送且每 100 毫秒一次，同 Baidu Recorder.sendEmptyPacketBackground (~50 毫秒)。VW CNS3 channel 20082122 相同，
+    //   约 5.6 秒 (h222, 2026-10-17 USB)。
+    // - 无线上的 Desay G6S (h211, 倒车)：每 900 毫秒一次的空 VIDEO_DATA 撑不住，24-28 秒后 head unit 断开
+    //   Wi-Fi Direct；只撑得住 25 秒以内的暂停。Baidu 在暂停时发送的正是 VIDEO_HEARTBEAT (Recorder:906-926)，
+    //   我们设为每 100 毫秒一次，USB 上 Desay 仍使用 VIDEO_DATA。
     /**
-     * ГУ, которым на PAUSE нужен VIDEO_HEARTBEAT раз в 100 мс: VW 20082120/20082122 (h93, h222), VW BT 1420 по воздуху
-     * (Павел 2026-10-18: без keepalive на PAUSE ГУ закрыла сокет через ~1 мин, с пустым VIDEO_DATA рвала на START)
-     * и Desay G6S по воздуху (h211).
+     * PAUSE 时需要每 100 毫秒一次 VIDEO_HEARTBEAT 的 head unit：VW 20082120/20082122 (h93, h222)、无线的 VW BT 1420
+     * (Pavel 2026-10-18：PAUSE 下无 keepalive 时 head unit 约 1 分钟后关闭 socket，用空 VIDEO_DATA 则在 START 时断开)
+     * 以及无线的 Desay G6S (h211)。
      */
     private val pauseHeartbeatHu: Boolean
         get() = bridge.huVw20082120 || (air && (bridge.huVwBt1420 || bridge.huDesayG6S))
@@ -1087,9 +1087,9 @@ class CarLifeSession(
     }
 
     /**
-     * VW CNS2 Delphi 20082114 (h425, лог 2026-10-24): AA на статичном экране не шлёт кадров, через 6,4 с без видео ГУ
-     * порвала USB (EIO), паузы до 5,1 с проходили. Вне PAUSE после [IDLE_HEARTBEAT_MS] без кадров шлём VIDEO_HEARTBEAT,
-     * как на PAUSE, и дальше с тем же шагом, пока AA молчит.
+     * VW CNS2 Delphi 20082114 (h425, 日志 2026-10-24)：AA 在静态画面时不发送帧，6.4 秒无视频后 head unit
+     * 断开 USB (EIO)，5.1 秒以内的暂停没问题。非 PAUSE 状态下 [IDLE_HEARTBEAT_MS] 无帧后发送 VIDEO_HEARTBEAT，
+     * 与 PAUSE 时相同，并以同样间隔继续，直到 AA 恢复发送。
      */
     private fun idleHeartbeat() {
         if (!bridge.huVwCns2Delphi || !carlifeStarted || vFrames == 0L) return
@@ -1120,8 +1120,8 @@ class CarLifeSession(
     }
 
     /**
-     * Раз в секунду: статус нагрева (прогноз headroom - раз в 10 с, чаще PowerManager отдаёт NaN) -> ThermalThrottle.
-     * Сменилась ступень - потолок fps и битрейта перекодирования на лету. В passthrough разгружать нечего, только лог.
+     * 每秒一次：发热状态（headroom 预测 - 每 10 秒一次，更频繁时 PowerManager 返回 NaN）-> ThermalThrottle。
+     * 档位变化时 - 实时调整转码的 fps 和比特率上限。passthrough 下无可降载，仅记录日志。
      */
     private fun checkThermal(now: Long) {
         try {
@@ -1184,7 +1184,7 @@ class CarLifeSession(
     }
 
     private fun deviceInfo(): DeviceInfo {
-        // SDK_INT >= 33: как в 8.6.7 врём "29"/29
+        // SDK_INT >= 33：同 8.6.7 谎报 "29"/29
         val (sdk, sdkInt) = DeviceInfo.reportedSdk(Build.VERSION.SDK_INT)
         return DeviceInfo(
             os = "Android",
@@ -1208,7 +1208,7 @@ class CarLifeSession(
             release = Build.VERSION.RELEASE,
             sdk = sdk,
             sdkInt = sdkInt,
-            btaddress = "unknown", // BT-адрес нам недоступен; Baidu шлёт "unknown", если не получил
+            btaddress = "unknown", // BT 地址我们拿不到；Baidu 未取得时发送 "unknown"
             carlifeVersion = Handshake.MD_VERSION,
             carlifeType = Handshake.MD_TYPE_CARLIFE_APP,
         )
@@ -1217,10 +1217,10 @@ class CarLifeSession(
     companion object {
         const val FPS = Handshake.DEFAULT_FPS
 
-        /** action&255 тача, которые мост переводит в AA: DOWN, UP, MOVE, POINTER_DOWN, POINTER_UP. */
+        /** 桥接层转换为 AA 的触摸 action&255：DOWN, UP, MOVE, POINTER_DOWN, POINTER_UP。 */
         private val TOUCH_TO_AA = setOf(0, 1, 2, 5, 6)
-        private const val TTS_TX_LOGGED = 8           // TTS_DATA после INIT с временем записи в транспорт (h222)
-        private const val MAX_AUDIO_QUEUE = 180       // звук не принимается, если в общей очереди больше пакетов
+        private const val TTS_TX_LOGGED = 8           // INIT 之后带写入传输层时间的 TTS_DATA (h222)
+        private const val MAX_AUDIO_QUEUE = 180       // 公共队列中包更多时音频不被接受
         private const val BITRATE_POLL_MS = 100L
         private const val VW_20082138_CEILING_BPS = 2_000_000
         private const val VW_20082138_MIN_BPS = 1_500_000
@@ -1228,32 +1228,32 @@ class CarLifeSession(
         private const val VW_20082138_CUT_INTERVAL_MS = 1000L
         private const val NEVER_MS = Long.MIN_VALUE
 
-        /** getThermalHeadroom чаще раза в секунду отдаёт NaN, прогноз на 10 с - хватает раза в 10 с. */
+        /** getThermalHeadroom 每秒多次会返回 NaN，10 秒预测 - 每 10 秒一次足够。 */
         private const val HEADROOM_POLL_MS = 10_000L
 
-        /** PowerManager.THERMAL_STATUS_* по порядку. */
+        /** PowerManager.THERMAL_STATUS_* 按顺序排列。 */
         private val THERMAL_NAMES = listOf("NONE", "LIGHT", "MODERATE", "SEVERE", "CRITICAL", "EMERGENCY", "SHUTDOWN")
         private const val SILENCE_MS = 10_000L
-        private const val PAUSE_KEEPALIVE_MS = 2_000L  // Desay G6S: пустой VIDEO_DATA
-        private const val PAUSE_HEARTBEAT_MS = 100L    // VW 20082120: пустой VIDEO_HEARTBEAT
-        private const val IDLE_HEARTBEAT_MS = 1_000L   // Delphi 20082114: AA без кадров дольше секунды
+        private const val PAUSE_KEEPALIVE_MS = 2_000L  // Desay G6S: 空 VIDEO_DATA
+        private const val PAUSE_HEARTBEAT_MS = 100L    // VW 20082120: 空 VIDEO_HEARTBEAT
+        private const val IDLE_HEARTBEAT_MS = 1_000L   // Delphi 20082114: AA 超过一秒无帧
 
-        /** На воздухе раз в ~1 с: ГУ на Wi-Fi рвут видео-сокет быстрее (план 5.2 п.4). */
+        /** 无线约每 1 秒一次：Wi-Fi 上的 head unit 断开视频 socket 更快 (计划 5.2 第 4 条)。 */
         private const val PAUSE_KEEPALIVE_AIR_MS = 900L
 
-        /** Keepalive на PAUSE: пустой VIDEO_DATA, у VW 20082120 VIDEO_HEARTBEAT. */
+        /** PAUSE 时的 keepalive：空 VIDEO_DATA，VW 20082120 用 VIDEO_HEARTBEAT。 */
         @Volatile @JvmStatic var PAUSE_KEEPALIVE_ENABLED = true
 
         private const val FEATURE_CONTENT_ENCRYPTION = "CONTENT_ENCRYPTION"
 
-        /** moduleID подписки CARLIFE_DATA_SUBSCRIBE на навигацию (CarlifeDataSubscribe: 0 навигация, 2 музыка). */
+        /** CARLIFE_DATA_SUBSCRIBE 导航订阅的 moduleID (CarlifeDataSubscribe: 0 导航, 2 音乐)。 */
         private const val SUB_NAVI = 0
 
-        /** moduleID голосового помощника в MODULE_STATUS (ModuleStatusManage: 4 = VR). */
+        /** MODULE_STATUS 中语音助手的 moduleID (ModuleStatusManage: 4 = VR)。 */
         private const val MODULE_VR = 4
         private const val VR_ECHO_MS = 1500L
 
-        /** Поле time видеопакета: unix-секунды (Recorder.sendVideoData :930-962). */
+        /** 视频包的 time 字段：unix 秒 (Recorder.sendVideoData :930-962)。 */
         private fun unixSeconds() = (System.currentTimeMillis() / 1000).toInt()
     }
 }

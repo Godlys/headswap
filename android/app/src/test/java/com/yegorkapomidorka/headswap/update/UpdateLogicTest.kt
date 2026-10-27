@@ -31,7 +31,7 @@ class UpdateLogicTest {
 
     @Test
     fun testBuildSuffixIsIgnored() {
-        // тестовая сборка 1.1.10-cx5test1 не считает релиз 1.1.10 обновлением, а 1.1.11 - считает
+        // 测试构建 1.1.10-cx5test1 不把 1.1.10 当作更新，而 1.1.11 会被当作更新
         assertFalse(UpdateLogic.isNewer("1.1.10", "1.1.10-cx5test1"))
         assertTrue(UpdateLogic.isNewer("1.1.11", "1.1.10-cx5test1"))
     }
@@ -56,7 +56,7 @@ class UpdateLogicTest {
         val renamed = Asset("Headswap.apk", "https://x/h.apk", 3_000_000, null)
         assertEquals(renamed, UpdateLogic.pickApk(listOf(renamed, other), "1.1.11"))
         assertNull(UpdateLogic.pickApk(listOf(other), "1.1.11"))
-        // два APK с чужими именами: какой ставить, непонятно
+        // 两个 APK 都不是目标文件名：该装哪个，说不清
         assertNull(UpdateLogic.pickApk(listOf(renamed, renamed.copy(name = "debug.apk")), "1.1.11"))
     }
 
@@ -97,13 +97,13 @@ class UpdateLogicTest {
         assertTrue(UpdateLogic.shouldCheck(true, 0, last))
         assertFalse(UpdateLogic.shouldCheck(true, last, last + 5 * h))
         assertTrue(UpdateLogic.shouldCheck(true, last, last + 6 * h))
-        // часы перевели назад: не ждать 6 часов от «будущей» отметки
+        // 时钟被回拨：不要从“未来”的时间戳起再等 6 小时
         assertTrue(UpdateLogic.shouldCheck(true, last, last - h))
     }
 
     @Test
     fun failedCheckRetriesInAnHour() {
-        // Updater после ошибки пишет lastCheck = now - CHECK_INTERVAL_MS + RETRY_MS
+        // Updater 出错后写入 lastCheck = now - CHECK_INTERVAL_MS + RETRY_MS
         val now = 1_000_000_000L
         val last = now - UpdateLogic.CHECK_INTERVAL_MS + UpdateLogic.RETRY_MS
         assertFalse(UpdateLogic.shouldCheck(true, last, now + UpdateLogic.RETRY_MS - 1))

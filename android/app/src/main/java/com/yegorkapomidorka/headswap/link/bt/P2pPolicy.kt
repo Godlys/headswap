@@ -1,15 +1,15 @@
 package com.yegorkapomidorka.headswap.link.bt
 
-/** Что делать с очередным TARGET_INFO от ГУ. */
+/** 如何处理来自车机的下一条 TARGET_INFO。 */
 enum class P2pOnTarget { START, RESTART, SKIP }
 
-/** Чистая логика входа в P2P-группу ГУ, без android.*: проверяется JVM-тестами. */
+/** 进入车机 P2P 组的纯逻辑，不依赖 android.*：由 JVM 测试验证。 */
 object P2pPolicy {
     /**
-     * Новый TARGET_INFO (ГУ шлёт его на каждое подключение Bluetooth): в группе уже - пропускаем, IP переотдаётся по
-     * IP_REQUEST; попытка идёт, но не вошли (BUSY, пир не нашёлся, Wi-Fi включили позже, ГУ сменила имя) - начинаем
-     * заново с новыми реквизитами (h126). Те же реквизиты, а попытке меньше [freshMs] - не трогаем: rejoin спрашивает
-     * TARGET_INFO раз в 5-10 с, и рестарт на каждый ответ рвал поиск и висящее приглашение (h211, Равиль 21.10).
+     * 收到新的 TARGET_INFO（车机在每次蓝牙连接时都会发送）：已在组内——跳过，IP 会通过
+     * IP_REQUEST 重新下发；尝试进行中但未进入（BUSY、未找到对端、Wi-Fi 开启较晚、车机改名）——用新凭据
+     * 重新开始（h126）。凭据相同且尝试时间小于 [freshMs]——不做处理：rejoin 每 5-10 秒询问一次
+     * TARGET_INFO，对每个应答都重启会中断搜索和挂起的邀请（h211，Ramil 21.10）。
      */
     fun onTarget(active: Boolean, joined: Boolean, same: Boolean = false, ageMs: Long = Long.MAX_VALUE, freshMs: Long = 30_000L): P2pOnTarget = when {
         joined -> P2pOnTarget.SKIP
@@ -19,9 +19,9 @@ object P2pPolicy {
     }
 
     /**
-     * Группа ГУ распалась, а Bluetooth жив (h211, Mazda G6S: задний ход дольше ~25 с): сама ГУ TARGET_INFO не шлёт,
-     * пока не переподключит Bluetooth, а это бывает только после сна машины. Просим его сами: через 2 с, 5 с, дальше
-     * раз в 10 с; null - хватит (~10 мин без входа, ГУ явно не хочет).
+     * 车机组已解散而蓝牙仍存活（h211、Mazda G6S：倒车超过约 25 秒）：车机自己不发送 TARGET_INFO，
+     * 直到重新连接蓝牙，而这只会在汽车休眠后发生。我们自己请求它：2 秒后、5 秒后，此后
+     * 每 10 秒一次；null——够了（约 10 分钟未进入，车机显然不愿意）。
      */
     fun rejoinDelayMs(attempt: Int): Long? = when {
         attempt < 0 -> null
@@ -32,9 +32,9 @@ object P2pPolicy {
     }
 
     /**
-     * Запросы TARGET_INFO на 2-й, 7-й, 17-й и 27-й секундах ГУ отвечает, но пир в эфире так и не появился (первая 30-секундная
-     * попытка входа кончилась на ~32 с): Desay G6S поднимает Wi-Fi Direct только на новом подключении Bluetooth (h211,
-     * S23 23.10: 2 мин rejoin без пира, после переподключения BT пир за 1,5 с; h185). На ~37 с рвём RFCOMM.
+     * 在第 2、7、17 和 27 秒的 TARGET_INFO 请求中车机都有响应，但对端始终未在空中出现（第一次 30 秒
+     * 进入尝试在约 32 秒时结束）：Desay G6S 只在新的蓝牙连接上启动 Wi-Fi Direct（h211、
+     * S23 23.10：2 分钟 rejoin 无对端，BT 重连后 1.5 秒对端出现；h185）。约 37 秒时断开 RFCOMM。
      */
     fun rejoinDropBt(attempt: Int): Boolean = attempt >= REJOIN_DROP_BT_AFTER
 

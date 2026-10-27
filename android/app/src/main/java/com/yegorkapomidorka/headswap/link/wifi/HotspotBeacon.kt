@@ -13,16 +13,16 @@ import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** IPv4-интерфейс локальной сети, куда шлём маяк: хотспот телефона (ветка B) или сеть ГУ, куда вошёл телефон (C′). */
+/** 发送信标的本地网络 IPv4 接口：手机热点（分支 B）或手机已加入的车机网络（C′）。 */
 class LanIface(val name: String, val ip: Inet4Address, val prefix: Int, val broadcast: Inet4Address) {
-    /** Адрес в подсети интерфейса (по нему же принимаются сокеты ГУ). */
+    /** 地址是否位于接口子网内（车机 socket 也据此判断放行）。 */
     fun contains(a: InetAddress): Boolean {
         if (a !is Inet4Address) return false
         val mask = if (prefix == 0) 0 else -1 shl (32 - prefix)
         return (toInt(a) and mask) == (toInt(ip) and mask)
     }
 
-    /** Узлы подсети без своего адреса, сети и broadcast; только для /24 и уже (иначе слишком много). */
+    /** 子网主机地址（排除自身地址、网络地址和 broadcast）；仅限 /24 及掩码更长的前缀（否则数量过多）。 */
     fun hosts(): List<Inet4Address> {
         if (prefix < 24 || prefix > 30) return emptyList()
         val mask = -1 shl (32 - prefix)
@@ -42,18 +42,18 @@ class LanIface(val name: String, val ip: Inet4Address, val prefix: Int, val broa
         ) as Inet4Address
 
         /**
-         * Подходит ли интерфейс для маяка. Мобильные данные (rmnet, ccmni), loopback, туннели и dummy нет;
-         * p2p нет (это ветка A, как в «mix»-режиме Baidu). Остальные IPv4 с broadcast-адресом да.
+         * 接口是否适合发送信标。移动数据（rmnet、ccmni）、loopback、隧道和 dummy 不适用；
+         * p2p 不适用（那是分支 A，同 Baidu 的 "mix" 模式）。其余带 broadcast 地址的 IPv4 适用。
          */
         fun eligibleName(name: String): Boolean =
             EXCLUDED_PREFIXES.none { name.startsWith(it) }
 
-        /** Хотспот (а не STA): свип unicast-маяками только по ним, в домашнюю сеть через wlan0 не сыплем. */
+        /** 热点接口（而非 STA）：仅向这些接口以 unicast 扫发信标，不向 wlan0 家庭网络发送。 */
         fun sweepName(name: String): Boolean = name != "wlan0"
 
         private val EXCLUDED_PREFIXES = listOf("rmnet", "ccmni", "lo", "dummy", "tun", "ppp", "p2p", "ip6tnl", "sit", "v4-", "clat")
 
-        /** Текущие подходящие интерфейсы. */
+        /** 当前合适的接口。 */
         fun scan(): List<LanIface> {
             val out = ArrayList<LanIface>()
             for (ni in NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()) {
@@ -73,25 +73,25 @@ class LanIface(val name: String, val ip: Inet4Address, val prefix: Int, val broa
     }
 }
 
-/** Байты ветки B: маяк телефона и ответ на опрос ГУ. */
+/** 分支 B 的数据字节：手机信标和对车机询问的应答。 */
 object BeaconCodec {
     const val BEACON_PORT = 7999
     const val PROBE_PORT = 8999
 
-    /** Что шлёт Baidu MD 8.6.7 (ConnectManager.sendHotspotUdp): ГУ берёт только адрес отправителя. */
+    /** Baidu MD 8.6.7 发送的内容（ConnectManager.sendHotspotUdp）：车机只取发送方地址。 */
     val BEACON: ByteArray = "CarlifeHost".toByteArray(Charsets.US_ASCII)
 
-    /** Ответ FT/CL2AA на опрос 8999 (расширение под отдельные ГУ, в официальном MD слушателя нет). */
+    /** 对 8999 端口询问的应答（FT/CL2AA）（为个别车机做的扩展，官方 MD 没有该监听器）。 */
     val READY: ByteArray = """{"carlifehost":"carlife","status":"ready"}""".toByteArray(Charsets.US_ASCII)
 
-    /** Опрос ГУ: датаграмма со строкой carlifehost (регистр важен, как у FT). */
+    /** 车机询问：包含 carlifehost 字符串的数据报（大小写敏感，同 FT）。 */
     fun isProbe(data: ByteArray, len: Int): Boolean = String(data, 0, len, Charsets.ISO_8859_1).contains("carlifehost")
 }
 
 /**
- * Ветка B: телефон раздаёт хотспот, ГУ в нём клиент. Раз в 2 с маяк «CarlifeHost» на UDP 7999 в broadcast каждого
- * подходящего интерфейса, раз в 12 с unicast каждому адресу подсети хотспота (часть ГУ broadcast не ловит: FT, CL2AA);
- * ответчик на UDP 8999. Работает, пока ГУ не подключила 6 сокетов (stop()). Всё в WL-лог, без содержимого пакетов ГУ.
+ * 分支 B：手机开启热点，车机作为客户端接入。每 2 秒向每个合适接口的 broadcast 发送 "CarlifeHost" 信标（UDP 7999），
+ * 每 12 秒向热点子网内每个地址 unicast 发送（部分车机收不到 broadcast：FT、CL2AA）；
+ * 同时在 UDP 8999 上应答。直到车机连满 6 个 socket（stop()）前持续工作。全部记入 WL 日志，不含车机数据包内容。
  */
 class HotspotBeacon(
     private val ifaces: () -> List<LanIface> = { LanIface.scan() },
@@ -100,12 +100,12 @@ class HotspotBeacon(
     private val beaconPort: Int = BeaconCodec.BEACON_PORT,
     private val probePort: Int = BeaconCodec.PROBE_PORT,
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
-    /** Набор сетей изменился (включили/выключили хотспот): для статуса на экране. */
+    /** 网络集合发生变化（热点开启/关闭）：用于屏幕上的状态显示。 */
     private val onIfaces: (List<LanIface>) -> Unit = {},
     /**
-     * Сеть машины, в которую вошёл телефон (WifiNetworkSpecifier): сокеты маяка и ответчика привязываются к ней, чтобы
-     * пакеты не ушли в основную сеть. Свип unicast при этом выключен: сеть машины может быть на wlan1, а не на хотспотном
-     * интерфейсе. Список [ifaces] вызывающий сужает до интерфейса этой сети сам. null - как раньше.
+     * 手机加入的车辆网络（WifiNetworkSpecifier）：信标与应答 socket 绑定到该网络，以免数据包流入主网络。
+     * 同时关闭 unicast 扫发：车辆网络可能位于 wlan1 而非热点接口上。调用方自行将 [ifaces] 列表收窄到该网络的接口。
+     * null - 同之前一致。
      */
     private val bindNetwork: Network? = null,
 ) {
@@ -113,7 +113,7 @@ class HotspotBeacon(
     private var sender: Thread? = null
     private var responder: Thread? = null
     @Volatile private var probeSocket: DatagramSocket? = null
-    @Volatile private var known: Set<String>? = null   // null: ещё не смотрели, первый опрос всегда сообщает
+    @Volatile private var known: Set<String>? = null   // null：尚未查看过，首次刷新总是上报
 
     @Volatile var sent = 0L
         private set
@@ -122,10 +122,10 @@ class HotspotBeacon(
     @Volatile var probes = 0L
         private set
 
-    /** Фактический порт ответчика (в тестах 0 = любой). -1, пока не открыт. */
+    /** 应答器实际端口（测试中 0 = 任意端口）。打开前为 -1。 */
     val probePortBound: Int get() = probeSocket?.localPort ?: -1
 
-    /** Подсети, куда сейчас идёт маяк: по ним Tcp6Listener пускает ГУ. */
+    /** 当前信标发往的子网：Tcp6Listener 据此放行车机。 */
     @Volatile var current: List<LanIface> = emptyList()
         private set
 
@@ -184,7 +184,7 @@ class HotspotBeacon(
                         targets += i.broadcast
                         if (sweep && LanIface.sweepName(i.name)) targets += i.hosts()
                         for (t in targets) {
-                            if (!running.get()) return   // ГУ уже подключилась: свип не досылаем
+                            if (!running.get()) return   // 车机已连接：不再补发扫发
                             try {
                                 s.send(DatagramPacket(BeaconCodec.BEACON, BeaconCodec.BEACON.size, t, beaconPort))
                                 sent++
@@ -211,7 +211,7 @@ class HotspotBeacon(
         }
     }
 
-    /** Сокет маяка; при [bindNetwork] привязан к сети машины до первой отправки. */
+    /** 信标 socket；设置了 [bindNetwork] 时在首次发送前绑定到车辆网络。 */
     private fun openSender(): DatagramSocket {
         val net = bindNetwork ?: return DatagramSocket()
         val s = DatagramSocket(null)
@@ -220,7 +220,7 @@ class HotspotBeacon(
         return s
     }
 
-    /** Привязка сокета к сети машины; сбой не фатален (пакеты пойдут по маршруту системы), но попадает в лог. */
+    /** 将 socket 绑定到车辆网络；失败不致命（数据包会走系统路由），但会记入日志。 */
     private fun bindToNetwork(s: DatagramSocket, net: Network, what: String) {
         try {
             net.bindSocket(s)

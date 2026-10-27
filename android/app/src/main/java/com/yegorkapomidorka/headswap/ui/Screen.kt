@@ -8,28 +8,28 @@ import android.view.ViewGroup
 import android.widget.ScrollView
 import com.yegorkapomidorka.headswap.MainActivity
 
-/** Экран внутри MainActivity: сама View, обновление раз в 500 мс пока виден, реакция на «назад». */
+/** MainActivity 内的屏幕：自身是一个 View，可见期间每 500 毫秒刷新一次，响应「返回」。 */
 abstract class Screen(val host: MainActivity) {
     val ctx: Context get() = host
     abstract val view: View
 
-    /** Экран стал виден (в том числе после возврата из системных настроек). */
+    /** 屏幕变为可见（包括从系统设置返回后）。 */
     open fun onShow() {}
 
     open fun onHide() {}
 
-    /** Каждые 500 мс, пока экран виден. */
+    /** 屏幕可见期间，每 500 毫秒调用一次。 */
     open fun tick() {}
 
-    /** true = нажатие «назад» обработано экраном. */
+    /** true = 「返回」按键已由屏幕处理。 */
     open fun onBack(): Boolean = false
 
     open fun onPermissionResult() {}
 
-    /** Вернулся результат стороннего activity/диалога (выбор машины через CDM). */
+    /** 第三方 activity/对话框返回了结果（通过 CDM 选择车辆）。 */
     open fun onActivityResultDone() {}
 
-    /** Отладка (adb --ei scroll_y N): прокрутить экран, чтобы снять нижнюю часть. */
+    /** 调试用（adb --ei scroll_y N）：滚动屏幕，以便截取底部内容。 */
     fun scrollTo(y: Int) {
         fun find(v: View): ScrollView? {
             if (v is ScrollView) return v
@@ -43,7 +43,7 @@ abstract class Screen(val host: MainActivity) {
 val Context.isNight: Boolean
     get() = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
-/** Настройки самого UI: онбординг пройден, ручные отметки шагов, которые определить нельзя. */
+/** UI 自身的设置：新手引导已完成、无法自动判定的步骤的手动标记。 */
 class UiPrefs(ctx: Context) {
     private val sp: SharedPreferences = ctx.getSharedPreferences("ui", Context.MODE_PRIVATE)
 
@@ -51,12 +51,12 @@ class UiPrefs(ctx: Context) {
         get() = sp.getBoolean("onboardingDone", false)
         set(v) = sp.edit().putBoolean("onboardingDone", v).apply()
 
-    /** Окно «Отказ от спецвозможностей» (2.6.0) уже показывали или оно не нужно (новичок прошёл онбординг). */
+    /** 「无障碍功能免责声明」弹窗（2.6.0）已展示过，或无需展示（新手已完成引导）。 */
     var a11yNoticeShown: Boolean
         get() = sp.getBoolean("a11yNoticeShown", false)
         set(v) = sp.edit().putBoolean("a11yNoticeShown", v).apply()
 
-    /** Тема интерфейса: system / light / medium / dark (см. AppTheme). */
+    /** 界面主题：system / light / medium / dark（参见 AppTheme）。 */
     var theme: String
         get() = sp.getString("theme", "system") ?: "system"
         set(v) = sp.edit().putString("theme", v).apply()

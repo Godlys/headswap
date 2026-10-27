@@ -10,10 +10,10 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 class MusicResamplerTest {
-    /** Выходная частота -> (L, M) отношения L/M к 48000. */
+    /** 输出频率 -> 相对 48000 的 (L, M) 比率 L/M。 */
     private val ratios = mapOf(44100 to (147 to 160), 32000 to (2 to 3), 24000 to (1 to 2), 22050 to (147 to 320))
 
-    /** Стерео-синус (R = L) в int16 LE на 48 кГц. */
+    /** 48 kHz 下 int16 LE 的立体声正弦波(R = L)。 */
     private fun sine(freq: Double, amp: Double, frames: Int): ByteArray {
         val b = ByteArray(frames * 4)
         for (i in 0 until frames) {
@@ -26,7 +26,7 @@ class MusicResamplerTest {
         return b
     }
 
-    /** Левый канал выхода как Int. */
+    /** 输出的左声道,以 Int 表示。 */
     private fun left(pcm: ByteArray) = IntArray(pcm.size / 4) { i ->
         ((pcm[i * 4].toInt() and 0xFF) or (pcm[i * 4 + 1].toInt() shl 8)).toShort().toInt()
     }
@@ -59,7 +59,7 @@ class MusicResamplerTest {
     @Test
     fun chunkingDoesNotChangeResult() {
         val src = sine(1000.0, 10000.0, 20000)
-        // добавим шум в правый канал, чтобы каналы различались
+        // 在右声道加入噪声,让两个声道有所区别
         val rnd = java.util.Random(1)
         for (i in 0 until 20000) {
             val v = rnd.nextInt(2000) - 1000
@@ -111,7 +111,7 @@ class MusicResamplerTest {
 
     @Test
     fun toneAboveOutputNyquistIsAttenuated() {
-        // частота выше 0,5 x выход: давится минимум в 10 раз (пик < 1000 при амплитуде 10000)
+        // 频率高于 0.5 × 输出采样率:至少被压制 10 倍(幅度 10000 时峰值 < 1000)
         val tones = mapOf(22050 to 12000.0, 24000 to 15000.0, 32000 to 17000.0, 44100 to 21000.0)
         for ((rate, hz) in tones) {
             val out = left(MusicResampler(rate).process(sine(hz, 10000.0, 48000)))
@@ -136,7 +136,7 @@ class MusicResamplerTest {
 
     @Test
     fun saturatesInsteadOfWrapping() {
-        // полный размах на низкой частоте: выход не должен «перескакивать» знак
+        // 低频满幅:输出不应发生符号"跳变"
         for (rate in ratios.keys) {
             val out = left(MusicResampler(rate).process(sine(100.0, 32767.0, 48000)))
             var maxJump = 0

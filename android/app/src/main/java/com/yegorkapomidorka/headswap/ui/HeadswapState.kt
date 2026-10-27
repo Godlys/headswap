@@ -9,7 +9,7 @@ import com.yegorkapomidorka.headswap.aa.AaCreds
 import com.yegorkapomidorka.headswap.aa.AaPrefs
 import com.yegorkapomidorka.headswap.aa.AaState
 
-/** Сводка состояния для главного экрана и уведомления. Чистая логика без Android: считается из Inputs. */
+/** 主屏幕和通知的状态摘要。纯逻辑,不依赖 Android:由 Inputs 计算得出。 */
 enum class Phase { OFF, WAITING, CONNECTED, RECONNECTING, PARKED, ERROR }
 
 enum class StageState { DONE, ACTIVE, PAUSE, ERR, TODO, PEND }
@@ -29,7 +29,7 @@ data class HomeState(
     val title: UiText,
     val sub: UiText,
     val stages: List<Pair<UiText, Pair<StageState, UiText>>>,
-    /** Оставшиеся секунды grace (только RECONNECTING), иначе -1. */
+    /** grace 剩余秒数(仅 RECONNECTING),否则为 -1。 */
     val graceLeftS: Int,
     val graceTotalS: Int,
     val primary: PrimaryAction?,
@@ -44,32 +44,32 @@ class Inputs(
     val bridgeRunning: Boolean,
     val aaStatus: String,
     val protocolKnown: Boolean,
-    /** Сервер ГУ AA запущен (по нашему запуску), пока сессии нет. */
+    /** AA 车机服务器已启动(由我们启动),但会话尚未建立。 */
     val serverUp: Boolean,
-    /** Подключённая сессия закончилась (обрыв USB или «Стоп»), AA закрыта штатно: сервер ГУ должен был остаться. */
+    /** 已建立的会话已结束(USB 断开或「停止」),AA 正常关闭:车机服务器应保持运行。 */
     val ended: Boolean,
     val graceLeftS: Int,
     val graceTotalS: Int,
     val usbAudio: Boolean,
-    /** Мост не стартует из-за настройки (нет сертификата head unit): текст для пользователя. */
+    /** 桥接因配置未启动(缺少车机证书):面向用户的说明文本。 */
     val setupError: UiText? = null,
-    /** Размер видео на ГУ («1280×720»): фактический режим сессии. */
+    /** 车机上的视频尺寸(「1280×720」):会话的实际模式。 */
     val videoRes: String = "1280×720",
-    /** Сессия идёт по Wi-Fi: CarLife и звук идут к ГУ по воздуху, кабеля нет. */
+    /** 会话通过 Wi-Fi 进行:CarLife 和声音经无线传输到车机,无需数据线。 */
     val wireless: Boolean = false,
-    /** Сколько мс подряд сервер ГУ отказывает (ECONNREFUSED) настоящим подключениям моста; 0 = не отказывает. */
+    /** 车机服务器连续多少毫秒拒绝(ECONNREFUSED)桥接的真实连接;0 = 未拒绝。 */
     val refusedForMs: Long = 0,
-    /** Сколько попыток моста подряд принято по TCP без VERSION_RESPONSE (зависший сервер). */
+    /** 桥接连续多少次 TCP 连接被接受却没有 VERSION_RESPONSE(服务器卡死)。 */
     val versionHangs: Int = 0,
-    /** Хоть раз установилась настоящая AA-сессия: сервер ГУ работал. Без этого «не отвечает» не показываем (новичку - «Запустите сервер ГУ»). */
+    /** 至少成功建立过一次真正的 AA 会话:车机服务器曾正常工作。没有这一点就不显示「无响应」(对新用户显示「启动车机服务器」)。 */
     val serverWorked: Boolean = false,
 )
 
 object HomeLogic {
-    /** Отказ сервера ГУ короче этого - норма: после ByeBye AA снова слушает порт примерно через 6 с. */
+    /** 车机服务器拒绝短于此时间属正常:ByeBye 后 AA 约 6 秒重新监听端口。 */
     const val REFUSED_DOWN_MS = 15_000L
 
-    /** Столько попыток подряд «TCP есть, VERSION_RESPONSE нет» - сервер завис. */
+    /** 连续这么多次「TCP 通了但没有 VERSION_RESPONSE」,即服务器卡死。 */
     const val HANGS_DOWN = 2
 
     val LABELS = listOf(
@@ -87,7 +87,7 @@ object HomeLogic {
         val connected = i.bridgeRunning && st.startsWith("мост: AA -> CarLife")
         val refused = i.bridgeRunning && "жду сервер ГУ" in st
         val total = if (i.graceTotalS > 0) i.graceTotalS else 8
-        // кабель есть, мост пробует подключиться, а сервер, который раньше работал, не отвечает на настоящие попытки
+        // 数据线已连接,桥接尝试连接,而此前工作正常的服务器对真实连接尝试无响应
         val serverDown = i.bridgeRunning && i.serverWorked && (i.refusedForMs >= REFUSED_DOWN_MS || i.versionHangs >= HANGS_DOWN)
         return when {
             i.setupError != null && !i.bridgeRunning -> state(
@@ -121,7 +121,7 @@ object HomeLogic {
                     StageState.DONE to if (i.wireless) CARLIFE_WIFI else CARLIFE,
                     StageState.DONE to UiText.res(R.string.home_stage_connected),
                     StageState.DONE to UiText.raw(i.videoRes),
-                    // настройка «Звук через Headswap» (бывш. «Звук через USB») - это звук по каналу CarLife; без кабеля он идёт по Wi-Fi
+                    // 「通过 Headswap 播放声音」(原「通过 USB 播放声音」)即声音走 CarLife 通道;无数据线时经 Wi-Fi 传输
                     if (i.usbAudio) StageState.DONE to UiText.raw(if (i.wireless) "Wi-Fi" else "USB")
                     else StageState.PEND to UiText.res(R.string.home_stage_off),
                 ),
@@ -135,7 +135,7 @@ object HomeLogic {
                 ),
             )
             serverDown -> serverDownState()
-            // сервер уже работал: короткий отказ после ByeBye - норма, пока AA снова слушает; ждём как обычное подключение
+            // 服务器此前工作过:ByeBye 后的短暂拒绝属正常,等待 AA 重新监听;像普通连接一样等待
             refused && !i.serverWorked -> state(
                 Phase.OFF, Tone.PRI, HeroIcon.POWER, UiText.res(R.string.home_title_off),
                 UiText.res(R.string.home_sub_refused, TEXT_START_CHAIN),
@@ -181,7 +181,7 @@ object HomeLogic {
         }
     }
 
-    /** «Машина отключена»: мост сам штатно закрыл установленную сессию (ByeBye), сервер ГУ остался в фоне. Держится до нового кабеля. */
+    /** 「车辆已断开」:桥接自行正常关闭了已建立的会话(ByeBye),车机服务器留在后台。该状态保持到再次插入数据线。 */
     private fun parkedState() = state(
         Phase.PARKED, Tone.PRI, HeroIcon.CAR, UiText.res(R.string.home_title_parked), UiText.res(R.string.home_sub_parked),
         listOf(
@@ -192,7 +192,7 @@ object HomeLogic {
         notifText = UiText.res(R.string.notif_parked),
     )
 
-    /** «Сервер ГУ не отвечает»: настоящие подключения моста не получают ответа (отказ дольше REFUSED_DOWN_MS или HANGS_DOWN зависаний), нужно включить сервер снова. */
+    /** 「车机服务器无响应」:桥接的真实连接得不到响应(拒绝超过 REFUSED_DOWN_MS 或卡死达到 HANGS_DOWN 次),需要重新启动服务器。 */
     private fun serverDownState() = state(
         Phase.ERROR, Tone.ERR, HeroIcon.ALERT, UiText.res(R.string.home_title_server_down), UiText.res(R.string.home_sub_server_down),
         listOf(
@@ -216,9 +216,9 @@ object HomeLogic {
 }
 
 /**
- * Наблюдаемая сводка (только чтение из CarLifeState/AaState + то, что сама знает UI-часть):
- * собирает Inputs и помнит переходы (оборвалась ли сессия, когда подключились, до какого момента держится grace).
- * Вызывается с главной нити: экраном и тикером уведомления.
+ * 可观察的摘要(只读 CarLifeState/AaState + UI 部分自身掌握的信息):
+ * 组装 Inputs 并记住状态迁移(会话是否中断、何时连接、grace 持续到何时)。
+ * 在主线程调用:由界面和通知 ticker 使用。
  */
 object HeadswapStatus {
     private var prevRunning = false
@@ -232,13 +232,13 @@ object HeadswapStatus {
 
     private val graceRe = Regex("""жива\s+(\d+)\s*с""")
 
-    /** Пользователь нажал «Запустить сервер ГУ» (или открыл настройки AA): считаем сервер запущенным. */
+    /** 用户点击了「启动车机服务器」(或打开了 AA 设置):视为服务器已启动。 */
     fun markServerRequested() {
         serverUp = true
         ended = false
     }
 
-    /** «Остановить»: сессия закрывается штатно (ByeBye), экран потом показывает «Машина отключена». */
+    /** 「停止」:会话正常关闭(ByeBye),之后界面显示「车辆已断开」。 */
     fun markUserStop() {
         serverUp = false
     }
@@ -278,7 +278,7 @@ object HeadswapStatus {
         prevRunning = running
 
         val aaPrefs = AaPrefs(ctx)
-        // AaConnector знает об установленных сессиях только в процессе; признак запоминаем, чтобы пережить перезапуск приложения
+        // AaConnector 只在进程内知道已建立的会话;记住该标志以在应用重启后保留
         if (AaState.serverFailures.worked && !aaPrefs.serverWorked) aaPrefs.serverWorked = true
         val serverWorked = aaPrefs.serverWorked
         val left = if (graceDeadline > 0) ((graceDeadline - now + 999) / 1000).toInt() else -1
@@ -291,7 +291,7 @@ object HeadswapStatus {
             graceLeftS = left,
             graceTotalS = graceTotalS,
             usbAudio = aaPrefs.usbAudio,
-            // известный текст нет-сертификата подменяем ресурсом, остальные ошибки показываем как есть
+            // 已知的无证书提示文本替换为资源,其余错误原样显示
             setupError = AaState.setupError?.let { if (it == AaCreds.MISSING_TEXT) UiText.res(R.string.home_err_no_cert) else UiText.raw(it) },
             videoRes = (CarLifeState.videoMode ?: aaPrefs.videoGeometry.effective(aaPrefs.transcode)).outLabel,
             wireless = CarLifeState.wirelessSession,
@@ -303,7 +303,7 @@ object HeadswapStatus {
 
     fun current(ctx: Context): HomeState = HomeLogic.compute(inputs(ctx))
 
-    /** Подключён ли USB-аксессуар (для подсказок на экране). */
+    /** USB 附件是否已连接(用于界面提示)。 */
     fun accessoryPresent(ctx: Context): Boolean =
         ctx.getSystemService(UsbManager::class.java).accessoryList?.isNotEmpty() == true
 }

@@ -5,8 +5,8 @@ import com.yegorkapomidorka.headswap.PbWriter
 import com.yegorkapomidorka.headswap.Wire
 
 /**
- * Кадры Bluetooth-канала беспроводного CarLife (Baidu MD 8.6.7, CommonParams, BluetoothConnect.readData):
- * [длина тела u16 BE][резерв u16 = 0][тип u32 BE] + protobuf. Длина без заголовка.
+ * 无线 CarLife 蓝牙通道的帧（Baidu MD 8.6.7、CommonParams、BluetoothConnect.readData）：
+ * [正文长度 u16 BE][保留 u16 = 0][类型 u32 BE] + protobuf。长度不含头部。
  */
 object BtMsg {
     const val MD_WIRELESS_INFO_REQUEST = 0x00100001
@@ -33,7 +33,7 @@ object BtMsg {
         else -> "0x%08X".format(type)
     }
 
-    /** wirlessType из INFO_RESPONSE: 2..4 запускают беспроводную ветку у Baidu, 1 (WIFI) нет. */
+    /** INFO_RESPONSE 中的 wirelessType：2..4 会启动 Baidu 的无线分支，1 (WIFI) 不会。 */
     fun wirelessTypeName(t: Int?): String = when (t) {
         null -> "-"
         1 -> "1(wifi)"
@@ -46,19 +46,19 @@ object BtMsg {
     fun frame(type: Int, body: ByteArray? = null): ByteArray = Wire.cmdInner(type, body)
 
     /**
-     * Тело MD_WIFI_IP: адрес телефона в P2P-группе ГУ строкой в поле 1. Формат не подтверждён исходником MD
-     * (у Baidu 8.6.7 мы его не читали, LifeAuto собирает тело в нативной части): по первому отчёту с машины сверить.
+     * MD_WIFI_IP 的正文：手机在车机 P2P 组中的地址，以字符串形式放在字段 1。格式未经 MD 源码确认
+     * （Baidu 8.6.7 我们没读过，LifeAuto 在原生部分组装正文）：需根据实车的第一份报告核实。
      */
     fun wifiIp(ip: String): ByteArray = PbWriter().string(1, ip).toByteArray()
 }
 
-/** Реквизиты P2P-группы ГУ из TARGET_INFO: имя устройства Wi-Fi Direct и p2pNetInfo «ssid,пароль[,частота]». */
+/** 来自 TARGET_INFO 的车机 P2P 组凭据：Wi-Fi Direct 设备名和 p2pNetInfo「ssid,密码[,频率]」。 */
 class P2pTarget(val deviceName: String?, val ssid: String?, val passphrase: String?, val freqMhz: Int?) {
-    /** Можно ли войти в группу напрямую (WifiP2pConfig.Builder): ssid DIRECT-xy и пароль 8..63 символа. */
+    /** 能否直接加入组（WifiP2pConfig.Builder）：ssid 为 DIRECT-xy 且密码 8..63 个字符。 */
     val canJoinBySsid: Boolean
         get() = ssid != null && ssid.startsWith("DIRECT-") && ssid.length >= 9 && passphrase != null && passphrase.length in 8..63
 
-    /** Те же реквизиты: ГУ ответила на наш TARGET_INFO_REQUEST тем же, что уже прислала. */
+    /** 凭据相同：车机对我们 TARGET_INFO_REQUEST 的应答与其已发送的内容相同。 */
     fun sameAs(o: P2pTarget): Boolean =
         deviceName == o.deviceName && ssid == o.ssid && passphrase == o.passphrase && freqMhz == o.freqMhz
 
@@ -78,11 +78,11 @@ class P2pTarget(val deviceName: String?, val ssid: String?, val passphrase: Stri
 
 class BtFrame(val type: Int, val body: ByteArray)
 
-/** Сборка кадров из кусков RFCOMM-потока. Мусор в заголовке (резерв != 0, длина > MAX_BODY): сдвиг на байт. */
+/** 从 RFCOMM 流片段组装帧。头部中有垃圾数据（保留 != 0、长度 > MAX_BODY）：逐字节偏移。 */
 class BtFrameParser {
     private var buf = ByteArray(0)
 
-    /** Сколько байт выброшено при ресинхронизации (для лога). */
+    /** 重新同步时丢弃了多少字节（用于日志）。 */
     var skipped = 0L
         private set
 
@@ -107,8 +107,8 @@ class BtFrameParser {
 }
 
 /**
- * Сводки ответов ГУ для WL-лога без секретов: имя сети и пароль из p2pNetInfo не выводятся, только число частей
- * и частота; scanRecord (зашифрованные реквизиты бокса) - только длина.
+ * 供 WL 日志使用的车机响应摘要，不含机密：p2pNetInfo 中的网络名和密码不输出，只输出部分数量和频率；
+ * scanRecord（盒子的加密凭据）——只输出长度。
  */
 object BtSummary {
     fun wirelessInfo(body: ByteArray): List<Pair<String, Any?>> {
@@ -130,7 +130,7 @@ object BtSummary {
         ) + netInfo(net)
     }
 
-    /** p2pNetInfo = «ssid,пароль[,частота МГц]»: наличие, число частей, частота. */
+    /** p2pNetInfo = 「ssid,密码[,频率 MHz]」：是否存在、部分数量、频率。 */
     fun netInfo(net: String?): List<Pair<String, Any?>> {
         if (net == null) return listOf("p2pNetInfo" to "нет")
         val parts = net.split(',')
@@ -138,7 +138,7 @@ object BtSummary {
         return listOf("p2pNetInfo" to "есть", "netParts" to parts.size, "netFreq" to freq)
     }
 
-    /** Состав тела без значений строк: номер поля, тип, число или длина (формат IP_REQUEST и ответов ГУ не подтверждён). */
+    /** 正文结构，不含字符串值：字段号、类型、数值或长度（IP_REQUEST 和车机响应的格式未经确认）。 */
     fun shape(body: ByteArray): String {
         val f = PbReader.parse(body) ?: return "parse-fail/${body.size}"
         if (f.isEmpty()) return "empty"

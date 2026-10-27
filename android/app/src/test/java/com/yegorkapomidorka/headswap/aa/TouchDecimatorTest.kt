@@ -4,7 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class TouchDecimatorTest {
-    private val out = ArrayList<String>()      // "D", "M<y>", "U", "P<y>" (второй палец / MOVE с px,py)
+    private val out = ArrayList<String>()      // "D", "M<y>", "U", "P<y>"（第二根手指 / 带 px,py 的 MOVE）
     private val dec = TouchDecimator { a, _, y, px, _ ->
         out.add(
             when {
@@ -48,10 +48,10 @@ class TouchDecimatorTest {
     fun secondFingerFlushesPending() {
         down(2)
         move(1, 2)
-        move(2, 2)                                                 // пропущен, ждёт
+        move(2, 2)                                                 // 被跳过，等待中
         dec.onTouch(5 or (1 shl 8), 100, 2, 300, 300, 2)           // POINTER_DOWN
-        move(3, 2)                                                 // счёт заново: уходит первым
-        dec.onTouch(AapMessages.TOUCH_MOVE, 100, 4, 310, 310, 2)   // MOVE с вторым пальцем идёт как есть
+        move(3, 2)                                                 // 重新计数：第一个发出
+        dec.onTouch(AapMessages.TOUCH_MOVE, 100, 4, 310, 310, 2)   // 带第二根手指的 MOVE 原样发出
         assertEquals(listOf("D", "M1", "M2", "P2", "M3", "P4"), out)
     }
 
@@ -62,7 +62,7 @@ class TouchDecimatorTest {
         move(2, 2)
         up(2)
         down(2)
-        move(5, 2)                                                 // первый MOVE после DOWN уходит всегда
+        move(5, 2)                                                 // DOWN 之后的第一个 MOVE 总是发出
         assertEquals(listOf("D", "M1", "M2", "U", "D", "M5"), out)
     }
 

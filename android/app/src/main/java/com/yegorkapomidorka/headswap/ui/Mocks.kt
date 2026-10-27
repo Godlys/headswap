@@ -13,9 +13,9 @@ import android.widget.LinearLayout
 import com.yegorkapomidorka.headswap.R
 
 /**
- * Иллюстрации-схемы для шагов онбординга: «что где нажать» (Onboarding.dc.html). Только рисунок, ничего не нажимается.
- * Цвета из темы приложения; синий системного UI Android (переключатели, галочки) - литералами, как в макете.
- * «Размытие» - полупрозрачные полоски цвета line, на API 31+ ещё и RenderEffect.
+ * 引导步骤的示意图：“哪里该点什么”（Onboarding.dc.html）。纯插图，不可点击。
+ * 颜色取自应用主题；Android 系统 UI 的蓝色（开关、勾选）用字面量，与设计稿一致。
+ * “模糊”用半透明的 line 色条实现，API 31+ 上还叠加 RenderEffect。
  */
 object Mocks {
     private val SYS_BLUE = Color.parseColor("#3B7BEA")
@@ -51,16 +51,16 @@ object Mocks {
         StepId.MIC -> ctx.vbox(10).apply { addView(ctx.micDialog(), lp(MATCH, WRAP)) }
         StepId.BLUETOOTH -> ctx.vbox(8).apply { ctx.bluetoothRows().forEach { addView(it, lp(MATCH, WRAP)) } }
         StepId.LOCATION -> ctx.vbox(8).apply { ctx.locationRows().forEach { addView(it, lp(MATCH, WRAP)) } }
-        /** Шаг выбора машины рисует свой список (OnboardingScreen.renderCar), схемы нет. */
+        /** 车型选择步骤自行绘制列表（OnboardingScreen.renderCar），无示意图。 */
         StepId.CAR -> ctx.vbox()
         StepId.FIRST -> ctx.vbox(10).apply { addView(ctx.usbDialog(), lp(MATCH, WRAP)) }
     }
 
-    // --- окна Android Auto ---
+    // --- Android Auto 窗口 ---
 
     /**
-     * Окно настроек Android Auto: шапка, размытые строки и подсвеченная строка с нужным пунктом;
-     * справа стрелка «пролистайте вниз» на всю высоту окна. chrome = стрелка назад и ⋮; compact = низкая строка и две полоски.
+     * Android Auto 设置窗口：标题栏、模糊行和带所需项的高亮行；
+     * 右侧是贯穿窗口全高的“向下滚动”箭头。chrome = 返回箭头和 ⋮；compact = 矮行和两条模糊条。
      */
     private fun Context.aaWindow(title: String, row: String, chrome: Boolean, tap: Boolean, check: Boolean, compact: Boolean): View {
         val c = this
@@ -124,7 +124,7 @@ object Mocks {
         }
     }
 
-    /** Стрелка прокрутки вниз: шток затухает сверху (прозрачный -> акцент), внизу наконечник. */
+    /** 向下滚动箭头：杆部自上而下渐显（透明 -> 强调色），底部是箭头尖。 */
     private fun Context.scrollArrow(): View {
         val acc = clr(R.color.acc)
         return FrameLayout(this).apply {
@@ -141,7 +141,7 @@ object Mocks {
         }
     }
 
-    /** Окно Android Auto с выпадающим меню ⋮ из четырёх пунктов; нужный подсвечен и помечен рукой. */
+    /** Android Auto 窗口带 ⋮ 下拉菜单（四个选项）；所需项高亮并用手指图标标记。 */
     private fun Context.menuWindow(): View {
         val c = this
         val back = vbox().apply {
@@ -196,9 +196,9 @@ object Mocks {
         }
     }
 
-    // --- системные окна ---
+    // --- 系统窗口 ---
 
-    /** Шторка с уведомлением Headswap (шаг уведомлений). */
+    /** 含 Headswap 通知的下拉通知栏（通知步骤）。 */
     private fun Context.shade(): View {
         val c = this
         return vbox(8).apply {
@@ -247,7 +247,7 @@ object Mocks {
         }
     }
 
-    /** Сведения о приложении: «Контроль активности: Нет ограничений» с синей галочкой. */
+    /** 应用信息：“活动控制：无限制”带蓝色勾选。 */
     private fun Context.activityControl(): View {
         val c = this
         return vbox(6).apply {
@@ -270,7 +270,7 @@ object Mocks {
         }
     }
 
-    /** Список «Автозапуск» Xiaomi с включённым Headswap (только на Xiaomi). */
+    /** 小米“自启动”列表，Headswap 已开启（仅小米设备）。 */
     private fun Context.autostartList(): View {
         val c = this
         return card(16).apply {
@@ -294,7 +294,7 @@ object Mocks {
         }
     }
 
-    /** Запрос разрешения на микрофон: кнопка «При использовании приложения» обведена. */
+    /** 麦克风权限请求：“使用应用期间”按钮被描边高亮。 */
     private fun Context.micDialog(): View {
         val c = this
         return vbox(8).apply {
@@ -337,7 +337,7 @@ object Mocks {
         }
     }
 
-    /** Системное окно Bluetooth: переключатель, подключённая магнитола, размытая строка. */
+    /** 系统蓝牙窗口：开关、已连接的车机、模糊行。 */
     private fun Context.bluetoothRows(): List<View> {
         val c = this
         val toggle = hbox().apply {
@@ -378,7 +378,7 @@ object Mocks {
         return listOf(toggle, headUnit, ghost)
     }
 
-    /** Системное окно геолокации: переключатель «Включить геолокацию» обведён, ниже размытые строки. */
+    /** 系统定位窗口：“开启定位”开关被描边高亮，下方是模糊行。 */
     private fun Context.locationRows(): List<View> {
         val c = this
         val toggle = hbox(12).apply {
@@ -409,7 +409,7 @@ object Mocks {
         return listOf(toggle, ghosts)
     }
 
-    /** Запрос «Открыть Headswap для USB-аксессуара»: галочка «По умолчанию» и ОК. */
+    /** “为 USB 配件打开 Headswap”弹窗：“默认使用”勾选框和确定按钮。 */
     private fun Context.usbDialog(): View {
         val c = this
         return vbox(14).apply {
@@ -449,16 +449,16 @@ object Mocks {
         }
     }
 
-    // --- кирпичики ---
+    // --- 积木组件 ---
 
-    /** Полоска-«строка текста» шириной pct процентов (размытие рисуется полупрозрачной полоской цвета line). */
+    /** 宽度为 pct 百分比的“文本行”条（模糊用半透明的 line 色条绘制）。 */
     private fun Context.bar(pct: Int, heightDp: Int = 10): View = hbox().apply {
         weightSum = 100f
         addView(View(this@bar).apply { background = shape(clr(R.color.line), heightDp / 2) }, LinearLayout.LayoutParams(0, dp(heightDp), pct.toFloat()))
         addView(View(this@bar), LinearLayout.LayoutParams(0, dp(heightDp), (100 - pct).toFloat()))
     }
 
-    /** Полупрозрачность и, на API 31+, настоящее размытие. */
+    /** 半透明效果；API 31+ 上还会应用真正的模糊。 */
     private fun <T : View> T.blurred(alphaValue: Float, blurDp: Float): T = apply {
         alpha = alphaValue
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -472,7 +472,7 @@ object Mocks {
         pad(this@badge, 12, vPadDp, 12, vPadDp)
     }
 
-    /** Включённый переключатель системного UI Android (синий, как в макете). */
+    /** Android 系统 UI 的开启状态开关（蓝色，与设计稿一致）。 */
     private fun Context.sysSwitch(): View = FrameLayout(this).apply {
         background = shape(SYS_BLUE, 14)
         addView(

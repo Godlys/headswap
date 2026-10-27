@@ -14,7 +14,7 @@ class ThermalThrottleTest {
     fun coolPhoneIsNotThrottled() {
         val t = ThermalThrottle()
         assertNull(t.update(0, 0, nan))
-        assertNull(t.update(1000, 1, 0.5f))     // LIGHT и запас по прогнозу: без разгрузки
+        assertNull(t.update(1000, 1, 0.5f))     // LIGHT 且预测有富余：不降载
         assertEquals(ThermalLevel.NORMAL, t.level)
         assertEquals(30, t.capFps(30))
         assertEquals(4_000_000, t.capBitrate(4_000_000))
@@ -25,7 +25,7 @@ class ThermalThrottleTest {
         val t = ThermalThrottle()
         assertEquals(ThermalLevel.WARM, t.update(0, ThermalThrottle.STATUS_MODERATE, nan))
         assertEquals(20, t.capFps(30))
-        assertEquals(15, t.capFps(15))          // ниже потолка - как есть
+        assertEquals(15, t.capFps(15))          // 低于上限 - 原样返回
         assertEquals(3_000_000, t.capBitrate(4_000_000))
         assertEquals(ThermalLevel.HOT, t.update(1000, ThermalThrottle.STATUS_SEVERE, nan))
         assertEquals(15, t.capFps(30))
@@ -46,7 +46,7 @@ class ThermalThrottleTest {
         assertNull(t.update(1_000, 0, nan))
         assertNull(t.update(60_000, 0, nan))
         assertEquals(ThermalLevel.WARM, t.update(61_000, 0, nan))
-        // до NORMAL снова ждать полный период
+        // 回到 NORMAL 需要再等满一个周期
         assertNull(t.update(100_000, 0, nan))
         assertEquals(ThermalLevel.NORMAL, t.update(121_000, 0, nan))
         assertEquals(ThermalLevel.HOT, t.maxLevel)
@@ -57,7 +57,7 @@ class ThermalThrottleTest {
         val t = ThermalThrottle(relaxMs = 60_000)
         t.update(0, ThermalThrottle.STATUS_MODERATE, nan)
         t.update(1_000, 0, nan)
-        t.update(30_000, ThermalThrottle.STATUS_MODERATE, nan)     // снова тёплый: отсчёт заново
+        t.update(30_000, ThermalThrottle.STATUS_MODERATE, nan)     // 再次变热：重新计时
         assertNull(t.update(31_000, 0, nan))
         assertNull(t.update(90_000, 0, nan))
         assertEquals(ThermalLevel.NORMAL, t.update(91_000, 0, nan))
@@ -77,14 +77,14 @@ class ThermalThrottleTest {
         val p = BitratePolicy(4_000_000)
         assertTrue(p.setThermalCap(2_000_000))
         assertEquals(2_000_000, p.current)
-        // спокойная очередь: выше теплового потолка не поднимается
+        // 队列平静：不会升到热上限之上
         var now = 0L
         repeat(60) {
             p.update(now, 0.0, 500_000.0)
             now += 1000
         }
         assertEquals(2_000_000, p.current)
-        // остыл: потолок снят, подъём обычными ступенями до потолка режима
+        // 已降温：解除上限，按常规步进回升到模式上限
         assertFalse(p.setThermalCap(Int.MAX_VALUE))
         repeat(120) {
             p.update(now, 0.0, 500_000.0)
@@ -95,13 +95,13 @@ class ThermalThrottleTest {
 
     @Test
     fun pioneerCeilingHoldsWithThermalCap() {
-        // Pioneer RM56E8B (h277): потолок 800 кбит/с (= пол) под флагом ГУ, режим просит 4 Мбит/с; нагрев берётся от уже сниженного потолка
+        // Pioneer RM56E8B (h277)：车机标志下上限 800 kbit/s（= 下限），模式要求 4 Mbit/s；发热按已降低的上限计算
         val ceiling = AaBridgeCore.PIONEER_RM56_CEILING_BPS
         val p = BitratePolicy(4_000_000)
         val t = ThermalThrottle()
         assertTrue(p.lowerCeiling(ceiling))
         assertEquals(ceiling, p.current)
-        // спокойная очередь: выше потолка ГУ не поднимается
+        // 队列平静：不会升到车机上限之上
         var now = 0L
         repeat(120) {
             p.update(now, 0.0, 2_000_000.0)
@@ -109,9 +109,9 @@ class ThermalThrottleTest {
             assertTrue(p.current <= ceiling)
         }
         assertEquals(ceiling, p.current)
-        // нагрев HOT (×0.5 от потолка ГУ, не ниже пола) режет сильнее, остывание возвращает к потолку ГУ, но не выше
+        // HOT 发热（车机上限 ×0.5，不低于下限）削减更狠，降温后回到车机上限但不更高
         t.update(0, ThermalThrottle.STATUS_SEVERE, nan)
-        p.setThermalCap(t.capBitrate(p.ceilingBps))      // потолок ГУ уже равен полу: резать некуда, current не меняется
+        p.setThermalCap(t.capBitrate(p.ceilingBps))      // 车机上限已等于下限：无处可减，current 不变
         assertEquals(BitratePolicy.FLOOR_BPS, p.current)
         p.setThermalCap(Int.MAX_VALUE)
         repeat(300) {
@@ -120,7 +120,7 @@ class ThermalThrottleTest {
             assertTrue(p.current <= ceiling)
         }
         assertEquals(ceiling, p.current)
-        // потолок ГУ приходит позже теплового (флаг после замера нагрева): итог всё равно min
+        // 车机上限晚于热上限到达（发热测量后的标志）：结果仍是 min
         val q = BitratePolicy(4_000_000)
         q.setThermalCap(3_000_000)
         assertTrue(q.lowerCeiling(ceiling))
@@ -137,10 +137,10 @@ class ThermalThrottleTest {
         val cap = AaBridgeCore.PIONEER_RM56_MAX_FPS
         val t = ThermalThrottle()
         assertEquals(10, t.capFps(Handshake.capFps(30, cap)))
-        t.update(0, ThermalThrottle.STATUS_MODERATE, nan)      // WARM: 20, потолок ГУ 10 остаётся
+        t.update(0, ThermalThrottle.STATUS_MODERATE, nan)      // WARM：20，车机上限 10 保持
         assertEquals(10, t.capFps(Handshake.capFps(30, cap)))
         assertEquals(8, t.capFps(Handshake.capFps(8, cap)))
-        t.update(1_000, ThermalThrottle.STATUS_SEVERE, nan)    // HOT: 15, потолок ГУ 10
+        t.update(1_000, ThermalThrottle.STATUS_SEVERE, nan)    // HOT：15，车机上限 10
         assertEquals(10, t.capFps(Handshake.capFps(30, cap)))
         assertEquals(15, t.capFps(30))
     }

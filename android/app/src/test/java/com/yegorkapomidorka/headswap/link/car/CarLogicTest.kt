@@ -24,16 +24,16 @@ class CarLogicTest {
     fun debounceFiresOnlyAfterDelay() {
         var now = 1_000L
         val d = AutoOffDebounce(10_000L) { now }
-        assertFalse(d.fire())      // не взведён
+        assertFalse(d.fire())      // 未布防
         d.arm()
         assertTrue(d.pending)
         now += 9_999L
         assertFalse(d.fire())
-        assertTrue(d.pending)      // рано: остаётся взведённым
+        assertTrue(d.pending)      // 太早：保持布防状态
         now += 1L
         assertTrue(d.fire())
         assertFalse(d.pending)
-        assertFalse(d.fire())      // срабатывает один раз
+        assertFalse(d.fire())      // 只触发一次
     }
 
     @Test
@@ -42,7 +42,7 @@ class CarLogicTest {
         val d = AutoOffDebounce(10_000L) { now }
         d.arm()
         now += 5_000L
-        d.cancel()                 // пришёл ACL_CONNECTED
+        d.cancel()                 // 收到了 ACL_CONNECTED
         now += 60_000L
         assertFalse(d.fire())
         assertFalse(d.pending)
@@ -50,13 +50,13 @@ class CarLogicTest {
 
     @Test
     fun debounceBurstRearmsFromLastDisconnect() {
-        // всплески ACL у ГУ: каждый новый DISCONNECTED сдвигает срок
+        // 车机上的 ACL 突发：每个新的 DISCONNECTED 都会延后期限
         var now = 0L
         val d = AutoOffDebounce(10_000L) { now }
         d.arm()
         now += 7_000L
         d.arm()
-        now += 7_000L              // 14 с от первого, 7 с от второго
+        now += 7_000L              // 距第一次 14 秒，距第二次 7 秒
         assertFalse(d.fire())
         now += 3_000L
         assertTrue(d.fire())
@@ -74,7 +74,7 @@ class CarLogicTest {
         assertEquals(false, m.tryAcquire())
     }
 
-    /** Все условия выполнены; тесты по одному ломают по условию. */
+    /** 所有条件均已满足；各测试每次只破坏一个条件。 */
     private fun request(
         carWifiSet: Boolean = true,
         waiting: Boolean = true,
@@ -100,24 +100,24 @@ class CarLogicTest {
 
     @Test
     fun carNetDelayZeroOnlyRightAfterCarWasOnline() {
-        assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(null))              // машины не было: ждём её в сети телефона
+        assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(null))              // 之前没有汽车：在手机网络中等待它
         assertEquals(0L, CarNetPolicy.delayMs(0))
-        assertEquals(0L, CarNetPolicy.delayMs(11_000))                         // выдернули кабель, AA grace 8 с
+        assertEquals(0L, CarNetPolicy.delayMs(11_000))                         // 拔掉了数据线，AA 宽限期 8 秒
         assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(CAR_RECENT_MS))
-        assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(-1))              // часы назад: как не было
+        assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(-1))              // 系统时间回拨：视为从未有车
     }
 
     @Test
     fun carNetDelayZeroWhenCarConnectedByBluetooth() {
-        assertEquals(0L, CarNetPolicy.delayMs(null, carBtNear = true))         // холодный старт, машина по BT рядом
+        assertEquals(0L, CarNetPolicy.delayMs(null, carBtNear = true))         // 冷启动，汽车就在附近（BT）
         assertEquals(0L, CarNetPolicy.delayMs(CAR_RECENT_MS * 10, carBtNear = true))
         assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(null, carBtNear = false))
-        assertEquals(0L, CarNetPolicy.delayMs(null, carNetProven = true))      // ГУ уже приходила через свою сеть
+        assertEquals(0L, CarNetPolicy.delayMs(null, carNetProven = true))      // 车机已通过自己的网络接入过
         assertEquals("wpa2", CarSecPolicy.first(null, hasPass = true))
         assertEquals("wpa3", CarSecPolicy.first("wpa3", hasPass = true))
         assertEquals("open", CarSecPolicy.first("wpa2", hasPass = false))
-        assertTrue(CarSecPolicy.retryWpa3(null, "wpa2", hasPass = true))         // защита ещё не известна: пробуем WPA3
-        assertFalse(CarSecPolicy.retryWpa3("wpa2", "wpa2", hasPass = true))     // WPA2 уже удавался: машины просто нет в эфире
+        assertTrue(CarSecPolicy.retryWpa3(null, "wpa2", hasPass = true))         // 加密方式未知：尝试 WPA3
+        assertFalse(CarSecPolicy.retryWpa3("wpa2", "wpa2", hasPass = true))     // WPA2 已成功过：只是汽车不在信号范围内
         assertFalse(CarSecPolicy.retryWpa3(null, "wpa3", hasPass = true))
         assertEquals(CAR_NET_DELAY_MS, CarNetPolicy.delayMs(CAR_RECENT_MS, carNetProven = false))
     }
@@ -172,7 +172,7 @@ class CarLogicTest {
         assertFalse(CarNetPolicy.shouldRelease(CarNetEvent.SESSION_END))
     }
 
-    /** Все условия выполнены; тесты по одному ломают по условию. */
+    /** 所有条件均已满足；各测试每次只破坏一个条件。 */
     private fun btHint(
         waiting: Boolean = true,
         session: Boolean = false,

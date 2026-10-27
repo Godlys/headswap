@@ -13,7 +13,7 @@ import kotlin.math.sqrt
 class EqualizerTest {
     private val rate = 48000
 
-    /** Стерео-синус PCM16 LE: L и R одинаковые. */
+    /** 立体声正弦波 PCM16 LE:L 和 R 相同。 */
     private fun sine(freq: Double, amp: Double, frames: Int): ByteArray {
         val out = ByteArray(frames * 4)
         for (i in 0 until frames) {
@@ -32,7 +32,7 @@ class EqualizerTest {
         return ((pcm[p].toInt() and 0xFF) or (pcm[p + 1].toInt() shl 8)).toShort().toInt()
     }
 
-    /** RMS левого канала, пропуская переходный процесс в начале. */
+    /** 左声道 RMS,跳过开头的瞬态过程。 */
     private fun rms(pcm: ByteArray, skipFrames: Int): Double {
         val frames = pcm.size / 4
         var sum = 0.0
@@ -44,7 +44,7 @@ class EqualizerTest {
     }
 
     private fun gainDb(freq: Double, settings: EqSettings, amp: Double = 0.1): Double {
-        val input = sine(freq, amp, rate)      // 1 с
+        val input = sine(freq, amp, rate)      // 1 秒
         val out = input.copyOf()
         Equalizer(rate, 2).apply { update(settings) }.process(out)
         val skip = rate / 4
@@ -93,7 +93,7 @@ class EqualizerTest {
         }
         assertTrue("peak=$peak", peak <= 32767)
         assertTrue("лимитер включился, peak=$peak", peak > 29000)
-        // переполнение short дало бы перескок через знак (~65000); буст ~+30 дБ у нуля законно круто (~3000)
+        // short 溢出会产生符号跳变(~65000);零附近 ~+30 dB 的增益本来就陡(~3000)
         assertTrue("скачок $maxJump", maxJump < 16000)
         assertEquals(1.0, Equalizer.softLimit(100.0), 1e-6)
         assertEquals(0.5, Equalizer.softLimit(0.5), 0.0)
@@ -116,7 +116,7 @@ class EqualizerTest {
 
     @Test
     fun liveUpdateKeepsState() {
-        // смена усиления на лету не сбрасывает фильтры: на стыке нет скачка
+        // 运行时切换增益不会重置滤波器:衔接处没有跳变
         val input = sine(63.0, 0.3, 9600)
         val out = input.copyOf()
         val eq = Equalizer(rate, 2).apply { update(band(0, 6)) }
@@ -129,7 +129,7 @@ class EqualizerTest {
 
     @Test
     fun preampChangeIsRamped() {
-        // −12 дБ preamp на лету: без плавного перехода на стыке был бы скачок ~3/4 амплитуды
+        // 运行时 −12 dB preamp:没有平滑过渡的话,衔接处会有约 3/4 幅度的跳变
         val input = sine(63.0, 0.8, 9600)
         val out = input.copyOf()
         val eq = Equalizer(rate, 2).apply { update(band(6, 1)) }
@@ -143,7 +143,7 @@ class EqualizerTest {
 
     @Test
     fun channelsIndependent() {
-        // L — синус, R — тишина: R остаётся нулём
+        // L — 正弦波,R — 静音:R 保持为零
         val frames = 4800
         val pcm = ByteArray(frames * 4)
         for (i in 0 until frames) {

@@ -55,7 +55,7 @@ import com.yegorkapomidorka.headswap.update.UpdatePrefs
 import com.yegorkapomidorka.headswap.update.Updater
 import java.text.NumberFormat
 
-/** Шапка «назад + заголовок» и прокручиваемое тело. */
+/** 「返回 + 标题」顶栏和可滚动内容区。 */
 fun scaffold(ctx: Context, title: String, onBack: () -> Unit, body: View): LinearLayout = ctx.vbox().apply {
     val header = ctx.hbox(4).apply {
         pad(ctx, 4, 8, 8, 0)
@@ -70,30 +70,30 @@ fun scaffold(ctx: Context, title: String, onBack: () -> Unit, body: View): Linea
     }, lp(MATCH, 0, 1f))
 }
 
-/** Разделы настроек: на главном экране по строке на каждый, внутри — свой экран (SettingsSectionScreen). */
+/** 设置分区:主屏幕每项一行,内部各有独立界面(SettingsSectionScreen)。 */
 enum class SettingsSection(val key: String, val titleRes: Int, val iconRes: Int) {
     APPEARANCE("appearance", R.string.set_sec_appearance, R.drawable.ic_palette),
     VIDEO("video", R.string.set_video, R.drawable.ic_video),
     SOUND("sound", R.string.set_sec_sound, R.drawable.ic_mic),
 
-    /** Эквалайзер: вход из «Звук и микрофон», на главном экране своей строки нет. */
+    /** 均衡器:从「声音与麦克风」进入,主屏幕没有自己的行。 */
     EQ("eq", R.string.eq_title, R.drawable.ic_equalizer),
     HEADUNIT("headunit", R.string.set_sec_headunit, R.drawable.ic_car),
 
-    /** Каталог чужих AA-приложений (Fermata Auto, ParkedTube, AABrowser) и предупреждение про видео в движении. */
+    /** 第三方 AA 应用目录(Fermata Auto、ParkedTube、AABrowser)和行驶中视频的警告。 */
     APPS("apps", R.string.set_sec_apps, R.drawable.ic_open),
 
-    /** Беспровод: только в сборке с BuildConfig.WIRELESS_BETA. */
+    /** 无线:仅在 BuildConfig.WIRELESS_BETA 构建中。 */
     WIRELESS("wireless", R.string.wl_title, R.drawable.ic_wifi),
     UPDATES("updates", R.string.upd_title, R.drawable.ic_download);
 
     companion object {
-        /** Разделы этой сборки: без беты беспровода его нет ни в меню, ни по ключу. */
+        /** 此构建的分区:没有无线 beta 时,菜单和按键中都无此项。 */
         fun shown(): List<SettingsSection> = values().filter { it != WIRELESS || BuildConfig.WIRELESS_BETA }
 
         fun byKey(key: String?): SettingsSection? = shown().firstOrNull { it.key == key }
 
-        /** Строки главного экрана настроек: подразделы (EQ) открываются из своих разделов. */
+        /** 设置主屏幕的行:子分区(EQ)从各自分区中打开。 */
         fun menu(): List<SettingsSection> = shown().filter { it != EQ }
     }
 }
@@ -131,7 +131,7 @@ private fun Context.eqPresetName(p: EqPreset): String = getString(EQ_PRESETS.fir
 private fun Context.micMissing(aa: AaPrefs): Boolean =
     aa.micMode != MicMode.CAR && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
 
-/** Строка состояния обновлений и её цвет: одна и та же на главном экране и в разделе «Обновления». */
+/** 更新状态行及其颜色:主屏幕与「更新」分区共用同一实现。 */
 private fun Context.updateStatus(): Pair<String, Int> {
     val rel = Updater.available(this)
     val err = Updater.error
@@ -146,7 +146,7 @@ private fun Context.updateStatus(): Pair<String, Int> {
     }
 }
 
-/** Главный экран настроек: разделы с текущими значениями, помощь, версия. */
+/** 设置主屏幕:带当前值的分区、帮助、版本。 */
 class SettingsScreen(host: MainActivity) : Screen(host) {
     private val aa = AaPrefs(ctx)
     private val summaries = HashMap<SettingsSection, TextView>()
@@ -223,7 +223,7 @@ class SettingsScreen(host: MainActivity) : Screen(host) {
         }
     }
 
-    /** Подписи под разделами: текущие значения, а при проблеме — её описание цветом предупреждения. */
+    /** 分区下方的摘要:当前值;有问题时显示警告色的说明。 */
     private fun refreshSummaries() {
         val c = ctx
         fun set(s: SettingsSection, text: String, color: Int = R.color.on2) {
@@ -264,9 +264,9 @@ class SettingsScreen(host: MainActivity) : Screen(host) {
     }
 
     /**
-     * «Поддержать Егора»: контурная пилюля под версией, открывает страницу поддержки на сайте
-     * (реквизиты там, в приложении их нет). URL по языку: ru — СБП на /headswap/support/,
-     * остальные — PayPal на /headswap/en/#donate (R.string.set_support_url).
+     * 「支持 Egor」:版本下方的描边胶囊按钮,打开网站上的支持页面
+     * (收款信息在那里,应用内没有)。URL 随语言:ru — SBP(俄罗斯快速支付),位于 /headswap/support/;
+     * 其他 — PayPal,位于 /headswap/en/#donate (R.string.set_support_url)。
      */
     private fun supportButton(): View {
         val c = ctx
@@ -305,7 +305,7 @@ class SettingsScreen(host: MainActivity) : Screen(host) {
     }
 }
 
-/** Переключатель из нескольких кнопок в рамке; выбранная залита pric и помечена «✓». */
+/** 由多个按钮组成的框架式切换器;选中项填充 pric 并标记「✓」。 */
 private class Segmented(val ctx: Context, private val labels: List<String>, sp: Float, val onPick: (Int) -> Unit) {
     private val buttons = ArrayList<TextView>()
     val view: LinearLayout = ctx.hbox().apply {
@@ -338,7 +338,7 @@ private class Segmented(val ctx: Context, private val labels: List<String>, sp: 
     }
 }
 
-/** Один раздел настроек (язык и тема, видео, звук, ГУ, обновления). */
+/** 单个设置分区(语言和主题、视频、声音、车机、更新)。 */
 class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : Screen(host) {
     private val aa = AaPrefs(ctx)
     private val langRows = LinkedHashMap<String, RadioRow>()
@@ -367,7 +367,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     private var eqUsbNote: TextView? = null
     private var eqEntrySub: TextView? = null
     private var eqEntryRow: View? = null
-    /** Списки «Установлено на телефоне» и «Рекомендуем»: пересобираются при каждом возврате на экран. */
+    /** 「已安装在手机上」和「推荐」列表:每次回到界面时重建。 */
     private var appsHost: LinearLayout? = null
     private var updStatus: TextView? = null
     private var updButton: TextView? = null
@@ -383,7 +383,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     private var wlCwPass: EditText? = null
     private var wlCwResult: TextView? = null
     private var wlCwForget: View? = null
-    /** Запрос сети машины из «Сохранить и проверить»; null - проверки нет. */
+    /** 来自「保存并检查」的车辆网络请求;null - 未在检查。 */
     private var wlCwCheck: CarNetwork? = null
     private val cwHandler = Handler(Looper.getMainLooper())
     private val body: LinearLayout = ctx.vbox(6).apply { pad(ctx, 16, 4, 16, 16) }
@@ -427,14 +427,14 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         }
         if (wlAwaitingCarPermission) {
             wlAwaitingCarPermission = false
-            CarPairing.start(host)      // без разрешения выбор всё равно возможен, refreshWireless предупредит
+            CarPairing.start(host)      // 无权限时选择仍可用,refreshWireless 会给出警告
         }
         refreshWireless()
     }
 
     override fun onActivityResultDone() = refreshWireless()
 
-    /** Беспровод (бета): пояснение, старт/стоп, выбор машины для автостарта по Bluetooth, отчёт. */
+    /** 无线(beta):说明、启动/停止、按蓝牙自动启动的车辆选择、报告。 */
     private fun wirelessCard(): View {
         val c = ctx
         val card = c.vbox(8).apply {
@@ -445,12 +445,12 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         wlStatus = c.text("", 15f, 500).also { card.addView(it, lp(MATCH, WRAP)) }
         wlNoPermission = c.text(c.getString(R.string.wl_no_permission), 13f, 400, c.clr(R.color.warn)).apply { visibility = View.GONE }
             .also { card.addView(it, lp(MATCH, WRAP)) }
-        // высота кнопок задаётся явно (как на других экранах): pill с WRAP сжимается до высоты текста
+        // 按钮高度显式指定(与其他界面一致):WRAP 的胶囊会收缩到文本高度
         card.addView(c.primaryButton(c.getString(R.string.wl_start), heightDp = 60, sp = 17f).apply { setOnClickListener { onWirelessStart() } },
             lp(MATCH, c.dp(60)).apply { topMargin = c.dp(4) })
         card.addView(c.outlineButton(c.getString(R.string.wl_stop), heightDp = 56, sp = 16f).apply { setOnClickListener { Actions.stopBridge(c) } },
             lp(MATCH, c.dp(56)))
-        // выбор машины: дальше при её Bluetooth-подключении ожидание по Wi-Fi стартует само
+        // 选择车辆:之后在其蓝牙连接时 Wi-Fi 等待自动启动
         wlCarLine = c.text("", 15f, 500).also { card.addView(it, lp(MATCH, WRAP).apply { topMargin = c.dp(8) }) }
         card.addView(c.text(c.getString(R.string.wl_car_note), 13f, 400, c.clr(R.color.on2)), lp(MATCH, WRAP))
         wlCarWarn = c.text("", 13f, 400, c.clr(R.color.warn)).apply { visibility = View.GONE }.also { card.addView(it, lp(MATCH, WRAP)) }
@@ -459,7 +459,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         wlCarForget = c.outlineButton(c.getString(R.string.wl_car_forget), heightDp = 56, sp = 16f).apply {
             setOnClickListener { CarPairing.forget(c); refreshWireless() }
         }.also { card.addView(it, lp(MATCH, c.dp(56))) }
-        // Wi-Fi машины: телефон входит в её точку доступа сам (WifiNetworkSpecifier), интернет остаётся на основной сети
+        // 车辆的 Wi-Fi:手机自行加入其热点(WifiNetworkSpecifier),互联网仍走主网络
         val cw = CarWifi(c)
         wlCwLine = c.text("", 15f, 500).also { card.addView(it, lp(MATCH, WRAP).apply { topMargin = c.dp(8) }) }
         card.addView(c.text(c.getString(R.string.wl_cw_note), 13f, 400, c.clr(R.color.on2)), lp(MATCH, WRAP))
@@ -488,7 +488,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         val carText = c.getString(R.string.wl_car_line, if (car.isSet) car.btName ?: car.btMac ?: "" else c.getString(R.string.wl_car_none))
         wlCarLine?.let { if (it.text.toString() != carText) it.text = carText }
         wlCarForget?.visibility = if (car.isSet) View.VISIBLE else View.GONE
-        // без BLUETOOTH_CONNECT (31+) система не доставляет ACL выбранной машины: триггер молчит
+        // 没有 BLUETOOTH_CONNECT (31+) 时系统不投递所选车辆的 ACL:触发器静默
         val warn = when {
             !CarPairing.available(c) -> c.getString(R.string.wl_car_unavailable)
             car.isSet && !carBtGranted() -> c.getString(R.string.wl_car_no_permission)
@@ -498,7 +498,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
             if (it.text.toString() != warn) it.text = warn
             it.visibility = if (warn.isEmpty()) View.GONE else View.VISIBLE
         }
-        val cw = CarWifi(c)      // SSID на экране показываем, в логи и отчёт он не уходит
+        val cw = CarWifi(c)      // SSID 显示在界面上,不进入日志和报告
         val cwText = c.getString(R.string.wl_cw_line, if (cw.isSet) c.getString(R.string.wl_cw_set, cw.ssid) else c.getString(R.string.wl_cw_none))
         wlCwLine?.let { if (it.text.toString() != cwText) it.text = cwText }
         wlCwForget?.visibility = if (cw.isSet) View.VISIBLE else View.GONE
@@ -515,7 +515,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         isSingleLine = true
         inputType = InputType.TYPE_CLASS_TEXT or
             if (password) InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        typeface = ctx.sans(400)      // setInputType для пароля сам ставит моноширинный
+        typeface = ctx.sans(400)      // 密码的 setInputType 会自动设置等宽字体
     }
 
     private fun showCwResult(text: String, color: Int = R.color.on2) {
@@ -527,8 +527,8 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     }
 
     /**
-     * «Сохранить и проверить»: запрос сети машины с переднего плана, чтобы человек увидел и одобрил системный диалог (из фона
-     * его не показать). Это только одобрение/проверка: через 5 с после входа запрос снимаем, дальше его держит сервис.
+     * 「保存并检查」:从前台请求车辆网络,让用户看到并批准系统对话框(后台无法显示)。
+     * 这只是批准/验证:接入 5 秒后撤下请求,之后由服务保持网络。
      */
     private fun onCarWifiSave() {
         val ssid = wlCwSsid?.text?.toString().orEmpty()
@@ -580,7 +580,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     private fun carBtGranted() =
         Build.VERSION.SDK_INT < 31 || ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
-    /** На Android 12+ перед выбором просим BLUETOOTH_CONNECT (имя устройства, доставка ACL); отказ выбор не блокирует. */
+    /** 在 Android 12+ 上,选择前请求 BLUETOOTH_CONNECT(设备名称、ACL 投递);拒绝不会阻止选择。 */
     private fun onCarPick() {
         if (!carBtGranted()) {
             wlAwaitingCarPermission = true
@@ -591,19 +591,19 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     }
 
     /**
-     * На Android 17+ без ACCESS_LOCAL_NETWORK LAN режется молча: сначала спрашиваем, старт - в onPermissionResult.
-     * BLUETOOTH_CONNECT (Android 12+) и «Устройства поблизости» (Wi-Fi Direct) - для ветки A, без них беспровод всё равно стартует.
+     * 在 Android 17+ 上,没有 ACCESS_LOCAL_NETWORK 时 LAN 会被静默切断:先询问,启动在 onPermissionResult 中进行。
+     * BLUETOOTH_CONNECT (Android 12+) 和「附近的设备」(Wi-Fi Direct) 用于分支 A,没有它们无线仍会启动。
      */
     private fun onWirelessStart() {
         wlNoPermission?.visibility = View.GONE
         val ask = ArrayList<String>()
         if (Build.VERSION.SDK_INT >= 37 && NetProbe.localNetworkGranted(ctx) != "granted") ask += Manifest.permission.ACCESS_LOCAL_NETWORK
         if (!carBtGranted()) ask += Manifest.permission.BLUETOOTH_CONNECT
-        // ветка A: вход в Wi-Fi Direct-группу ГУ; без него беспровод стартует, но только веткой B
+        // 分支 A:加入车机的 Wi-Fi Direct 组;没有它无线也能启动,但只能用分支 B
         val p2p = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.NEARBY_WIFI_DEVICES else Manifest.permission.ACCESS_FINE_LOCATION
         if (ctx.checkSelfPermission(p2p) != PackageManager.PERMISSION_GRANTED) {
             ask += p2p
-            // Android 12 молча отклоняет FINE без COARSE в том же запросе
+            // Android 12 在同一请求中缺少 COARSE 时会静默拒绝 FINE
             if (p2p == Manifest.permission.ACCESS_FINE_LOCATION) ask += Manifest.permission.ACCESS_COARSE_LOCATION
         }
         if (ask.isNotEmpty()) {
@@ -620,11 +620,11 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     }
 
     private companion object {
-        /** Тот же код, что MainActivity.REQ_LOCAL_NETWORK: результат попадает в её лог. */
+        /** 与 MainActivity.REQ_LOCAL_NETWORK 相同的请求码:结果会进入它的日志。 */
         const val REQ_LOCAL_NETWORK = 37
-        /** BLUETOOTH_CONNECT перед выбором машины (38 занят диалогом CDM, CarPairing.REQ_CAR_PAIR). */
+        /** 选择车辆前的 BLUETOOTH_CONNECT(38 已被 CDM 对话框占用,即 CarPairing.REQ_CAR_PAIR)。 */
         const val REQ_CAR_BT = 39
-        /** Проверка Wi-Fi машины из настроек: сколько ждём одобрения и входа, и сколько держим сеть после входа. */
+        /** 从设置中检查车辆 Wi-Fi:等待批准和接入的时间,以及接入后保持网络的时长。 */
         const val CW_CHECK_TIMEOUT_MS = 60_000L
         const val CW_CHECK_HOLD_MS = 5_000L
     }
@@ -632,7 +632,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     private fun note(text: String, color: Int = R.color.on2): TextView =
         ctx.text(text, 13f, 400, ctx.clr(color)).also { body.addView(it, lp(WRAP, WRAP).margins(ctx, 8, 2, 8, 0)) }
 
-    // --- язык и тема ---
+    // --- 语言和主题 ---
 
     private fun buildAppearance() {
         val c = ctx
@@ -657,7 +657,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         if (AppLocale.get(ctx) == tag) return
         AppLocale.set(ctx, tag)
         refreshLang()
-        if (AppLocale.needsRecreate) host.recreate()      // на 33+ activity пересоздаёт система
+        if (AppLocale.needsRecreate) host.recreate()      // 在 33+ 上 activity 由系统重建
     }
 
     private fun refreshLang() {
@@ -669,7 +669,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         if (AppTheme.get(ctx) == mode) return
         AppTheme.set(ctx, mode)
         refreshTheme()
-        host.recreate()      // тема и цвета читаются при создании activity
+        host.recreate()      // 主题和颜色在创建 activity 时读取
     }
 
     private fun refreshTheme() {
@@ -677,7 +677,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         for ((mode, row) in themeRows) row.setSelected(cur == mode)
     }
 
-    // --- видео ---
+    // --- 视频 ---
 
     private fun buildVideo() {
         val c = ctx
@@ -720,15 +720,15 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
     }
 
     private fun setVideoMode(m: VideoMode) {
-        if (m.needsTranscode && !aa.transcode) return      // кроп возможен только при перекодировании
+        if (m.needsTranscode && !aa.transcode) return      // 裁剪仅在转码时可用
         aa.videoMode = m
         refreshVideoMode()
     }
 
-    /** Без перекодирования «широкий» недоступен: радио затемнено, фактический режим 1280×720 (в prefs выбор остаётся). */
+    /** 不转码时「宽屏」不可用:单选按钮变暗,实际模式为 1280×720(prefs 中的选择保留)。 */
     private fun refreshVideoMode() {
         val shown = aa.videoMode.effective(aa.transcode)
-        // своё разрешение из раздела для разработчиков перекрывает список (без перекодирования оно само уходит в R720)
+        // 开发者分区中的自定义分辨率会覆盖列表(不转码时它自己落到 R720)
         val custom = aa.videoGeometry.effective(aa.transcode) as? CustomVideoMode
         customResNote?.apply {
             visibility = if (custom != null) View.VISIBLE else View.GONE
@@ -740,10 +740,10 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
             row.setSub(if (blocked) ctx.getString(R.string.set_needs_transcode) else ctx.getString(m.subRes))
             row.view.alpha = if (blocked) 0.45f else if (custom != null) 0.6f else 1f
         }
-        refreshDensity()      // «авто» зависит от режима
+        refreshDensity()      // 「自动」取决于模式
     }
 
-    /** «−  значение  +  Авто»: 11 вариантов (авто и 100..280 через 20) не влезают в Segmented, поэтому степпер. */
+    /** 「−  值  +  自动」:11 个选项(自动和 100..280,步长 20)放不进 Segmented,所以用步进器。 */
     private fun densityCard(): View {
         val c = ctx
         fun stepButton(label: String, desc: String, up: Boolean) = c.text(label, 24f, 500, c.clr(R.color.acc)).apply {
@@ -783,7 +783,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         return row
     }
 
-    /** density режима, который реально применится (с учётом passthrough). */
+    /** 实际生效的模式 density(考虑 passthrough)。 */
     private fun autoDensity(): Int = aa.videoGeometry.effective(aa.transcode).density
 
     private fun setDensity(v: Int) {
@@ -821,7 +821,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         fpsNote?.text = ctx.getString(aa.fpsSetting.subRes)
     }
 
-    // --- звук и микрофон ---
+    // --- 声音和麦克风 ---
 
     private fun buildSound() {
         val c = ctx
@@ -851,7 +851,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         refreshMic()
     }
 
-    /** Строка «Эквалайзер · пресет ›» под «Звук по USB»: открывает экран EQ; без звука по USB затемнена. */
+    /** 「均衡器 · 预设 ›」行,位于「USB 音频」下方:打开 EQ 界面;无 USB 音频时变暗。 */
     private fun eqEntry(): View {
         val c = ctx
         val sub = c.text("", 14f, 400, c.clr(R.color.on2))
@@ -903,13 +903,13 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         note.visibility = if (missing) View.VISIBLE else View.GONE
     }
 
-    // --- эквалайзер ---
+    // --- 均衡器 ---
 
     private fun buildEq() {
         val c = ctx
         eqUsbNote = note(c.getString(R.string.eq_usb_only), R.color.warn)
         body.addView(c.sectionTitle(c.getString(R.string.eq_presets)))
-        // каждая кнопка отдельная пилюля, по две в ряд
+        // 每个按钮是独立胶囊,每行两个
         val grid = c.vbox(8)
         for (row in EQ_PRESETS.chunked(2)) {
             val line = c.hbox(8)
@@ -953,7 +953,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         refreshEq()
     }
 
-    /** Строка «подпись | слайдер | значение в дБ»; onChange только от пальца. */
+    /** 「标签 | 滑块 | 以 dB 为单位的值」行;onChange 仅在手动拖动时触发。 */
     private fun eqSliderRow(label: String, min: Int, max: Int, onChange: (Int) -> Unit): Triple<View, SeekBar, TextView> {
         val c = ctx
         val value = c.text("", 14f, 500, c.clr(R.color.on2)).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL }
@@ -989,7 +989,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
 
     private fun dbLabel(v: Int): String = ctx.getString(R.string.eq_db, if (v > 0) "+$v" else if (v < 0) "−${-v}" else "0")
 
-    /** Любое движение слайдера = «Свой»; его значения запоминаются отдельно. */
+    /** 滑块的任何移动 = 「自定义」;其值单独保存。 */
     private fun applyCustomEq(s: EqSettings) {
         aa.eq = s
         aa.eqCustom = s
@@ -1032,7 +1032,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         usbNote.visibility = if (aa.usbAudio) View.GONE else View.VISIBLE
     }
 
-    // --- головное устройство ---
+    // --- 车机 ---
 
     private fun buildHeadunit() {
         val c = ctx
@@ -1093,7 +1093,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         return card
     }
 
-    // --- приложения для магнитолы ---
+    // --- 车机应用 ---
 
     private fun buildApps() {
         val c = ctx
@@ -1125,7 +1125,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         }
     }
 
-    /** Найденное на телефоне: иконка и имя самого приложения, описание из каталога (если есть), подпись про «Неизвестные источники». */
+    /** 手机上找到的应用:应用本身的图标和名称、目录中的描述(如有)、关于「未知来源」的说明。 */
     private fun installedAppRow(pkg: String, label: CharSequence, icon: Drawable?, catalog: HuApp?): View {
         val c = ctx
         val canOpen = HuApps.launchIntent(c, pkg) != null
@@ -1143,7 +1143,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         }
     }
 
-    /** Запись каталога, которой на телефоне нет: описание, требование, «Скачать». */
+    /** 目录中手机尚未安装的应用条目:描述、要求、「下载」。 */
     private fun recommendedAppRow(app: HuApp): View {
         val c = ctx
         val unsupported = HuApps.status(c, app).unsupported
@@ -1163,7 +1163,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         }
     }
 
-    /** Поиск по PackageManager: зовётся при каждом возврате на экран (после браузера и установщика). */
+    /** 通过 PackageManager 搜索:每次返回该界面时都会调用(在浏览器和安装器之后)。 */
     private fun refreshApps() {
         val host = appsHost ?: return
         val c = ctx
@@ -1183,7 +1183,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         if (rows.isEmpty()) {
             host.addView(c.text(c.getString(R.string.apps_installed_empty), 14f, 400, c.clr(R.color.on2)).apply { lineHeight = c.dp(20) })
         } else {
-            // одна подпись на всю секцию: в списке только приложения не из Play
+            // 整个分区共用一条说明:列表中只有非 Play 来源的应用
             host.addView(c.text(c.getString(R.string.apps_installed_note), 13f, 400, c.clr(R.color.on2)).apply { lineHeight = c.dp(18) },
                 lp(MATCH, WRAP).apply { bottomMargin = c.dp(8) })
             val card = c.card()
@@ -1206,7 +1206,7 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
         }
     }
 
-    /** Один раз за установку: видео на ходу не блокируем, ответственность на водителе. */
+    /** 每次安装只提示一次:不阻止行驶中播放视频,责任在驾驶员。 */
     private fun maybeShowAppsWarning() {
         if (aa.appsWarningShown) return
         aa.appsWarningShown = true
@@ -1217,9 +1217,9 @@ class SettingsSectionScreen(host: MainActivity, val section: SettingsSection) : 
             .show()
     }
 
-    // --- обновления ---
+    // --- 更新 ---
 
-    /** Переключатель проверки + строка состояния с кнопкой «Проверить» / «Обновить» (как карточка автозапуска). */
+    /** 检查开关 + 状态行,带「检查」/「更新」按钮(结构同自动启动卡片)。 */
     private fun updateCard(): View {
         val c = ctx
         val prefs = UpdatePrefs(c)

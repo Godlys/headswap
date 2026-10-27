@@ -22,7 +22,7 @@ import com.yegorkapomidorka.headswap.MainActivity
 import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.update.Updater
 
-/** Главный экран «Готов к поездке» (Main.dc.html): шесть состояний, этапы, кнопки; сверху плашка обновления. */
+/** 主屏幕“准备出发”（Main.dc.html）：六种状态、阶段、按钮；顶部为更新横幅。 */
 class HomeScreen(host: MainActivity) : Screen(host) {
     private val root = ctx.vbox()
     override val view: View get() = root
@@ -76,10 +76,10 @@ class HomeScreen(host: MainActivity) : Screen(host) {
         tick()
     }
 
-    /** Строка беспровода в карточке статуса: только когда режим включён и USB-сессии нет. */
+    /** 状态卡片中的无线连接行：仅当无线模式开启且无 USB 会话时显示。 */
     private fun wirelessLine(): String? {
         val w = CarLifeState.wireless
-        // во время беспроводной сессии строка повторяла бы подзаголовок; после обрыва нужна («жду машину снова»)
+        // 无线会话期间该行会与副标题重复；断连后则需要它（“再次等待汽车”）
         if (CarLifeState.wirelessSession) return null
         return if (w != null) ctx.getString(R.string.home_wireless, w) else null
     }
@@ -98,7 +98,7 @@ class HomeScreen(host: MainActivity) : Screen(host) {
         lastState = st
         val wlSame = wl == lastWireless
         lastWireless = wl
-        // меняется только обратный отсчёт: обновляем его, не пересобирая экран
+        // 只有倒计时在变化：仅更新它，不重建整个屏幕
         if (wlSame && prev != null && st.copy(graceLeftS = prev.graceLeftS) == prev && st.phase == Phase.RECONNECTING) {
             updateGrace(st)
             return
@@ -106,7 +106,7 @@ class HomeScreen(host: MainActivity) : Screen(host) {
         render(st)
     }
 
-    /** Плашка «Доступна версия X»: не во время подключения к машине; крестик прячет её до следующей версии. */
+    /** “新版本 X 可用”横幅：不在连接汽车时显示；点击叉号将其隐藏至下一个版本。 */
     private fun refreshUpdate() {
         val c = ctx
         val rel = if (CarLifeState.running) null else Updater.banner(c)
@@ -175,7 +175,7 @@ class HomeScreen(host: MainActivity) : Screen(host) {
             HeroIcon.REFRESH -> R.drawable.ic_refresh
             HeroIcon.ALERT -> R.drawable.ic_alert
         }
-        // слева значок в кружке, справа заголовок в одну строку; подзаголовок ниже на всю ширину
+        // 左侧为圆形图标，右侧为单行标题；副标题在其下方占满整行
         heroBox.addView(c.hbox(12).apply {
             addView(FrameLayout(c).apply {
                 background = c.oval(c.clr(fgRes))
@@ -199,7 +199,7 @@ class HomeScreen(host: MainActivity) : Screen(host) {
         for ((label, sm) in st.stages) stagesBox.addView(stageRow(label.get(c), sm.first, sm.second.get(c)), c.lpDp(MATCH, 52))
 
         footer.removeAllViews()
-        // сервер ГУ включает пользователь сам: и первый запуск, и после обрыва кнопка ведёт в настройки Android Auto
+        // 车机服务器由用户自行启动：无论是首次运行还是断连之后，按钮都跳转到 Android Auto 设置
         if (st.primary != null) {
             footer.addView(c.primaryButton(c.getString(R.string.action_open_aa), R.drawable.ic_open).apply { setOnClickListener { Actions.startServerFromUi(c) } })
         }
@@ -211,13 +211,13 @@ class HomeScreen(host: MainActivity) : Screen(host) {
             footer.addView(b)
         }
         if (st.logLink) {
-            // «Отправить лог» живёт внутри самодиагностики: на главном одна понятная вторая кнопка
+            // “发送日志”位于自检功能内：主屏幕上保留一个明确易懂的次要按钮
             footer.addView(c.tonalButton(c.getString(R.string.diag_home_btn)).apply { setOnClickListener { host.showDiag() } })
         }
         if (st.phase == Phase.RECONNECTING) updateGrace(st)
     }
 
-    /** Как запустить сервер ГУ: три пронумерованных пункта на плашке surf (Main.dc.html, isOff). */
+    /** 如何启动车机服务器：surf 面板上的三个带编号的步骤（Main.dc.html, isOff）。 */
     private fun chain(): View {
         val c = ctx
         val box = c.vbox().apply {
@@ -245,7 +245,7 @@ class HomeScreen(host: MainActivity) : Screen(host) {
         return box
     }
 
-    /** Строка ресурса с <b>: жирное рисуем шрифтом приложения (Golos 700), а не синтетическим BOLD. */
+    /** 带 <b> 的资源字符串：粗体使用应用字体（Golos 700）绘制，而非合成的 BOLD。 */
     private fun boldText(res: Int): CharSequence {
         val c = ctx
         val out = SpannableString(c.getText(res))

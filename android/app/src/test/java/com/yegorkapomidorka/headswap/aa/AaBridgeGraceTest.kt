@@ -52,9 +52,9 @@ class BridgeHostTest {
         host.onUsbSessionClosed(immediate = false)
         assertTrue(host.isInGrace)
         Thread.sleep(150)
-        assertTrue(host.onUsbSessionStarted())            // вернулся в окно
+        assertTrue(host.onUsbSessionStarted())            // 在窗口内回来了
         assertFalse(host.isInGrace)
-        Thread.sleep(600)                                  // таймер отменён: не сработает
+        Thread.sleep(600)                                  // 定时器已取消:不会触发
         assertEquals(1, lc.starts.get())
         assertEquals(0, lc.stops.get())
         assertFalse(host.isDead)
@@ -117,7 +117,7 @@ class BridgeHostTest {
         val lc1 = FakeLifecycle(stopDelayMs = 500)
         val host1 = BridgeHost(core(), lc1, scheduler, { l, _ -> logs.add(l) })
         host1.onUsbSessionStarted()
-        host1.shutdown("тест")                              // закрытие идёт 500 мс
+        host1.shutdown("тест")                              // 关闭需要 500 毫秒
         val lc2 = FakeLifecycle()
         val host2 = BridgeHost(core(), lc2, scheduler, { l, _ -> logs.add(l) }, previous = host1)
         assertTrue(host2.onUsbSessionStarted())
@@ -129,7 +129,7 @@ class BridgeHostTest {
     }
 }
 
-/** Живая AA-сессия переживает обрыв USB: тот же сеанс, keyframe-цикл, источник вернулся на AA; по истечении grace - ByeBye. */
+/** 存活的 AA 会话能扛过 USB 断开:同一会话、keyframe 循环、音源切回 AA;grace 到期后 - ByeBye。 */
 class BridgeGraceIntegrationTest {
     @Test
     fun usbDropAndReturnInsideGraceReusesSameAaSessionAndRecoversByKeyframe() {
@@ -153,7 +153,7 @@ class BridgeGraceIntegrationTest {
         val scheduler = Executors.newSingleThreadScheduledExecutor()
         val host = BridgeHost(core, connector, scheduler, { l, _ -> logs.add(l) }, graceMs = 1500, onTornDown = { down.countDown() })
 
-        // USB-сессия 1: CarLife START, AA подключается и отдаёт config + IDR + P
+        // USB 会话 1:CarLife START,AA 连接并输出 config + IDR + P
         core.attach(link1)
         host.onUsbSessionStarted()
         core.onCarlifeStart()
@@ -166,7 +166,7 @@ class BridgeGraceIntegrationTest {
         assertTrue(phone.ready.await(10, TimeUnit.SECONDS))
         val aaSession = sessionRef.get()
 
-        // обрыв USB (EIO): CarLife закрыт, AA жива
+        // USB 断开(EIO):CarLife 已关闭,AA 仍存活
         core.onCarlifeClosed(link1)
         host.onUsbSessionClosed(immediate = false)
         Thread.sleep(300)
@@ -174,7 +174,7 @@ class BridgeGraceIntegrationTest {
         assertTrue("AA-сессия жива", aaSession.established)
         assertEquals(null, phone.error)
 
-        // USB вернулся внутри grace: новая CarLife-сессия, заглушка "жду кадр", keyframe, IDR от той же AA
+        // USB 在 grace 内回来了:新的 CarLife 会话、"等待帧"占位、keyframe、同一 AA 的 IDR
         val link2 = FakeLink()
         core.attach(link2)
         assertTrue(host.onUsbSessionStarted())
@@ -182,13 +182,13 @@ class BridgeGraceIntegrationTest {
         core.onCarlifeStart()
         waitUntil { link2.sent.isNotEmpty() }
         assertEquals("после keyframe-цикла IDR не дошёл\n" + logs.joinToString("\n"), 1, link2.sent.size)
-        assertArrayEquals(FakePhone.SPS_PPS2 + FakePhone.IDR2, link2.sent[0])      // свежий SPS+PPS+IDR
+        assertArrayEquals(FakePhone.SPS_PPS2 + FakePhone.IDR2, link2.sent[0])      // 全新的 SPS+PPS+IDR
         assertEquals(AaBridgeCore.Source.AA, core.activeSource)
         assertEquals(1, link2.hides)
         assertEquals("всё ещё та же AA-сессия", 1, created.get())
         assertTrue(aaSession === sessionRef.get() && aaSession.established)
 
-        // USB не вернулся за grace: AA закрывается корректно (ByeBye), телефон это видит
+        // USB 未在 grace 内返回:AA 正常关闭(ByeBye),手机能看到
         core.onCarlifeClosed(link2)
         host.onUsbSessionClosed(immediate = false)
         assertTrue("AA не закрылась после grace\n" + logs.joinToString("\n"), down.await(15, TimeUnit.SECONDS))

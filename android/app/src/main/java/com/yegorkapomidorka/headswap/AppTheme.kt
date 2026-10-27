@@ -5,9 +5,9 @@ import android.content.res.Configuration
 import com.yegorkapomidorka.headswap.ui.UiPrefs
 
 /**
- * Тема интерфейса: «system» (по умолчанию, следует системе), «light», «medium» (нейтральная тёмно-серая), «dark».
- * Выбор хранится в prefs "ui" (UiPrefs.theme). MainActivity оборачивает контекст через [wrap] в attachBaseContext:
- * light форсирует uiMode night=NO, medium и dark - night=YES (medium потом подменяет цвета на *_mid через [res]).
+ * 界面主题：「system」（默认，跟随系统）、「light」、「medium」（中性深灰）、「dark」。
+ * 选择保存在 prefs "ui"（UiPrefs.theme）中。MainActivity 在 attachBaseContext 中通过 [wrap] 包装上下文：
+ * light 强制 uiMode night=NO，medium 和 dark 强制 night=YES（medium 随后通过 [res] 将颜色替换为 *_mid 变体）。
  */
 object AppTheme {
     const val SYSTEM = "system"
@@ -16,7 +16,7 @@ object AppTheme {
     const val DARK = "dark"
     val MODES = listOf(SYSTEM, LIGHT, MEDIUM, DARK)
 
-    /** Включена «средняя»: Context.clr() и ресурсные ссылки идут через [res]. Выставляется в [wrap]. */
+    /** 是否启用「中等」主题：Context.clr() 和资源引用都通过 [res] 处理。在 [wrap] 中设置。 */
     @Volatile
     var medium = false
         private set
@@ -27,7 +27,7 @@ object AppTheme {
         UiPrefs(ctx).theme = if (mode in MODES) mode else SYSTEM
     }
 
-    /** Контекст с форсированным night-режимом; локаль из уже обёрнутого [base] сохраняется (копия его конфигурации). */
+    /** 带有强制 night 模式的上下文；已包装的 [base] 中的语言环境得以保留（复制其配置）。 */
     fun wrap(base: Context): Context {
         val mode = get(base)
         medium = mode == MEDIUM
@@ -41,7 +41,7 @@ object AppTheme {
         return base.createConfigurationContext(cfg)
     }
 
-    /** Ресурс для текущей темы: в «средней» вариант *_mid, иначе тот же id. Явная карта, не getIdentifier (его вырежет shrinkResources). */
+    /** 当前主题的资源：在「中等」主题下返回 *_mid 变体，否则返回相同 id。使用显式映射，而非 getIdentifier（后者会被 shrinkResources 移除）。 */
     fun res(id: Int): Int = if (medium) MID[id] ?: id else id
 
     private val MID: Map<Int, Int> = mapOf(

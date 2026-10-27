@@ -2,15 +2,15 @@ package com.yegorkapomidorka.headswap.aa
 
 import java.util.ArrayDeque
 
-/** Откуда брать звук для микрофона AA. */
+/** Android Auto 麦克风的音频来源。 */
 enum class MicMode(val key: String, val label: String) {
-    /** Только микрофон ГУ (запрос записи по CarLife); нет данных - ждём дальше. */
+    /** 仅车机麦克风（通过 CarLife 请求录音）；无数据则继续等待。 */
     CAR("car", "машина"),
 
-    /** Только микрофон телефона. */
+    /** 仅手机麦克风。 */
     PHONE("phone", "телефон"),
 
-    /** Сначала ГУ; если за HU_TIMEOUT_MS нет данных - микрофон телефона. */
+    /** 先用车机；若 HU_TIMEOUT_MS 内无数据 - 改用手机麦克风。 */
     AUTO("auto", "авто");
 
     companion object {
@@ -18,7 +18,7 @@ enum class MicMode(val key: String, val label: String) {
     }
 }
 
-/** Формат микрофона AA (MicCaptureFormat в headunit-revived): PCM 16 кГц 16 бит моно, кадры по 2048 сэмплов. */
+/** Android Auto 麦克风格式（headunit-revived 中的 MicCaptureFormat）：PCM 16 kHz 16 位单声道，每帧 2048 个采样。 */
 object AaMicFormat {
     const val SAMPLE_RATE = 16000
     const val BITS = 16
@@ -27,10 +27,10 @@ object AaMicFormat {
     const val CHUNK_FRAMES = 2048
     const val CHUNK_BYTES = CHUNK_FRAMES * 2
 
-    /** Длительность n байт PCM в микросекундах. */
+    /** n 字节 PCM 的时长（微秒）。 */
     fun usForBytes(n: Int): Long = n * 1_000_000L / BYTES_PER_SEC
 
-    /** Тело MEDIA_DATA на канале MIC: [timestamp u64 BE, мкс][PCM]. */
+    /** MIC 通道上的 MEDIA_DATA 消息体：[timestamp u64 BE, 微秒][PCM]。 */
     fun dataPayload(tsUs: Long, pcm: ByteArray): ByteArray {
         val out = ByteArray(8 + pcm.size)
         for (i in 0 until 8) out[i] = (tsUs ushr (56 - 8 * i)).toByte()
@@ -39,30 +39,30 @@ object AaMicFormat {
     }
 }
 
-/** Телефон просит у ГУ микрофон (MicrophoneRequest). Реализует ядро моста. */
+/** 手机向车机请求麦克风（MicrophoneRequest）。由桥接器核心实现。 */
 interface AaMicSink {
-    /** true = принято, PCM пойдёт через AaPeer.sendMicPcm. false = отказ (телефону уйдёт ошибка). */
+    /** true = 已接受，PCM 将通过 AaPeer.sendMicPcm 发送。false = 拒绝（手机将收到错误）。 */
     fun onMicOpen(): Boolean
 
     fun onMicClose(why: String)
 }
 
-/** Источник звука на телефоне (AudioRecord). */
+/** 手机上的音频源（AudioRecord）。 */
 interface PhoneMic {
-    /** Начать запись; sink получает PCM16 mono 16 кГц. false = не запустилось (нет разрешения и т.п.). */
+    /** 开始录音；sink 接收 PCM16 单声道 16 kHz。false = 未能启动（无权限等）。 */
     fun start(sink: (ByteArray) -> Unit): Boolean
 
     fun stop()
 }
 
 /**
- * Поток микрофона к телефону: нарезка PCM на кадры по 4096 Б (2048 сэмплов, ровно 128 мс, как требует гайд
- * Google и делает headunit-revived), окно maxUnacked из MicrophoneRequest, подтверждения Ack.
+ * 麦克风流向手机：将 PCM 切分为 4096 字节的帧（2048 个采样，恰好 128 毫秒，符合 Google 指南
+ * 及 headunit-revived 的做法），窗口为 MicrophoneRequest 中的 maxUnacked，通过 Ack 确认。
  *
- * Отправка кадров не блокирует: emit только ставит сообщение в очередь AAP. До activate() кадры копятся
- * (ответ MicrophoneResponse должен уйти раньше первых DATA). Хвост < 4096 Б при закрытии отбрасывается
- * (не дополняется нулями). Лишние кадры сверх окна ждут в очереди до maxPending, дальше OVERFLOW:
- * зависшего телефона не копим, сессию закрывает вызывающий.
+ * 发送帧不阻塞：emit 只是将消息放入 AAP 队列。activate() 之前帧会累积
+ * （MicrophoneResponse 响应必须先于第一批 DATA 发出）。关闭时不足 4096 字节的尾部被丢弃
+ * （不补零）。超出窗口的多余帧在队列中最多等待 maxPending，再超出则返回 OVERFLOW：
+ * 不为卡死的手机堆积数据，会话由调用方关闭。
  */
 class AaMicUplink(
     private val emit: (sessionId: Int, tsUs: Long, pcm: ByteArray) -> Unit,
@@ -113,7 +113,7 @@ class AaMicUplink(
         }
     }
 
-    /** MicrophoneResponse(успех) поставлен в очередь: можно слать данные. */
+    /** MicrophoneResponse（成功）已入队：可以发送数据了。 */
     fun activate() {
         synchronized(lock) {
             if (!open) return
@@ -122,7 +122,7 @@ class AaMicUplink(
         }
     }
 
-    /** pcm = PCM16 LE mono; capturedAtUs = момент захвата первого байта (мкс, часовой механизм телефона). */
+    /** pcm = PCM16 LE 单声道；capturedAtUs = 第一个字节的捕获时刻（微秒，手机单调时钟）。 */
     fun feed(pcm: ByteArray, capturedAtUs: Long): Feed {
         synchronized(lock) {
             if (!open) return Feed.CLOSED
@@ -148,7 +148,7 @@ class AaMicUplink(
         }
     }
 
-    /** Ack телефона: count принятых сообщений сессии sessionId. false = не наш/лишний ack. */
+    /** 手机的 Ack：sessionId 会话中已接收的 count 条消息。false = 不是我们的/多余的 ack。 */
     fun ack(sessionId: Int, count: Int): Boolean {
         synchronized(lock) {
             if (!open || sessionId != sid || count <= 0 || count > inFlight) return false
@@ -159,7 +159,7 @@ class AaMicUplink(
         }
     }
 
-    /** Закрыть сессию; null, если она не была открыта. Невышедшее отбрасывается. */
+    /** 关闭会话；若从未打开则返回 null。未发出的数据被丢弃。 */
     fun close(): Summary? {
         synchronized(lock) {
             if (!open) return null
@@ -182,38 +182,38 @@ class AaMicUplink(
     }
 
     companion object {
-        /** Четыре кадра по 128 мс: застрявший телефон прерывает сессию, а не растит задержку. */
+        /** 4 帧 × 128 毫秒：卡住的手机使会话中断，而不是让延迟增长。 */
         const val MAX_PENDING_CHUNKS = 4
     }
 }
 
-/** Отменяемая отложенная задача (для таймера fallback). */
+/** 可取消的延迟任务（用于 fallback 定时器）。 */
 fun interface MicTimerHandle {
     fun cancel()
 }
 
 /**
- * Маршрутизация микрофона AA: кто и откуда даёт звук.
- *  - open от AA: режим CAR/AUTO просят запись у ГУ (CarLife MIC_RECORD_RECOG_START), PHONE сразу пишет с телефона;
- *  - данные ГУ (VR 0x58001) идут в AA; в AUTO без данных за huTimeoutMs - fallback на микрофон телефона;
- *  - close от AA или потеря CarLife: остановить запись на ГУ (MIC_RECORD_END) / на телефоне.
- * Без Android: всё внешнее приходит лямбдами. Лог: префикс MIC.
+ * Android Auto 麦克风路由：谁提供声音、从哪里提供。
+ *  - 来自 Android Auto 的 open：CAR/AUTO 模式向车机请求录音（CarLife MIC_RECORD_RECOG_START），PHONE 模式立即从手机录音；
+ *  - 车机数据（VR 0x58001）送往 Android Auto；AUTO 模式下 huTimeoutMs 内无数据 - fallback 到手机麦克风；
+ *  - Android Auto 的 close 或 CarLife 丢失：停止车机（MIC_RECORD_END）/手机上的录音。
+ * 不依赖 Android：所有外部交互通过 lambda 传入。日志前缀：MIC。
  */
 class AaMicRouter(
     private val log: (String, Boolean) -> Unit,
     private val mode: () -> MicMode,
-    /** Есть живая CarLife-сессия (после START), у ГУ можно просить запись. */
+    /** 存在存活的 CarLife 会话（START 之后），可以向车机请求录音。 */
     private val huLinkUp: () -> Boolean,
-    /** Запрос записи у ГУ: true = старт, false = стоп. false в ответе = отправить не удалось. */
+    /** 向车机请求录音：true = 开始，false = 停止。返回 false = 发送失败。 */
     private val huRecord: (start: Boolean) -> Boolean,
     private val phone: () -> PhoneMic?,
-    /** PCM -> телефону (AapSession.sendMicPcm). */
+    /** PCM → 手机（AapSession.sendMicPcm）。 */
     private val toAa: (pcm: ByteArray, capturedAtUs: Long) -> Unit,
     private val schedule: (delayMs: Long, task: Runnable) -> MicTimerHandle,
     private val nowMs: () -> Long = { System.nanoTime() / 1_000_000 },
     private val nowUs: () -> Long = { System.nanoTime() / 1_000 },
     private val huTimeoutMs: Long = HU_TIMEOUT_MS,
-    /** Baidu MD (ReceiveDataThread.FILTER_PAKCAGE_NUM) выбрасывает первые 20 пакетов VR после старта записи. */
+    /** 百度 MD（ReceiveDataThread.FILTER_PAKCAGE_NUM）会在录音开始后丢弃前 20 个 VR 包。 */
     private val huSkipPackets: Int = HU_SKIP_PACKETS,
 ) {
     enum class State { IDLE, HU_WAIT, HU, PHONE }
@@ -240,7 +240,7 @@ class AaMicRouter(
     val bytesFromHu: Long get() = synchronized(lock) { huBytes }
     val bytesFromPhone: Long get() = synchronized(lock) { phoneBytes }
 
-    /** Телефон открыл микрофон. false = отказ (в режиме CAR нет CarLife, в PHONE не запустился AudioRecord). */
+    /** 手机打开了麦克风。false = 拒绝（CAR 模式下没有 CarLife，PHONE 模式下 AudioRecord 未启动）。 */
     fun open(): Boolean {
         synchronized(lock) {
             if (state != State.IDLE) {
@@ -291,7 +291,7 @@ class AaMicRouter(
         }
     }
 
-    /** CarLife-сессия закрыта (USB оборван): запись на ГУ пропала, в AUTO переходим на телефон. */
+    /** CarLife 会话已关闭（USB 断开）：车机录音丢失，AUTO 模式切换到手机。 */
     fun onCarlifeLost() {
         synchronized(lock) {
             if (state != State.HU_WAIT && state != State.HU) return
@@ -306,7 +306,7 @@ class AaMicRouter(
         }
     }
 
-    /** PCM от ГУ (VR 0x58001, тело сообщения). */
+    /** 来自车机的 PCM（VR 0x58001，消息体）。 */
     fun onHuData(pcm: ByteArray) {
         val captured: Long
         synchronized(lock) {
@@ -431,7 +431,7 @@ class AaMicRouter(
     companion object {
         const val HU_TIMEOUT_MS = 2000L
 
-        /** 0: пакеты ГУ не режем. У Baidu 20, но размер пакета ГУ Honda неизвестен (при 4096 Б это 2,5 с речи). */
+        /** 0：不丢弃车机数据包。百度为 20，但 Honda 车机的包大小未知（按 4096 字节计约 2.5 秒语音）。 */
         const val HU_SKIP_PACKETS = 0
     }
 }

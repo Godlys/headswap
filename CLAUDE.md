@@ -1,21 +1,21 @@
 # CLAUDE.md
 
-## Как изменения попадают в main
+## 改动如何进入 main 分支
 
-Репозиторий github.com/YegorkaPomidorka/headswap, владелец Егор. Порядок всегда один:
+仓库 github.com/YegorkaPomidorka/headswap，所有者 Yegor。流程始终一致：
 
-1. **Worktree.** Правки только в отдельном worktree со своей веткой `claude/...`. В основном checkout (`main`) параллельно работают другие сессии, туда не коммитить.
-2. **Ветка.** Коммиты в ветку worktree. `git add` только явных путей, без `-a`. В конце сообщения строка `Co-Authored-By`.
-3. **Пуш ветки.** Через личный аккаунт gh, не через GCM (он уводит в рабочую организацию):
-   `git -c credential.helper= -c "credential.helper=!gh auth git-credential" push -u origin <ветка>`
-   Если main ушёл вперёд, сначала подтянуть его в ветку (в Claude Desktop — `sync_with_base_branch`), прогнать тесты.
-4. **PR** в `main`: `gh pr create --repo YegorkaPomidorka/headswap --base main --head <ветка>`.
-5. **Мердж.** Когда Егор говорит «залей» / «влей», сливать сразу, ревью не ждать — это его разрешение:
-   `gh pr merge <номер> --repo YegorkaPomidorka/headswap --merge`
-6. **После мерджа** main на GitHub обновлён. Локальный `main` в основном checkout подтянет та сессия, которая там работает; из worktree его не трогать.
+1. **Worktree。** 所有改动只在独立的 worktree 及其分支 `claude/...` 中进行。主 checkout（`main`）上有其他会话并行工作，不要在那里提交。
+2. **分支。** 提交到 worktree 分支。`git add` 只添加明确的路径，不用 `-a`。提交信息末尾加一行 `Co-Authored-By`。
+3. **推送分支。** 通过个人 gh 账号推送，不用 GCM（它会导向工作组织）：
+   `git -c credential.helper= -c "credential.helper=!gh auth git-credential" push -u origin <分支>`
+   如果 main 已经领先，先把 main 拉入分支（Claude Desktop 中用 `sync_with_base_branch`），再跑测试。
+4. **PR** 到 `main`：`gh pr create --repo YegorkaPomidorka/headswap --base main --head <分支>`。
+5. **合并。** 当 Yegor 说「залей」/「влей」（合并吧）时立即合并，不等评审——这就是他的授权：
+   `gh pr merge <编号> --repo YegorkaPomidorka/headswap --merge`
+6. **合并后** GitHub 上的 main 已更新。本地主 checkout 的 `main` 由在该 checkout 工作的会话自行拉取；不要在 worktree 里动它。
 
-Версия (`versionCode`/`versionName` в `android/app/build.gradle.kts`) поднимается отдельным коммитом «Version X.Y.Z (versionCode N)» только при выпуске релиза. Тестовые сборки (`-cx5test1` и т.п.) собираются с временной правкой версии, которая в коммит не попадает.
+版本号（`android/app/build.gradle.kts` 中的 `versionCode`/`versionName`）只在发布版本时单独提交「Version X.Y.Z (versionCode N)」。测试构建（`-cx5test1` 等）用临时版本号编译，不进提交。
 
-Релиз, кроме сайта, выкладывается в GitHub Releases: оттуда приложение обновляется само (`update/UpdateLogic.kt`). Тег `vX.Y.Z`, файл `headswap-X.Y.Z.apk` (имя как на сайте), описание релиза приложение показывает перед установкой:
-`gh release create vX.Y.Z headswap-X.Y.Z.apk --repo YegorkaPomidorka/headswap --title "Headswap X.Y.Z" --notes-file <что нового>`
-Тестовые сборки на GitHub выкладывать только с `--prerelease`: последним релизом GitHub их не считает, приложение их не предложит.
+除网站外，版本还发布到 GitHub Releases：应用从那里自更新（`update/UpdateLogic.kt`）。标签 `vX.Y.Z`，文件 `headswap-X.Y.Z.apk`（文件名同网站），应用在安装前会显示发布说明：
+`gh release create vX.Y.Z headswap-X.Y.Z.apk --repo YegorkaPomidorka/headswap --title "Headswap X.Y.Z" --notes-file <更新内容>`
+测试构建发布到 GitHub 只能加 `--prerelease`：这样 GitHub 不把它算作最新版本，应用也不会推送它。

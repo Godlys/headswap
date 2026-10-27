@@ -10,8 +10,8 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Лог в три места: logcat (тег Headswap), файл headswap-<timestamp>.log в getExternalFilesDir(null)
- * и кольцо последних строк для экрана. Подробности (hexdump) идут только в logcat и файл.
+ * 日志写入三个地方：logcat（标签 Headswap）、getExternalFilesDir(null) 下的 headswap-<timestamp>.log 文件，
+ * 以及供屏幕显示的最近行环形缓冲区。详细信息（hexdump）只写入 logcat 和文件。
  */
 object AppLog {
     const val TAG = "Headswap"
@@ -40,7 +40,7 @@ object AppLog {
         CrashLog.install(ctx)
     }
 
-    /** Строка для всех приёмников (экран тоже, если ui=true). */
+    /** 供所有接收者使用的行（如果 ui=true，屏幕也显示）。 */
     @Synchronized
     fun i(line: String, ui: Boolean = true) {
         Log.i(TAG, line)
@@ -51,7 +51,7 @@ object AppLog {
         }
     }
 
-    /** Подробности: только logcat и файл. */
+    /** 详细信息：仅 logcat 和文件。 */
     @Synchronized
     fun detail(text: String) {
         for (l in text.split('\n')) Log.d(TAG, l)
@@ -70,7 +70,7 @@ object AppLog {
     @Synchronized
     fun lastLines(): List<String> = ring.toList()
 
-    /** Очистить строки на экране (файл лога не трогаем). */
+    /** 清空屏幕上的行（不动日志文件）。 */
     @Synchronized
     fun clearRing() = ring.clear()
 
@@ -83,7 +83,7 @@ object AppLog {
         }
     }
 
-    /** Лог одного сообщения: заголовок + hexdump первых 256 байт inner и декодированный protobuf. */
+    /** 记录一条消息：标题 + inner 前 256 字节的 hexdump 和解码后的 protobuf。 */
     fun msg(dir: String, chan: Int, outerLen: Int, type: Int, len: Int, decoded: String?, inner: ByteArray, ui: Boolean = true, note: String = "") {
         val head = "$dir ${Ch.name(chan)} ${Msg.hex(type)} ${Msg.name(type)} len=$len" +
             (if (decoded != null) " $decoded" else "") + note

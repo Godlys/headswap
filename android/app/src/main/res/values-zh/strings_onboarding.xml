@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 引导步骤：标题、编号列表（string-array）、提示、按钮；short 为就绪检查清单中的名称。 -->
+    <string name="step_aa_dev_title">开启 Android Auto 开发者模式</string>
+    <string-array name="step_aa_dev_list">
+        <item>点击“打开 Android Auto”</item>
+        <item>一直向下滚动到底部</item>
+        <item>连续点击“版本”10 次并确认</item>
+    </string-array>
+    <string name="step_aa_dev_primary">打开 Android Auto</string>
+    <string name="step_aa_dev_short">Android Auto 开发者模式</string>
+
+    <string name="step_aa_unknown_title">允许安装未知来源的应用</string>
+    <string-array name="step_aa_unknown_list">
+        <item>点击“打开 Android Auto”</item>
+        <item>点击 ⋮ 并选择“开发者设置”</item>
+        <item>向下滚动到“未知来源”</item>
+        <item>勾选该选项</item>
+    </string-array>
+    <string name="step_aa_unknown_hint">不开启此项，Android Auto 将不会显示 Google Play 之外安装的应用。</string>
+    <string name="step_aa_unknown_primary">打开 Android Auto</string>
+    <string name="step_aa_unknown_short">未知来源</string>
+
+    <string name="step_autostart_title">启动车机服务器</string>
+    <string-array name="step_autostart_list">
+        <item>点击“打开 Android Auto”</item>
+        <item>点击右上角的 ⋮</item>
+        <item>选择“启动车机服务器”</item>
+    </string-array>
+    <string name="step_autostart_hint">你只需开启一次：车机服务器会在后台持续运行，Headswap 不会关闭它。如果 Android 自行将其关闭，请从 Android Auto 设置中重新开启。已不再支持通过无障碍功能自动启动，因此车机服务器需要手动启动。</string>
+    <string name="step_autostart_primary">打开 Android Auto</string>
+    <string name="step_autostart_short">车机服务器</string>
+
+    <string name="step_notif_title">开启通知</string>
+    <string-array name="step_notif_list">
+        <item>点击屏幕底部的“允许”</item>
+        <item>在 Android 弹窗“允许 Headswap 发送通知吗？”中点击“允许”</item>
+    </string-array>
+    <string name="step_notif_hint">通知栏会显示连接进度，而且在屏幕关闭时 Android 不会卸载 Headswap。</string>
+    <string name="step_notif_short">通知</string>
+
+    <!-- 第 3-4 项（自启动）仅在小米设备上显示 -->
+    <string name="step_background_title">解除电池限制</string>
+    <string-array name="step_background_list">
+        <item>点击“解除电池限制”</item>
+        <item>选择“无限制”</item>
+        <item>返回并点击“自启动”</item>
+        <item>滚动到 Headswap 并打开开关</item>
+    </string-array>
+    <string name="step_background_primary">解除电池限制</string>
+    <string name="step_background_extra">自启动</string>
+    <string name="step_background_short">后台运行</string>
+
+    <string name="step_mic_title">允许麦克风访问</string>
+    <string-array name="step_mic_list">
+        <item>点击屏幕底部的“允许”</item>
+        <item>点击“使用应用时”</item>
+    </string-array>
+    <string name="step_mic_hint">调用语音助手时需要。</string>
+    <string name="step_mic_short">麦克风</string>
+
+    <string name="step_bluetooth_title">开启 Bluetooth</string>
+    <string-array name="step_bluetooth_list">
+        <item>点击“打开 Bluetooth”</item>
+        <item>开启 Bluetooth</item>
+        <item>连接到车机</item>
+    </string-array>
+    <string name="step_bluetooth_hint">通话时需要：在 Android Auto 中，通话只能通过 Bluetooth 进行。</string>
+    <string name="step_bluetooth_primary">打开 Bluetooth</string>
+    <string name="step_bluetooth_short">通话用 Bluetooth</string>
+
+    <string name="step_location_title">开启定位</string>
+    <string-array name="step_location_list">
+        <item>点击“打开定位设置”</item>
+        <item>打开“使用位置信息”开关</item>
+    </string-array>
+    <string name="step_location_hint">不开启定位，Google Maps 等 Android Auto 中的地图应用会提示“需要位置权限”。</string>
+    <string name="step_location_primary">打开定位设置</string>
+    <string name="step_location_short">地图定位</string>
+
+    <string name="step_first_title">首次连接</string>
+    <string-array name="step_first_list">
+        <item>解锁手机并将数据线插入车机</item>
+        <item>勾选“默认用于此 USB 配件”</item>
+        <item>点击“确定”</item>
+    </string-array>
+    <string name="step_first_hint">如果车机显示“启动CarLife”界面，请点击该按钮。</string>
+    <string name="step_first_primary">知道了</string>
+    <string name="step_first_short">首次连接</string>
+
+    <string name="onb_already_done">已完成</string>
+    <string name="onb_skip">跳过</string>
+    <string name="onb_allow">允许</string>
+    <string name="onb_later">稍后</string>
+    <string name="onb_back">返回</string>
+    <string name="onb_next">下一步</string>
+    <string name="onb_got_it">知道了</string>
+    <string name="onb_step_progress">第 %1$d 步，共 %2$d 步</string>
+    <string name="onb_done_chip">已完成</string>
+
+    <string name="onb_checklist_title">就绪检查</string>
+    <string name="onb_all_ready">一切就绪，可以出行</string>
+    <string name="onb_ready_count">已就绪 %1$d / %2$d</string>
+    <string name="onb_checklist_hint">点击某个项目可打开对应步骤。</string>
+    <string name="onb_done">完成</string>
+    <string name="onb_status_marked">已标记</string>
+    <string name="onb_status_ready">已就绪</string>
+    <string name="onb_status_unmarked">未标记</string>
+    <string name="onb_status_off">未开启</string>
+    <string name="step_car_title">你开的是什么车？</string>
+    <string name="step_car_short">车型</string>
+    <string name="step_car_body">我们会填入社区在这款车上验证过的设置。有经验的用户可以跳过此步骤。</string>
+</resources>

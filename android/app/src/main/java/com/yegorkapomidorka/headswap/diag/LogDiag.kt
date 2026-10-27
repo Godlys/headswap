@@ -5,10 +5,10 @@ import org.json.JSONObject
 import java.time.LocalDate
 
 /**
- * Диагноз подключения по логу приложения: 1-3 вероятные причины и совет пользователю.
- * Kotlin-порт tools/logdiag.py (+ нужной части tools/logdigest.py), правила общие:
- * tools/logdiag_rules.json (в сборку копируется в assets). Поведение сверяется общими
- * кейсами tools/logdiag_cases/ (LogDiagTest и tools/test_logdiag.py). Чистая логика без Android.
+ * 根据应用日志诊断连接问题：给出 1-3 个可能的原因和给用户的建议。
+ * tools/logdiag.py（及 tools/logdigest.py 中所需部分）的 Kotlin 移植，规则是公共的：
+ * tools/logdiag_rules.json（构建时复制到 assets）。行为与 tools/logdiag_cases/ 中的公共
+ * 用例对照验证（LogDiagTest 和 tools/test_logdiag.py）。不依赖 Android 的纯逻辑。
  */
 object LogDiag {
     const val SHOW = 3
@@ -16,7 +16,7 @@ object LogDiag {
 
     class Cond(val fact: String, val op: String, val value: Any?)
 
-    /** Шаг решения в правиле: текст ru/en и необязательное действие-кнопка (open_aa, video, ... см. DiagActions). */
+    /** 规则中的解决步骤：ru/en 文本和可选的按钮动作（open_aa、video、... 参见 DiagActions）。 */
     class RuleStep(val text: String, val textEn: String?, val action: String?)
 
     class Rule(
@@ -43,7 +43,7 @@ object LogDiag {
 
     class Rules(val latest: String, val markers: Map<String, Regex>, val rules: List<Rule>)
 
-    /** Шаг для показа: текст на нужном языке и действие (null = без кнопки). */
+    /** 用于展示的步骤：指定语言的文本和动作（null = 无按钮）。 */
     class Step(val text: String, val action: String?)
 
     class Cause(
@@ -60,7 +60,7 @@ object LogDiag {
         val isNote get() = category == "note"
     }
 
-    /** Окружение из device.txt (в приложении — из PackageInfo и Build). */
+    /** 来自 device.txt 的环境信息（在应用中来自 PackageInfo 和 Build）。 */
     class Env(val version: String?, val device: String? = null, val android: String? = null, val sdk: Int? = null)
 
     class Marker {
@@ -73,7 +73,7 @@ object LogDiag {
 
     class Result(val facts: Map<String, Any?>, val causes: List<Cause>)
 
-    // ------------------------------------------------------------ правила
+    // ------------------------------------------------------------ 规则
 
     fun parseRules(json: String): Rules {
         val o = JSONObject(json)
@@ -125,7 +125,7 @@ object LogDiag {
         return Cond(c.getString(0), c.getString(1), if (v == JSONObject.NULL) null else v)
     }
 
-    // ------------------------------------------------------------ разбор лога
+    // ------------------------------------------------------------ 解析日志
 
     private val TS_RE = Regex("""^(\d\d):(\d\d):(\d\d)\.(\d{3}) (.*)$""")
     private val STAMP_RE = Regex("""(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d)(\d\d)""")
@@ -141,7 +141,7 @@ object LogDiag {
     private val EIO_REASON_RE = Regex("EIO|ENODEV")
     private const val DAY = 86_400_000L
 
-    /** Время строки -> мс с датой из имени файла и переходом через полночь (как Clock в logdigest.py). */
+    /** 行时间 -> 毫秒，日期取自文件名并处理跨午夜（同 logdigest.py 中的 Clock）。 */
     private class Clock(name: String) {
         private val stamp: Long?
         private var base: Long
@@ -269,7 +269,7 @@ object LogDiag {
             }
         }
 
-        /** true, если началось РЕЗЮМЕ (следующие строки с отступом - его поля). */
+        /** 若开始的是“РЕЗЮМЕ”（摘要）则返回 true（后续带缩进的行即其字段）。 */
         private fun line(t: Long, body: String): Boolean {
             if (body.startsWith("AA ")) { aaLine(t, body); return false }
             if (body.startsWith("== ")) {
@@ -344,7 +344,7 @@ object LogDiag {
         }
     }
 
-    /** logs: (имя файла, текст) в хронологическом порядке. */
+    /** logs：（文件名，文本）按时间先后顺序排列。 */
     fun facts(logs: List<Pair<String, String>>, env: Env, rules: Rules): Pair<Map<String, Any?>, Map<String, Marker>> {
         val dg = Digest(rules.markers)
         for ((name, text) in logs) dg.feed(name, text)
@@ -382,13 +382,13 @@ object LogDiag {
 
     private fun near(a: List<Long>, b: List<Long>, ms: Long) = a.count { x -> b.any { kotlin.math.abs(x - it) <= ms } }
 
-    // ------------------------------------------------------------ правила по фактам
+    // ------------------------------------------------------------ 基于事实的规则
 
     private val VER_RE = Regex("""(\d+)\.(\d+)(?:\.(\d+))?""")
 
     fun vtuple(v: String?): List<Int>? {
         val m = VER_RE.find(v ?: return null) ?: return null
-        if (m.range.first != 0) return null  // как re.match: версия с начала строки
+        if (m.range.first != 0) return null  // 同 re.match：版本必须从行首开始
         return m.groupValues.drop(1).map { it.toIntOrNull() ?: 0 }
     }
 
@@ -447,7 +447,7 @@ object LogDiag {
             r.fixedIn?.let { fixed ->
                 val fv = vtuple(fixed)
                 if (myVer != null && fv != null && cmpVer(myVer, fv) >= 0) continue
-                // без шагов в правиле сам совет становится вторым шагом, иначе экран показал бы только «обновитесь»
+                // 若规则中没有步骤，则建议本身成为第二步，否则界面只会显示“请更新”
                 if (steps.isEmpty()) steps = listOf(Step(advice, null))
                 steps = listOf(Step(if (en) "Update Headswap to $fixed or newer" else "Обновите Headswap до $fixed или новее", "update")) + steps
                 advice = (if (en) "Update Headswap to $fixed or newer (latest ${rules.latest}): this is fixed there. "
@@ -478,6 +478,6 @@ object LogDiag {
         return Result(f, diagnose(f, found, rules, en))
     }
 
-    /** Причины для показа (без заметок, не ниже порога, не больше SHOW). */
+    /** 要展示的原因（不含注记、不低于阈值、不超过 SHOW 条）。 */
     fun top(causes: List<Cause>): List<Cause> = causes.filter { !it.isNote && it.score >= MIN_SCORE }.take(SHOW)
 }

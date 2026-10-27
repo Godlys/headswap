@@ -15,7 +15,7 @@ import com.yegorkapomidorka.headswap.AppLog
 import com.yegorkapomidorka.headswap.R
 import com.yegorkapomidorka.headswap.aa.AaPrefs
 
-/** Всё, что надо включить перед поездкой: порядок, тексты, автоопределение «уже сделано». Общее для онбординга и чеклиста. */
+/** 出行前需要开启的全部事项：顺序、文案、「已完成」的自动检测。引导流程与检查清单共用。 */
 enum class StepId(val key: String) {
     AA_DEV("aa_dev"),
     AA_UNKNOWN("aa_unknown"),
@@ -27,13 +27,13 @@ enum class StepId(val key: String) {
     LOCATION("location"),
     FIRST("first"),
 
-    /** Выбор машины: проверенные сообществом настройки (CarPreset). Последний шаг; опытные пропускают. */
+    /** 选择车型：社区验证过的设置（CarPreset）。最后一步；老手会跳过。 */
     CAR("car"),
 }
 
 /**
- * Тексты шага - id ресурсов (hint/extra могут отсутствовать). Тело шага - либо пронумерованный список (string-array [list]),
- * либо абзац ([body], шаг выбора машины). В строки превращает UI: ctx.getString, список - через [listItems].
+ * 步骤文案 - 资源 id（hint/extra 可缺省）。步骤正文要么是带编号的列表（string-array [list]），
+ * 要么是段落（[body]，选车步骤）。转成字符串由 UI 完成：ctx.getString，列表通过 [listItems]。
  */
 class StepInfo(
     val id: StepId,
@@ -44,10 +44,10 @@ class StepInfo(
     val primary: Int,
     val extra: Int?,
     val skip: Int,
-    /** Короткое название для чеклиста. */
+    /** 用于检查清单的简称。 */
     val short: Int,
 ) {
-    /** Пункты списка; на шаге фона пункты про «Автозапуск» (3-4) есть только на Xiaomi. */
+    /** 列表项；在后台步骤中，关于「自动启动」的项（3-4）仅存在于小米设备。 */
     fun listItems(ctx: Context, xiaomi: Boolean = Readiness.isXiaomi()): List<String> {
         val all = list?.let { ctx.resources.getStringArray(it).toList() } ?: return emptyList()
         return if (id == StepId.BACKGROUND && !xiaomi) all.take(2) else all
@@ -105,13 +105,13 @@ object Readiness {
         return m.contains("xiaomi") || m.contains("redmi") || m.contains("poco")
     }
 
-    /** true/false - определено автоматически; null - определить нельзя (только ручная отметка «Уже сделано»). */
+    /** true/false - 已自动检测；null - 无法检测（只能手动勾选「已完成」）。 */
     fun auto(ctx: Context, id: StepId): Boolean? = when (id) {
         StepId.NOTIF -> ctx.getSystemService(NotificationManager::class.java).areNotificationsEnabled() &&
             (Build.VERSION.SDK_INT < 33 || ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
         StepId.MIC -> ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         StepId.BACKGROUND -> batteryOk(ctx)
-        StepId.CAR -> if (AaPrefs(ctx).carPreset != null) true else null      // пропуск - ручная отметка
+        StepId.CAR -> if (AaPrefs(ctx).carPreset != null) true else null      // 跳过 - 手动勾选
         StepId.LOCATION -> try {
             ctx.getSystemService(LocationManager::class.java).isLocationEnabled
         } catch (_: Exception) {
@@ -123,14 +123,14 @@ object Readiness {
     fun batteryOk(ctx: Context): Boolean =
         ctx.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(ctx.packageName)
 
-    /** Выполнено: автоопределение, а где его нет - ручная отметка. Фон на Xiaomi требует ещё и ручной отметки. */
+    /** 已完成：优先自动检测，无法检测时用手动勾选。小米上的后台步骤额外要求手动勾选。 */
     fun isDone(ctx: Context, id: StepId): Boolean {
         val ui = UiPrefs(ctx)
         if (id == StepId.BACKGROUND) return batteryOk(ctx) && (!isXiaomi() || ui.isManualDone(id.key))
         return auto(ctx, id) ?: ui.isManualDone(id.key)
     }
 
-    // --- действия кнопок ---
+    // --- 按钮操作 ---
 
     fun appDetails(ctx: Context) {
         ctx.startActivity(
@@ -155,7 +155,7 @@ object Readiness {
         }
     }
 
-    /** Автозапуск Xiaomi (Безопасность); не вышло - карточка приложения. */
+    /** 小米自启动（安全中心）；打不开则回退到应用详情页。 */
     fun openXiaomiAutostart(ctx: Context) {
         try {
             ctx.startActivity(

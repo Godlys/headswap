@@ -23,10 +23,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Surface -> OpenGL -> Surface: декодер AA рисует в SurfaceTexture, GL-нить копирует кадр на Surface входа
- * энкодера (копия на GPU, без ByteBuffer) и сама перерисовывает последний кадр, если новых нет idleRedrawMs.
- * Нужна потому, что встроенный KEY_REPEAT_PREVIOUS_FRAME_AFTER в Android повторяет кадр всего ~10 раз
- * (kRepeatLastFrameCount) и умолкает: на статичном экране AA через секунду ГУ остался бы без кадров.
+ * Surface → OpenGL → Surface：Android Auto 解码器绘制到 SurfaceTexture，GL 线程将帧复制到编码器
+ * 输入 Surface（GPU 内复制，不经 ByteBuffer），并在 idleRedrawMs 内没有新帧时自行重绘最后一帧。
+ * 这样做的原因是 Android 内置的 KEY_REPEAT_PREVIOUS_FRAME_AFTER 只会重复约 10 次帧
+ * （kRepeatLastFrameCount）然后停止：Android Auto 静态画面停留一秒钟后，车机就会收不到帧。
  */
 class GlRelay(
     private val outSurface: Surface,
@@ -34,11 +34,11 @@ class GlRelay(
     private val height: Int,
     private val idleRedrawMs: Long = 100,
     private val log: (String) -> Unit = {},
-    /** Размер исходного кадра AA (по умолчанию как выход) и вырезаемый из него прямоугольник. */
+    /** Android Auto 原始帧尺寸（默认同输出）以及从其中裁剪的矩形。 */
     private val srcWidth: Int = width,
     private val srcHeight: Int = height,
     crop: VideoCrop = VideoCrop.NONE,
-    /** Целевая частота выхода: гейт не отдаёт кадр в энкодер чаще (0 = без ограничения). */
+    /** 目标输出帧率：门控不高于此频率向编码器发送帧（0 = 不限制）。 */
     targetFps: Int = 0,
 ) {
     private val gate = FrameGate(targetFps)
@@ -55,7 +55,7 @@ class GlRelay(
     private var uMatrix = 0
     private val tm = FloatArray(16)
     private val quad: FloatBuffer = ByteBuffer.allocateDirect(16 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
-        // x, y, u, v; кроп = центральный прямоугольник вместо всей текстуры (uSTMatrix применяется шейдером поверх)
+        // x, y, u, v；裁剪 = 以中心矩形代替整张纹理（uSTMatrix 由着色器叠加应用）
         put(floatArrayOf(
             -1f, -1f, crop.u0, crop.v0, 1f, -1f, crop.u1, crop.v0,
             -1f, 1f, crop.u0, crop.v1, 1f, 1f, crop.u1, crop.v1,
@@ -64,7 +64,7 @@ class GlRelay(
     }
     @Volatile private var haveFrame = false
 
-    // переход заглушка -> AA (зум-растворение), только GL-нить
+    // 占位帧 → Android Auto 的过渡（缩放溶解），仅 GL 线程
     private var introProgram = 0
     private var iPos = 0
     private var iTex = 0
@@ -74,29 +74,29 @@ class GlRelay(
     private var iVideo = 0
     private var bannerTex = 0
     private var introArmed = false
-    /** Время первого кадра перехода (0 = ещё не нарисован). */
+    /** 过渡第一帧的时间（0 = 尚未绘制）。 */
     private var introStartNs = 0L
 
-    /** Последний кадр в текстуре гейт пропустил и он ещё не показан: tick отдаст его, как только гейт откроется. Только GL-нить. */
+    /** 门控跳过的、仍在纹理中且尚未显示的最后一帧：门控一打开，tick 就会将其送出。仅 GL 线程。 */
     private var skipped = false
     private var lastFreshNs = 0L
     @Volatile private var released = false
     private var lastDrawNs = 0L
     @Volatile private var initError: Throwable? = null
 
-    /** Сюда декодер выводит кадры. */
+    /** 解码器将帧输出到这里。 */
     lateinit var inputSurface: Surface
         private set
 
     val fresh = AtomicLong()
     val redraws = AtomicLong()
 
-    /** Сколько свежих кадров AA гейт не пустил в энкодер сразу (показаны позже перерисовкой или заменены следующим). */
+    /** 门控未立即送入编码器的 Android Auto 新帧数（稍后通过重绘显示或被下一帧替换）。 */
     val gated = AtomicLong()
 
     val targetFps: Int get() = gate.targetFps
 
-    /** Целевая частота на лету, без пересоздания кодека. Любая нить. */
+    /** 动态调整目标帧率，无需重建编解码器。任意线程可调用。 */
     fun setTargetFps(fps: Int) {
         gate.targetFps = fps
     }
@@ -113,7 +113,7 @@ class GlRelay(
             }
             latch.countDown()
         }
-        // при отказе освобождаем EGL и нить: окно EGL держит Surface энкодера, и запасной путь (декодер прямо в энкодер) к нему не подключится
+        // 失败时释放 EGL 和线程：EGL 窗口持有编码器的 Surface，备用路径（解码器直接到编码器）将无法连接它
         if (!latch.await(5, TimeUnit.SECONDS)) {
             stop()
             throw IllegalStateException("GL-нить не поднялась")
@@ -129,12 +129,12 @@ class GlRelay(
         override fun run() {
             if (released) return
             if (haveFrame && introArmed) {
-                // переход: рисуем каждый период гейта, иначе на статичном AA анимация шла бы по 10 кадров в секунду
+                // 过渡：按每个门控周期绘制，否则静态 Android Auto 上的动画会以每秒 10 帧运行
                 if (drawGated()) redraws.incrementAndGet()
             } else if (haveFrame) {
                 val now = SystemClock.elapsedRealtimeNanos()
-                // перерисовка: статика (нет новых кадров idleRedrawMs) или последний кадр, который задержал гейт и за период новых не пришло
-                // (пока поток идёт, задержанный кадр заменяется свежим и tick его не трогает: частота выхода остаётся ровной)
+                // 重绘：静态画面（idleRedrawMs 内无新帧）或门控延迟的最后一帧在周期内没有新帧到来
+                // （视频流播放期间，被延迟的帧会被新帧替换，tick 不会动它：输出帧率保持平稳）
                 val idle = now - lastDrawNs >= idleRedrawMs * 1_000_000
                 val lateSkipped = skipped && now - lastFreshNs >= gate.periodNs()
                 if ((idle || lateSkipped) && drawGated()) redraws.incrementAndGet()
@@ -144,8 +144,8 @@ class GlRelay(
     }
 
     /**
-     * Переход с кадра заглушки в AA: первый кадр после вызова = заглушка целиком, дальше за INTRO_MS она
-     * увеличивается и тает, а AA под ней «отъезжает» с лёгкого зума на место. Bitmap после загрузки в GL освобождается.
+     * 从占位帧过渡到 Android Auto：调用后的第一帧 = 完整占位图，随后在 INTRO_MS 期间它
+     * 不断放大并淡出，其下方的 Android Auto 画面从轻微缩放「滑」到原位。Bitmap 在载入 GL 后会被回收。
      */
     fun startIntro(banner: Bitmap) {
         if (released) return
@@ -187,16 +187,16 @@ class GlRelay(
         log("GlRelay: переход заглушка -> AA взведён (${banner.width}x${banner.height})")
     }
 
-    /** Новая AA-сессия: старый кадр больше не повторять до первого нового. */
+    /** 新的 Android Auto 会话：在第一个新帧到来前不再重复旧帧。 */
     fun clear() {
         haveFrame = false
     }
 
-    /** Кадр в энкодер только если гейт пускает; иначе он остаётся в текстуре (updateTexImage уже сделан) до следующей перерисовки. */
+    /** 只有门控放行时才将帧送入编码器；否则帧保留在纹理中（updateTexImage 已完成）直到下次重绘。 */
     private fun drawGated(fresh: Boolean = false): Boolean {
         if (!gate.shouldEmit(SystemClock.elapsedRealtimeNanos())) {
             skipped = true
-            if (fresh) gated.incrementAndGet()      // повторные отказы tick-а одного кадра не считаем
+            if (fresh) gated.incrementAndGet()      // tick 对同一帧的多次拒绝不重复计数
             return false
         }
         skipped = false
@@ -212,7 +212,7 @@ class GlRelay(
             try {
                 handler.removeCallbacks(tick)
                 st?.release()
-                // init() мог упасть до inputSurface: без проверки исключение пропустило бы освобождение EGL ниже
+                // init() 可能在 inputSurface 之前失败：不做检查的话，异常会跳过下面 EGL 的释放
                 if (::inputSurface.isInitialized) inputSurface.release()
                 if (display != EGL14.EGL_NO_DISPLAY) {
                     EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
@@ -317,7 +317,7 @@ class GlRelay(
         GLES20.glEnableVertexAttribArray(texAttr)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         lastDrawNs = SystemClock.elapsedRealtimeNanos()
-        // timestamp кадра для энкодера: монотонное время, как у surface-источников
+        // 给编码器的帧时间戳：单调时间，与 surface 源一致
         EGLExt.eglPresentationTimeANDROID(display, eglSurface, System.nanoTime())
         EGL14.eglSwapBuffers(display, eglSurface)
     }
@@ -345,13 +345,13 @@ class GlRelay(
     companion object {
         private const val EGL_RECORDABLE_ANDROID = 0x3142
 
-        /** Длительность перехода заглушка -> AA. Дольше - на низком CBR-битрейте растворение рассыпается на блоки. */
+        /** 占位帧 → Android Auto 过渡的时长。更长的话，低 CBR 比特率下溶解会碎成块。 */
         private const val INTRO_MS = 700L
 
-        // uT 0..1, e = ease-out cubic. AA: зум 1.08 -> 1 (кроп-координаты сжимаются к центру до uSTMatrix).
-        // Заглушка: зум 1 -> 1.35 и прозрачность 1 -> 0 (чуть быстрее зума, чтобы к концу не висела дымкой).
-        // uT общий для обоих шейдеров: точность обязана совпадать (GLSL ES), в вершинном по умолчанию highp, во
-        // фрагментном mediump - Mali (Exynos 9611) на этом падает при линковке, Adreno прощает. Явный mediump в обоих.
+        // uT 0..1，e = ease-out cubic。Android Auto：缩放 1.08 → 1（裁剪坐标向中心收缩直至 uSTMatrix）。
+        // 占位帧：缩放 1 → 1.35，透明度 1 → 0（略快于缩放，避免结束时残留薄雾效果）。
+        // uT 对两个着色器通用：精度必须一致（GLSL ES），顶点着色器默认 highp，而
+        // 片段着色器默认 mediump——Mali（Exynos 9611）在链接时会因此失败，Adreno 则容忍。两者都显式声明 mediump。
         private const val INTRO_VERTEX = """
             uniform mat4 uSTMatrix;
             uniform mediump float uT;

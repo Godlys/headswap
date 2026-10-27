@@ -33,8 +33,8 @@ import com.yegorkapomidorka.headswap.ui.UpgradeNotice
 import com.yegorkapomidorka.headswap.update.Updater
 
 /**
- * Единственная activity: хранит стек экранов (главный, настройки, для разработчиков, онбординг) и принимает команды intent
- * (`--es cmd ...`). Вся работа с сервисами и USB - в ui.Actions, экраны - в пакете ui.
+ * 唯一的 activity：保存屏幕栈（主屏、设置、开发者、引导页）并接收 intent 命令
+ * （`--es cmd ...`）。所有与服务和 USB 相关的工作都在 ui.Actions 中，屏幕在 ui 包中。
  */
 class MainActivity : Activity() {
     override fun attachBaseContext(base: Context) {
@@ -91,10 +91,10 @@ class MainActivity : Activity() {
             when (UpgradeNotice.onLaunch(prefs.onboardingDone, prefs.a11yNoticeShown)) {
                 UpgradeNotice.Launch.ONBOARDING -> {
                     showOnboarding()
-                    prefs.a11yNoticeShown = true         // новичок узнает всё из онбординга, окно ему не нужно
+                    prefs.a11yNoticeShown = true         // 新手会从引导页了解到全部内容，不需要弹窗
                 }
                 UpgradeNotice.Launch.NOTICE -> {
-                    prefs.a11yNoticeShown = true         // одного показа достаточно, даже если смахнули
+                    prefs.a11yNoticeShown = true         // 显示一次就够了，即使被滑掉
                     UpgradeNotice.show(this)
                 }
                 UpgradeNotice.Launch.NONE -> {}
@@ -163,7 +163,7 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Отладка беспровода: системный запрос ACCESS_LOCAL_NETWORK (Android 17+). Онбординг с ним появится в Э4. */
+    /** 无线调试：系统请求 ACCESS_LOCAL_NETWORK（Android 17+）。带它的引导页将在 Э4 中出现。 */
     private fun requestLocalNetwork() {
         if (Build.VERSION.SDK_INT < 37) {
             AppLog.i("ACCESS_LOCAL_NETWORK: API ${Build.VERSION.SDK_INT}, разрешения нет, локальная сеть открыта")
@@ -172,7 +172,7 @@ class MainActivity : Activity() {
         requestPermissions(arrayOf(android.Manifest.permission.ACCESS_LOCAL_NETWORK), REQ_LOCAL_NETWORK)
     }
 
-    // --- навигация ---
+    // --- 导航 ---
 
     private fun current(): Screen? = stack.lastOrNull()
 
@@ -196,7 +196,7 @@ class MainActivity : Activity() {
         if (resumed) s.onShow()
     }
 
-    /** Свернуть стек до главного экрана. */
+    /** 将屏幕栈折叠回主屏。 */
     private fun toHome() {
         while (stack.size > 1) back()
         if (stack.isEmpty()) push("home", HomeScreen(this))
@@ -210,7 +210,7 @@ class MainActivity : Activity() {
 
     fun showDiag() = push("diag", DiagScreen(this))
 
-    /** rerun = показать все шаги; checklist = сразу чеклист готовности. */
+    /** rerun = 显示全部步骤；checklist = 直接进入就绪清单。 */
     fun showOnboarding(rerun: Boolean = false, checklist: Boolean = false, startAt: StepId? = null) {
         push(if (checklist) "checklist" else if (rerun) "onboarding_all" else "onboarding", OnboardingScreen(this, rerun, checklist, startAt))
     }
@@ -226,26 +226,26 @@ class MainActivity : Activity() {
                 "onboarding" -> showOnboarding()
                 "onboarding_all" -> showOnboarding(rerun = true)
                 "checklist" -> showOnboarding(checklist = true)
-                else -> SettingsSection.byKey(k.removePrefix("settings:"))?.let { showSettingsSection(it) }     // раздел настроек после смены темы/языка
+                else -> SettingsSection.byKey(k.removePrefix("settings:"))?.let { showSettingsSection(it) }     // 切换主题/语言后的设置分区
             }
         }
     }
 
-    // --- команды intent ---
+    // --- intent 命令 ---
 
     private fun handleIntent(intent: Intent?, reason: String) {
         val cmd = intent?.getStringExtra(EXTRA_CMD)
         if (intent != null && cmd != null) {
-            intent.removeExtra(EXTRA_CMD)        // не повторять команду при пересоздании activity
+            intent.removeExtra(EXTRA_CMD)        // 避免 activity 重建时重复执行命令
             AppLog.i("команда из intent: $cmd")
             when (cmd) {
                 "aa_selftest" -> Actions.aaSelftest(this)
-                "aa_probe" -> AaProbe.run(this)                // проба AA-сессии к 127.0.0.1:5277 без CarLife (targetSdk 37)
-                // проба локальной сети для беспровода: маяк UDP 7999, ответчик 8999 (--ei seconds N --es to <ip>)
+                "aa_probe" -> AaProbe.run(this)                // 不带 CarLife 时对 127.0.0.1:5277 的 AA 会话探测（targetSdk 37）
+                // 无线模式的局域网探测：UDP 7999 信标，8999 响应端（--ei seconds N --es to <ip>）
                 "net_probe" -> NetProbe.run(this, intent.getIntExtra("seconds", 20), intent.getStringExtra("to"))
                 "net_perm" -> requestLocalNetwork()
                 "open_aa" -> Actions.openAaSettings(this)
-                // автостарт беспровода без Bluetooth машины: то же, что ACL_CONNECTED / ACL_DISCONNECTED выбранной машины
+                // 没有车辆 Bluetooth 时的无线自动启动：与所选车辆的 ACL_CONNECTED / ACL_DISCONNECTED 相同
                 "car_auto" -> startForegroundService(Intent(this, BridgeService::class.java).setAction(BridgeService.ACTION_WIFI_B_AUTO))
                 "car_auto_off" -> startForegroundService(Intent(this, BridgeService::class.java).setAction(BridgeService.ACTION_WIFI_B_AUTO_OFF))
                 "mic_test" -> Actions.micTest(this)
@@ -259,20 +259,20 @@ class MainActivity : Activity() {
                 "screen_dev" -> { toHome(); showDev() }
                 "onboarding" -> {
                     toHome()
-                    // --es step autostart|notif|... открывает онбординг сразу с нужного шага
+                    // --es step autostart|notif|... 直接从所需步骤打开引导页
                     val step = StepId.values().firstOrNull { it.key == intent.getStringExtra("step") }
                     showOnboarding(rerun = true, startAt = step)
                 }
                 "checklist" -> { toHome(); showOnboarding(checklist = true) }
-                "update_check" -> Updater.check(this, manual = true)      // проверить релиз на GitHub сейчас, не дожидаясь интервала
-                "a11y_notice" -> UpgradeNotice.show(this)      // окно «Отказ от спецвозможностей» принудительно, флаг не трогает
+                "update_check" -> Updater.check(this, manual = true)      // 立即检查 GitHub 上的版本，不必等待间隔
+                "a11y_notice" -> UpgradeNotice.show(this)      // 强制显示「无障碍声明」窗口，不改动标记
                 "theme" -> {                                   // --es mode system|light|medium|dark
                     AppTheme.set(this, intent.getStringExtra("mode") ?: AppTheme.SYSTEM)
                     recreate()
                 }
                 else -> AppLog.i("неизвестная команда '$cmd' (есть aa_selftest, aa_probe, net_probe, net_perm, mic_test, transcode_test, open_aa, car_auto, car_auto_off, a11y_notice)")
             }
-            if (intent.hasExtra("scroll_y")) current()?.scrollTo(intent.getIntExtra("scroll_y", 0))     // отладка: снимки нижней части экрана
+            if (intent.hasExtra("scroll_y")) current()?.scrollTo(intent.getIntExtra("scroll_y", 0))     // 调试：截取屏幕下半部分
             return
         }
         if (intent?.action == UsbManager.ACTION_USB_ACCESSORY_ATTACHED) {
@@ -295,7 +295,7 @@ class MainActivity : Activity() {
         const val EXTRA_CMD = "cmd"
         private const val STATE_SCREENS = "screens"
 
-        /** Все поля аксессуара одной строкой. Серийник без разрешения на аксессуар бросает SecurityException. */
+        /** 将配件的所有字段拼接为一行。没有配件权限时获取序列号会抛出 SecurityException。 */
         fun describe(a: UsbAccessory): String {
             val serial = try { "\"${a.serial}\"" } catch (_: SecurityException) { "(нет разрешения)" }
             return "manufacturer=\"${a.manufacturer}\" model=\"${a.model}\" description=\"${a.description}\" " +

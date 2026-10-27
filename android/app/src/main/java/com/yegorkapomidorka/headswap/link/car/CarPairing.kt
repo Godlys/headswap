@@ -19,26 +19,26 @@ import com.yegorkapomidorka.headswap.AppLog
 import com.yegorkapomidorka.headswap.link.diag.WLog
 
 /**
- * Выбор машины через CompanionDeviceManager: системный диалог со списком Bluetooth-устройств. Привязка даёт приложению
- * исключения на запуск foreground-сервиса из фона, а MAC и имя - фильтр для ресивера ACL ([CarAclReceiver]).
+ * 通过 CompanionDeviceManager 选择车辆：显示蓝牙设备列表的系统对话框。关联（绑定）赋予应用
+ * 从后台启动前台服务的豁免权，MAC 和名称则作为 ACL 接收器（[CarAclReceiver]）的过滤条件。
  *
- * API 33+: результат приходит в колбэк (onAssociationCreated) и дублируется в onActivityResult (EXTRA_ASSOCIATION);
- * API 29-32: только onActivityResult (EXTRA_DEVICE), id привязки нет. Запись идемпотентна: [store] не пишет дважды.
+ * API 33+：结果通过回调（onAssociationCreated）返回，并在 onActivityResult（EXTRA_ASSOCIATION）中重复；
+ * API 29-32：仅 onActivityResult（EXTRA_DEVICE），没有关联 id。写入是幂等的：[store] 不会重复写入。
  */
 object CarPairing {
-    /** Код startIntentSenderForResult диалога CDM; результат ловит MainActivity.onActivityResult. */
+    /** CDM 对话框的 startIntentSenderForResult 请求码；结果由 MainActivity.onActivityResult 捕获。 */
     const val REQ_CAR_PAIR = 38
 
     fun available(ctx: Context): Boolean =
         ctx.packageManager.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP) &&
             ctx.getSystemService(CompanionDeviceManager::class.java) != null
 
-    /** Имя, выбранное в нашем списке: CDM на 33+ отдаёт displayName, но у части прошивок это MAC. */
+    /** 在我们列表中选中的名称：CDM 在 33+ 返回 displayName，但部分固件返回的是 MAC。 */
     @Volatile private var pickedName: String? = null
 
     /**
-     * Сначала свой список спаренных устройств с именами (системный диалог CDM показывает всё вокруг, часто одними MAC),
-     * затем CDM подтверждает одно выбранное устройство (фильтр по адресу, singleDevice).
+     * 先显示我们自己带名称的已配对设备列表（CDM 系统对话框会显示周围所有设备，且常常只有 MAC），
+     * 再由 CDM 确认所选的那个设备（按地址过滤，singleDevice）。
      */
     @SuppressLint("MissingPermission")
     fun start(activity: Activity) {
@@ -55,7 +55,7 @@ object CarPairing {
         }
         if (bonded.isEmpty()) {
             WLog.ev(WLog.TRIGGER, "pair-list", "bonded" to 0)
-            associate(activity, null, null)      // нет разрешения или спаренных: системный диалог как есть
+            associate(activity, null, null)      // 没有权限或没有已配对设备：直接使用系统对话框
             return
         }
         android.app.AlertDialog.Builder(activity)
@@ -83,7 +83,7 @@ object CarPairing {
         }
     }
 
-    /** Результат диалога CDM из MainActivity.onActivityResult(REQ_CAR_PAIR). */
+    /** MainActivity.onActivityResult(REQ_CAR_PAIR) 中 CDM 对话框的结果。 */
     fun onResult(ctx: Context, resultCode: Int, data: Intent?) {
         if (resultCode != Activity.RESULT_OK || data == null) {
             WLog.ev(WLog.TRIGGER, "pair-cancel", "code" to resultCode)
@@ -101,13 +101,13 @@ object CarPairing {
             WLog.ev(WLog.TRIGGER, "pair-fail", "err" to "no-device")
             return
         }
-        // имя читается с BLUETOOTH_CONNECT (31+); без него SecurityException, имя тогда не показываем
+        // 读取名称需要 BLUETOOTH_CONNECT 权限（31+）；没有该权限会抛 SecurityException，此时不显示名称
         val name = try { dev.name } catch (_: SecurityException) { null }
         store(ctx, dev.address, name, -1)
     }
 
-    /** Забыть машину: снять привязку CDM, очистить профиль, выключить триггер. */
-    @SuppressLint("MissingPermission")      // stopObservingDevicePresence: см. observe
+    /** 忘记车辆：解除 CDM 关联、清除配置文件、关闭触发器。 */
+    @SuppressLint("MissingPermission")      // stopObservingDevicePresence：见 observe
     fun forget(ctx: Context) {
         val profile = CarProfile(ctx)
         val mac = profile.btMac
@@ -140,14 +140,14 @@ object CarPairing {
         store(ctx, mac, info.displayName?.toString(), info.id)
     }
 
-    /** Записать машину и включить триггер. Повтор (колбэк и onActivityResult) молча пропускается. */
+    /** 保存车辆并开启触发器。重复（回调与 onActivityResult）会被静默跳过。 */
     private fun store(ctx: Context, mac: String, name: String?, id: Int) {
         val profile = CarProfile(ctx)
         val sameMac = CarMac.same(profile.btMac, mac)
-        // тот же MAC и либо тот же id, либо новый без id (путь onActivityResult после колбэка): уже записано
+        // 相同 MAC 且要么 id 相同、要么新记录无 id（回调之后的 onActivityResult 路径）：已保存过
         if (sameMac && (id == -1 || id == profile.cdmAssociationId)) return
         val keepId = if (sameMac && id == -1) profile.cdmAssociationId else id
-        // выбрали другую машину: старую привязку снимаем, иначе на 33+ копятся осиротевшие association
+        // 选择了另一辆车：解除旧关联，否则在 33+ 上会积累孤立的 association
         val oldId = profile.cdmAssociationId
         if (Build.VERSION.SDK_INT >= 33 && oldId >= 0 && oldId != keepId) {
             try {
@@ -156,16 +156,16 @@ object CarPairing {
                 WLog.ev(WLog.TRIGGER, "forget-fail", "err" to e.javaClass.simpleName)
             }
         }
-        // имя из нашего списка надёжнее displayName CDM (у части прошивок там MAC)
+        // 我们列表中的名称比 CDM 的 displayName 更可靠（部分固件那里是 MAC）
         profile.save(mac, pickedName ?: name ?: if (sameMac) profile.btName else null, keepId)
         CarProfile.enableTrigger(ctx, true)
         WLog.ev(WLog.TRIGGER, "paired", "dev" to WLog.maskMac(mac), "cdm" to id)
         observe(ctx, mac)
     }
 
-    /** Присутствие устройства (31+): запасной путь, основной триггер - ACL. Нужного разрешения может не быть: только лог. */
+    /** 设备在场检测（31+）：备用路径，主触发器是 ACL。可能缺少所需权限：仅记日志。 */
     @Suppress("DEPRECATION")
-    @SuppressLint("MissingPermission")      // REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE не объявлено намеренно: без него SecurityException, только лог
+    @SuppressLint("MissingPermission")      // REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE 故意未声明：缺少时抛 SecurityException，仅记日志
     private fun observe(ctx: Context, mac: String) {
         if (Build.VERSION.SDK_INT < 31) return
         val cdm = ctx.getSystemService(CompanionDeviceManager::class.java) ?: return
@@ -190,7 +190,7 @@ object CarPairing {
         }
     }
 
-    /** API 33+: диалог приходит через onAssociationPending, готовая привязка - через onAssociationCreated. */
+    /** API 33+：对话框通过 onAssociationPending 到来，就绪的关联通过 onAssociationCreated。 */
     @TargetApi(33)
     @SuppressLint("NewApi")
     private class ModernCallback(private val activity: Activity) : CompanionDeviceManager.Callback() {
@@ -203,7 +203,7 @@ object CarPairing {
         }
     }
 
-    /** API 29-32: диалог приходит через onDeviceFound, выбранное устройство - в onActivityResult. */
+    /** API 29-32：对话框通过 onDeviceFound 到来，所选设备在 onActivityResult 中。 */
     private class LegacyCallback(private val activity: Activity) : CompanionDeviceManager.Callback() {
         @Deprecated("Deprecated in Java")
         override fun onDeviceFound(chooserLauncher: IntentSender) = launch(activity, chooserLauncher)

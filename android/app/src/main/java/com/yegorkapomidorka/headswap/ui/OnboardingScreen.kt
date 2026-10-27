@@ -17,9 +17,9 @@ import com.yegorkapomidorka.headswap.aa.AaPrefs
 import com.yegorkapomidorka.headswap.aa.CarPreset
 
 /**
- * Онбординг (Onboarding.dc.html) и чеклист готовности. Шаги из Readiness.STEPS; при первом запуске уже выполненные
- * (определяются автоматически или отмечены вручную) пропускаются, при повторном прохождении показываются все.
- * В конце - чеклист со статусом каждого пункта; тот же чеклист открывается из Настроек.
+ * 引导页（Onboarding.dc.html）与就绪检查清单。步骤来自 Readiness.STEPS；首次启动时已完成的步骤
+ * （自动检测或手动标记）会被跳过，再次完整走流程时全部显示。
+ * 末尾是显示每项状态的检查清单；同样的清单也可从设置中打开。
  */
 class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAtChecklist: Boolean, startAt: StepId? = null) : Screen(host) {
     private val root = ctx.vbox()
@@ -29,11 +29,11 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
     private var pos = 0
     private var checklist = false
 
-    /** Шаг открыт из чеклиста: после него возвращаемся в чеклист. */
+    /** 步骤从检查清单中打开：结束后返回检查清单。 */
     private var single: StepInfo? = null
     private var shownDone = false
 
-    /** Машина, отмеченная на шаге выбора, но ещё не применённая. */
+    /** 在选择步骤中选中、但尚未应用的车型。 */
     private var carChoice: CarPreset? = null
 
     init {
@@ -44,7 +44,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
     }
 
     override fun onShow() {
-        // вернулись из системных настроек: статус мог измениться
+        // 从系统设置返回：状态可能已改变
         if (checklist) render() else if (current() != null && Readiness.isDone(ctx, current()!!.id) != shownDone) render()
     }
 
@@ -58,7 +58,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
             checklist -> { ui.onboardingDone = true; return false }
             single != null -> { single = null; checklist = true; render() }
             pos > 0 -> { pos--; render() }
-            else -> { ui.onboardingDone = true; return false }      // вышли из онбординга сами: больше не навязываем
+            else -> { ui.onboardingDone = true; return false }      // 用户自行退出了引导页：不再强制展示
         }
         return true
     }
@@ -88,7 +88,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         }
     }
 
-    /** Полоса «Шаг n из N» с точками. */
+    /** “第 n 步，共 N 步”进度条，带圆点。 */
     private fun renderProgress(s: StepInfo) {
         val c = ctx
         val all = Readiness.STEPS
@@ -114,12 +114,12 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         renderProgress(s)
         renderTitle(s)
 
-        // прокручивается только картинка и текст, заголовок остаётся на месте
+        // 只有插图和文本滚动，标题保持不动
         val body = c.vbox().apply {
             addView(
                 FrameLayout(c).apply {
                     background = c.shape(c.clr(R.color.surf2), 28)
-                    // с подсказкой и на шагах с окном Android Auto макет компактнее: текст целиком виден без прокрутки
+                    // 带提示以及含 Android Auto 窗口的步骤布局更紧凑：文本无需滚动即可完整显示
                     val compact = s.hint != null || s.id == StepId.AA_DEV || s.id == StepId.AA_UNKNOWN
                     minimumHeight = c.dp(if (compact) 0 else 190)
                     pad(c, 20, 20, 20, 20)
@@ -127,7 +127,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
                 },
                 lp(MATCH, WRAP).margins(c, 0, 4, 0, 0),
             )
-            val text = c.vbox(10).apply { pad(c, 0, 18, 0, 36) }     // нижний отступ больше затемнения края: конец текста не тонет в fade
+            val text = c.vbox(10).apply { pad(c, 0, 18, 0, 36) }     // 底部留白大于边缘渐隐范围：文本结尾不会沉入 fade 中
             if (done) text.addView(doneChip(), lp(WRAP, WRAP))
             text.addView(numberedList(s.listItems(c)), lp(MATCH, WRAP))
             s.hint?.let {
@@ -157,8 +157,8 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
     }
 
     /**
-     * Последний шаг: какая у вас машина. Выпадашка только показывает настройки машины, «Применить» пишет их (AaPrefs.applyCar),
-     * «Пропустить» (для опытных) ничего не трогает и ставит ручную отметку шага.
+     * 最后一步：您的车是哪款。下拉框只展示车辆设置，“应用”将其写入（AaPrefs.applyCar），
+     * “跳过”（面向老手）不做任何改动，仅手动标记该步骤完成。
      */
     private fun renderCar(s: StepInfo) {
         val c = ctx
@@ -203,17 +203,17 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         root.addView(buttons, lp(MATCH, WRAP))
     }
 
-    /** Прокрутка с затемнением края: видно, что текст продолжается. */
+    /** 带边缘渐隐的滚动：提示文本还有后续内容。 */
     private fun fadingScroll(content: View) = ScrollView(ctx).apply {
         overScrollMode = View.OVER_SCROLL_NEVER
         isVerticalFadingEdgeEnabled = true
         setFadingEdgeLength(ctx.dp(24))
         isVerticalScrollBarEnabled = true
-        isScrollbarFadingEnabled = true     // постоянная полоса ложится на правый край карточки-иллюстрации; хвост текста и так виден по затемнению
+        isScrollbarFadingEnabled = true     // 常驻滚动条会落在插图卡片右缘；文本尾部本就靠渐隐可见
         addView(content)
     }
 
-    /** Заголовок шага под строкой «Шаг n из N»: вне прокрутки. */
+    /** 位于“第 n 步，共 N 步”下方的步骤标题：不参与滚动。 */
     private fun renderTitle(s: StepInfo) {
         val c = ctx
         root.addView(
@@ -222,7 +222,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
         )
     }
 
-    /** Пронумерованный список: кружок pri с цифрой и текст шага. */
+    /** 编号列表：pri 色圆点带序号，以及步骤文本。 */
     private fun numberedList(items: List<String>): View {
         val c = ctx
         return c.vbox(12).apply {
@@ -267,7 +267,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
             StepId.BLUETOOTH -> Readiness.openBluetoothSettings(c)
             StepId.LOCATION -> Readiness.openLocationSettings(c)
             StepId.FIRST -> { ui.setManualDone(s.id.key, true); next() }
-            StepId.CAR -> next()      // свои кнопки в renderCar
+            StepId.CAR -> next()      // 按钮在 renderCar 中自行处理
         }
     }
 
@@ -303,7 +303,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
             host.requestPermissions(arrayOf(p), 1)
             return
         }
-        // системный диалог уже был (или SDK < 33): включаем в настройках уведомлений приложения
+        // 系统对话框已弹出过（或 SDK < 33）：转到应用的通知设置中开启
         c.startActivity(
             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, c.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
@@ -312,7 +312,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
     private fun requestMic() {
         val c = ctx
         if (!firstAsk(Manifest.permission.RECORD_AUDIO) && !host.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
-            Readiness.appDetails(c)     // отказано насовсем: разрешить можно только в карточке приложения
+            Readiness.appDetails(c)     // 被永久拒绝：只能去应用详情页授予权限
             return
         }
         markAsked(Manifest.permission.RECORD_AUDIO)
@@ -323,7 +323,7 @@ class OnboardingScreen(host: MainActivity, private val showAll: Boolean, startAt
 
     private fun markAsked(p: String) = ui.setManualDone("asked_$p", true)
 
-    // --- чеклист ---
+    // --- 检查清单 ---
 
     private fun renderChecklist() {
         val c = ctx

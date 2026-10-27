@@ -18,14 +18,14 @@ import javax.net.ssl.SSLEngineResult.HandshakeStatus
 import javax.net.ssl.X509ExtendedKeyManager
 import javax.net.ssl.X509ExtendedTrustManager
 
-/** Сертификат и ключ головного устройства. */
+/** head unit 的证书和密钥。 */
 class AapCredentials(val certSet: String, val chain: Array<X509Certificate>, val key: PrivateKey)
 
-/** Загрузка PEM-наборов jvc/hur: assets/aa/<set>/{cert,key}.pem. */
+/** 加载 PEM 证书集 jvc/hur：assets/aa/<set>/{cert,key}.pem。 */
 object AapCerts {
     val SETS = listOf("jvc", "hur")
 
-    /** Результат загрузки с запасным набором. */
+    /** 带备用证书集的加载结果。 */
     class Loaded(val creds: AapCredentials, val requested: String, val error: String?)
 
     private fun pemBody(pem: String, label: String): ByteArray? {
@@ -45,7 +45,7 @@ object AapCerts {
         else -> byteArrayOf(0x83.toByte(), (n ushr 16).toByte(), (n ushr 8).toByte(), n.toByte())
     }
 
-    /** PKCS#1 RSAPrivateKey -> PKCS#8 PrivateKeyInfo (Java читает только второй). */
+    /** PKCS#1 RSAPrivateKey -> PKCS#8 PrivateKeyInfo（Java 只能读取后者）。 */
     fun pkcs1ToPkcs8(pkcs1: ByteArray): ByteArray {
         val rsaAlg = byteArrayOf(0x30, 0x0D, 0x06, 0x09, 0x2A, 0x86.toByte(), 0x48, 0x86.toByte(), 0xF7.toByte(), 0x0D, 0x01, 0x01, 0x01, 0x05, 0x00)
         val inner = ByteArrayOutputStream()
@@ -71,17 +71,17 @@ object AapCerts {
     fun parseCertificate(pem: String): X509Certificate =
         CertificateFactory.getInstance("X.509").generateCertificate(ByteArrayInputStream(pem.toByteArray(Charsets.US_ASCII))) as X509Certificate
 
-    /** Грузит один набор; бросает, если сертификат/ключ не разобрались. */
+    /** 加载单个证书集；若证书/密钥解析失败则抛出异常。 */
     fun load(opener: (String) -> InputStream, set: String): AapCredentials {
         require(set in SETS) { "неизвестный набор сертификатов $set, ожидается $SETS" }
         fun text(name: String) = opener("aa/$set/$name").use { String(it.readBytes(), Charsets.US_ASCII) }
         val cert = parseCertificate(text("cert.pem"))
-        cert.encoded                                   // форсировать нативный разбор DER
+        cert.encoded                                   // 强制进行原生 DER 解析
         val key = parsePrivateKey(text("key.pem"))
         return AapCredentials(set, arrayOf(cert), key)
     }
 
-    /** Запрошенный набор, при ошибке разбора - другой; error заполнен, если был откат. */
+    /** 加载请求的证书集，解析出错时改用另一套；若发生回退则填充 error。 */
     fun loadWithFallback(opener: (String) -> InputStream, preferred: String): Loaded {
         return try {
             Loaded(load(opener, preferred), preferred, null)
@@ -93,7 +93,7 @@ object AapCerts {
     }
 }
 
-/** Клиентский/серверный KeyManager с единственным ключом (HU отдаёт свой сертификат по запросу телефона). */
+/** 只含单个密钥的客户端/服务器 KeyManager（HU 按手机请求交出自身证书）。 */
 class SingleKeyKeyManager(private val creds: AapCredentials) : X509ExtendedKeyManager() {
     private val alias = "aa-${creds.certSet}"
     override fun getClientAliases(keyType: String?, issuers: Array<out java.security.Principal>?) = arrayOf(alias)
@@ -106,7 +106,7 @@ class SingleKeyKeyManager(private val creds: AapCredentials) : X509ExtendedKeyMa
     override fun getPrivateKey(alias: String?) = if (alias == this.alias) creds.key else null
 }
 
-/** Доверяет любому сертификату (телефон не проверяется, как в headunit-revived NoCheckTrustManager). */
+/** 信任任意证书（不校验手机，同 headunit-revived 的 NoCheckTrustManager）。 */
 class NoCheckTrustManager : X509ExtendedTrustManager() {
     override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
     override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
@@ -118,9 +118,9 @@ class NoCheckTrustManager : X509ExtendedTrustManager() {
 }
 
 /**
- * TLS-клиент (SSLEngine) поверх кадров AAP: записи TLS ездят внутри кадров, не по сокету.
- * handshakeStep(data) -> байты для plain-кадра ENCAPSULATED_SSL; encrypt/decrypt - тело одного кадра.
- * serverMode только для тестов (ответная сторона).
+ * 基于 AAP 帧的 TLS 客户端（SSLEngine）：TLS 记录在帧内传输，不经过 socket。
+ * handshakeStep(data) -> 供 ENCAPSULATED_SSL plain 帧使用的字节；encrypt/decrypt 处理单个帧的正文。
+ * serverMode 仅用于测试（应答方）。
  */
 class AapTls(creds: AapCredentials, private val serverMode: Boolean = false, tls12Only: Boolean = false) {
     private val engine: SSLEngine
@@ -133,7 +133,7 @@ class AapTls(creds: AapCredentials, private val serverMode: Boolean = false, tls
     init {
         val ctx = SSLContext.getInstance("TLS")
         ctx.init(arrayOf(SingleKeyKeyManager(creds)), arrayOf(NoCheckTrustManager()), null)
-        // тот же ключ кэша сессий, что у headunit-revived: createSSLEngine("android-auto", 5277)
+        // 与 headunit-revived 相同的会话缓存键：createSSLEngine("android-auto", 5277)
         engine = ctx.createSSLEngine(SNI_NAME, 5277)
         engine.useClientMode = !serverMode
         if (serverMode) engine.needClientAuth = true
@@ -141,7 +141,7 @@ class AapTls(creds: AapCredentials, private val serverMode: Boolean = false, tls
         engine.beginHandshake()
     }
 
-    /** Байты от пира (на первом вызове нет), в ответ - байты для пира. После вызова смотри handshakeDone. */
+    /** 对端发来的字节（首次调用时为空），返回要发给对端的字节。调用后查看 handshakeDone。 */
     fun handshakeStep(data: ByteArray? = null): ByteArray {
         if (data != null && data.isNotEmpty()) inBuf += data
         val out = ByteArrayOutputStream()
@@ -161,7 +161,7 @@ class AapTls(creds: AapCredentials, private val serverMode: Boolean = false, tls
                     note(r)
                     if (r.status == SSLEngineResult.Status.BUFFER_UNDERFLOW) return out.toByteArray()
                 }
-                else -> {                                   // NOT_HANDSHAKING / FINISHED
+                else -> {                                   // 其余状态：NOT_HANDSHAKING / FINISHED
                     handshakeDone = true
                     return out.toByteArray()
                 }
@@ -176,7 +176,7 @@ class AapTls(creds: AapCredentials, private val serverMode: Boolean = false, tls
         if (r.status == SSLEngineResult.Status.CLOSED) closed = true
     }
 
-    /** Одна запись TLS (запись до 16 КиБ plaintext = один кадр AAP). */
+    /** 一条 TLS 记录（最多 16 KiB 明文 = 一个 AAP 帧）。 */
     fun encrypt(plaintext: ByteArray): ByteArray {
         val out = ByteArrayOutputStream()
         val src = ByteBuffer.wrap(plaintext)
@@ -190,8 +190,8 @@ class AapTls(creds: AapCredentials, private val serverMode: Boolean = false, tls
     class Decrypted(val plaintext: ByteArray, val outgoing: ByteArray)
 
     /**
-     * Тело одного кадра -> (plaintext, байты, которые TLS-слой хочет отправить). plaintext может быть пустым:
-     * запись из одних handshake-данных (TLS 1.3 session tickets).
+     * 单个帧的正文 -> (plaintext, TLS 层想发送的字节)。plaintext 可能为空：
+     * 仅含握手数据的记录（TLS 1.3 session tickets）。
      */
     fun decrypt(record: ByteArray, drain: Boolean = true): Decrypted {
         inBuf += record
@@ -215,16 +215,16 @@ class AapTls(creds: AapCredentials, private val serverMode: Boolean = false, tls
             if (r.status == SSLEngineResult.Status.BUFFER_UNDERFLOW || r.status == SSLEngineResult.Status.CLOSED) break
             if (r.bytesConsumed() == 0 && r.bytesProduced() == 0) break
         }
-        // после CLOSED / разбора хвоста: что TLS хочет отправить (ответный close_notify и т.п.)
+        // CLOSED / 解析完尾部之后：TLS 想发送的内容（回应的 close_notify 等）
         var g2 = 0
         while (drain && engine.handshakeStatus == HandshakeStatus.NEED_WRAP && g2++ < 10) note(wrapInto(ByteBuffer.allocate(0), out))
         return Decrypted(plain.toByteArray(), out.toByteArray())
     }
 
-    /** TLS-слой хочет что-то отправить (KeyUpdate, close_notify...). */
+    /** TLS 层想发送一些内容（KeyUpdate、close_notify...）。 */
     fun wantsWrap(): Boolean = engine.handshakeStatus == HandshakeStatus.NEED_WRAP
 
-    /** Байты, которые TLS-слой хочет отправить; зовёт только нить-писатель сессии. */
+    /** TLS 层想发送的字节；仅由会话的写入线程调用。 */
     fun drainOutgoing(): ByteArray {
         val out = ByteArrayOutputStream()
         var g = 0
@@ -284,9 +284,9 @@ class AapTls(creds: AapCredentials, private val serverMode: Boolean = false, tls
 }
 
 /**
- * Самопроверка без сети: полный TLS-handshake клиента (HU, сертификат set) против серверного
- * SSLEngine (сертификат второго набора) в одном процессе, плюс обмен данными в обе стороны.
- * Показывает, принимает ли TLS-стек (Conscrypt на телефоне, JSSE в JVM) сертификат и ключ набора.
+ * 离线自检：客户端（HU，证书集 set）与服务器端 SSLEngine（第二套证书）在同一进程内
+ * 完成完整 TLS 握手，并双向交换数据。
+ * 用于验证 TLS 栈（手机上的 Conscrypt、JVM 里的 JSSE）是否接受该证书集的证书和密钥。
  */
 object AapTlsSelfTest {
     class Result(val set: String, val ok: Boolean, val detail: String)

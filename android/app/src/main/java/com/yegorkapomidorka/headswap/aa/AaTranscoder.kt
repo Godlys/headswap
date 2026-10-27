@@ -14,29 +14,28 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * AA H.264 -> MediaCodec-декодер (вывод на Surface) -> Surface входа энкодера AVC Baseline -> CarLife.
- * Нулевое копирование через Surface. Энкодер живёт от start() до stop() (вся CarLife-сессия) и сам
- * повторяет последний кадр раз в 100 мс на статичной картинке (KEY_REPEAT_PREVIOUS_FRAME_AFTER, как
- * MD Baidu: core/screen/video/Recorder.java:1364), поэтому ГУ не остаётся без кадров. Декодер создаётся
- * лениво на первом IDR AA и пересоздаётся при новом SPS или resetDecoder().
+ * AA H.264 -> MediaCodec 解码器（输出到 Surface）-> AVC Baseline 编码器输入 Surface -> CarLife。
+ * 通过 Surface 实现零拷贝。编码器从 start() 存活到 stop()（整个 CarLife 会话），并会在静态画面上
+ * 每 100 毫秒自行重复最后一帧（KEY_REPEAT_PREVIOUS_FRAME_AFTER，同 MD Baidu：core/screen/video/Recorder.java:1364），
+ * 因此车机不会没有帧。解码器在第一个 AA IDR 上惰性创建，并在新的 SPS 或 resetDecoder() 时重新创建。
  *
- * feedFrame/feedConfig/resetDecoder не блокируют вызывающую нить (нить AA под монитором моста): кладут в
- * [FeedQueue], а createDecoder, dequeueInputBuffer и queueInputBuffer выполняет нить aa-trans-feed.
- * Очередь на [FeedQueue.DEFAULT_MAX_FRAMES] кадров (~0,5 с при 30 fps: пока создаётся декодер, 80-300 мс, кадры копятся, а не
- * теряются); при переполнении кадры теряются до следующего IDR, мост получает onNeedAaKeyFrame.
- * Колбэки [out] не зовутся под lock. "nofeedthread" в tuning - старый синхронный путь на нити вызывающего.
+ * feedFrame/feedConfig/resetDecoder 不会阻塞调用线程（桥接器监视器下的 AA 线程）：它们被放入
+ * [FeedQueue]，而 createDecoder、dequeueInputBuffer 和 queueInputBuffer 由 aa-trans-feed 线程执行。
+ * 队列容量为 [FeedQueue.DEFAULT_MAX_FRAMES] 帧（30 fps 时约 0.5 秒：创建解码器期间 80-300 毫秒，帧会累积而不丢失）；
+ * 溢出时帧会丢失直到下一个 IDR，桥接器收到 onNeedAaKeyFrame。
+ * 回调 [out] 不会在 lock 下调用。tuning 中的 "nofeedthread" 是在调用者线程上的旧同步路径。
  */
 class AaTranscoder(
     private val width: Int,
     private val height: Int,
-    /** Начальная целевая частота: KEY_FRAME_RATE энкодера и гейт GL-реле; дальше меняется через [setTargetFps]. */
+    /** 初始目标帧率：编码器的 KEY_FRAME_RATE 和 GL 中继的闸门；之后可通过 [setTargetFps] 更改。 */
     private val fps: Int,
     private val bitrate: Int,
     private val out: TranscodeOutput,
     private val log: (String) -> Unit = { AppLog.i(it, false) },
-    /** Эксперименты: "vbr", "repeat=NNN" (мкс), "norealtime", "nolowlat", "nobase", "nofeedthread". */
+    /** 实验选项："vbr"、"repeat=NNN"（微秒）、"norealtime"、"nolowlat"、"nobase"、"nofeedthread"。 */
     private val tuning: String = "",
-    /** Размер кадра AA на входе (подсказка декодеру) и вырезаемая из него часть; по умолчанию вход = выход, без кропа. */
+    /** 输入 AA 帧的尺寸（给解码器的提示）以及从中裁剪的部分；默认输入 = 输出，无裁剪。 */
     private val srcWidth: Int = width,
     private val srcHeight: Int = height,
     private val crop: VideoCrop = VideoCrop.NONE,
@@ -48,7 +47,7 @@ class AaTranscoder(
     private var lastGated = 0L
     @Volatile private var target = fps
     @Volatile private var curBitrate = bitrate
-    private var bitrateMode = -1                       // режим, с которым сконфигурирован энкодер (-1 = не задан/неизвестен)
+    private var bitrateMode = -1                       // 配置编码器时使用的模式（-1 = 未设置/未知）
     @Volatile private var bitrateFailed = false
     private var encThread: Thread? = null
     @Volatile private var running = false
@@ -60,24 +59,24 @@ class AaTranscoder(
     private var decoder: Dec? = null
     private var sps: ByteArray? = null
     private var pps: ByteArray? = null
-    private var decoderCfg: ByteArray? = null          // SPS+PPS, с которыми создан текущий декодер
+    private var decoderCfg: ByteArray? = null          // SPS+PPS，当前解码器就是用它们创建的
     private var cfgStale = false
     private var needIdr = true
 
-    // нить кормления: вся работа с декодером уезжает с нити AA сюда
+    // 喂帧线程：所有解码器操作都从 AA 线程移到这里
     private val threaded = !tuning.contains("nofeedthread")
     private val queue = FeedQueue()
     private var feedThread: Thread? = null
 
-    /** Итог обработки кадра под lock; колбэки [out] зовёт вызывающий код уже после выхода из lock. */
+    /** 在 lock 下处理帧的结果；回调 [out] 由调用方代码在退出 lock 后调用。 */
     private sealed class Outcome {
         object None : Outcome()
-        object Skip : Outcome()                      // кадр пропущен, колбэк не нужен
+        object Skip : Outcome()                      // 帧被跳过，无需回调
         object NeedIdr : Outcome()
         class Error(val msg: String) : Outcome()
     }
 
-    // статистика окна
+    // 窗口统计
     private val inTimes = ConcurrentHashMap<Long, Long>()
     private val winIn = AtomicLong()
     private val winDecoded = AtomicLong()
@@ -126,7 +125,7 @@ class AaTranscoder(
             inSurface = c.createInputSurface()
             c.start()
         } catch (e: Exception) {
-            // кодек и Surface ещё не в полях: stop() их не увидит, аппаратный энкодер освобождаем здесь
+            // 编码器和 Surface 尚未写入字段：stop() 不会看到它们，在此释放硬件编码器
             try {
                 inSurface?.release()
             } catch (_: Exception) {
@@ -139,14 +138,14 @@ class AaTranscoder(
         }
         surface = inSurface
         encoder = c
-        // режим битрейта: CBR/VBR принимают PARAMETER_KEY_VIDEO_BITRATE на лету, CQ - нет; на уровне 2 режим не задавался
+        // 比特率模式：CBR/VBR 接受运行时设置 PARAMETER_KEY_VIDEO_BITRATE，CQ 不接受；级别 2 未设置模式
         bitrateMode = try {
             c.inputFormat.getInteger(MediaFormat.KEY_BITRATE_MODE)
         } catch (_: Exception) {
             -1
         }
         if (!tuning.contains("nogl")) {
-            // декодер -> GL-реле -> Surface энкодера: реле перерисовывает последний кадр на статике (>= 10 fps)
+            // 解码器 -> GL 中继 -> 编码器 Surface：中继在静态画面时重绘最后一帧（>= 10 fps）
             try {
                 relay = GlRelay(surface!!, width, height, REDRAW_IDLE_MS, log, srcWidth, srcHeight, crop, target).also { it.start() }
             } catch (e: Exception) {
@@ -166,7 +165,7 @@ class AaTranscoder(
 
     override val targetFps: Int get() = target
 
-    /** Целевая частота на лету: только гейт GL-реле, кодек не пересоздаётся (KEY_FRAME_RATE остаётся начальным). */
+    /** 运行时调整目标帧率：只调整 GL 中继的闸门，编解码器不会重建（KEY_FRAME_RATE 保持初始值）。 */
     override fun setTargetFps(fps: Int) {
         val old = target
         target = fps
@@ -177,7 +176,7 @@ class AaTranscoder(
 
     override val currentBitrate: Int get() = curBitrate
 
-    /** Битрейт на лету через setParameters (без пересоздания). CQ или исключение кодека: один раз в лог, дальше не пробуем. */
+    /** 通过 setParameters 运行时调整比特率（不重建）。CQ 或编解码器异常：记入日志一次，之后不再尝试。 */
     override fun setBitrate(bps: Int) {
         if (bitrateFailed || bps == curBitrate) return
         val c = encoder ?: return
@@ -201,13 +200,13 @@ class AaTranscoder(
         f.setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
         f.setInteger(MediaFormat.KEY_FRAME_RATE, fps)
         f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
-        // как у Baidu (Recorder.java:1364, MediaFormatUtils.java:48): на статичном экране кадр повторяется раз в 100 мс
+        // 同 Baidu（Recorder.java:1364, MediaFormatUtils.java:48）：静态屏幕上每 100 毫秒重复一帧
         val repeat = Regex("""repeat=(\d+)""").find(tuning)?.groupValues?.get(1)?.toLong() ?: REPEAT_AFTER_US
         f.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, repeat)
         if (level <= 1 && !tuning.contains("nobase")) {
             f.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
-            // VBR: на растворении логотипа AA в карты CBR c2.qti выдавал P-кадры до 129 КБ (~4x к исходнику AA, ~850 КБ за 0,3 с)
-            // и ГУ рисовало полосы; VBR на том же потоке держит пики до ~40 КБ при той же картинке (transcode_test, 12.10.2026)
+            // VBR：在 AA 徽标淡入地图时，CBR 下 c2.qti 会输出高达 129 KB 的 P 帧（约为 AA 源文件的 4 倍，0.3 秒内约 850 KB），
+            // 车机会出现条纹；同一码流下 VBR 在相同画面时峰值保持在约 40 KB 以内（transcode_test，2026.10.12）
             f.setInteger(
                 MediaFormat.KEY_BITRATE_MODE,
                 if (tuning.contains("cbr")) MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR else MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR
@@ -215,15 +214,15 @@ class AaTranscoder(
             f.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
         }
         if (level == 0) {
-            if (!tuning.contains("norealtime")) f.setInteger(MediaFormat.KEY_PRIORITY, 0)   // realtime
+            if (!tuning.contains("norealtime")) f.setInteger(MediaFormat.KEY_PRIORITY, 0)   // realtime（实时）
             if (Build.VERSION.SDK_INT >= 30 && !tuning.contains("nolowlat")) f.setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
         }
         return f
     }
 
-    // ---------------- вход AA ----------------
+    // ---------------- 输入 AA ----------------
 
-    /** Не блокирует: в режиме нити кладёт в очередь, разбор SPS/PPS делает нить кормления. */
+    /** 不阻塞：在线程模式下放入队列，SPS/PPS 解析由喂帧线程完成。 */
     override fun feedConfig(annexB: ByteArray) {
         if (threaded) queue.post(FeedItem.Config(annexB)) else processConfig(annexB)
     }
@@ -235,13 +234,13 @@ class AaTranscoder(
             val changed = sps?.contentEquals(s) != true || pps?.contentEquals(p) != true
             sps = s
             pps = p
-            if (changed && decoder != null) cfgStale = true     // декодер пересоздастся на следующем IDR
+            if (changed && decoder != null) cfgStale = true     // 解码器将在下一个 IDR 时重建
         }
     }
 
     /**
-     * Не блокирует (O(1)): в режиме нити кладёт в очередь. Очередь полна -> кадр теряется, пока не придёт IDR,
-     * мост получает onNeedAaKeyFrame один раз на эпизод. Колбэк зовётся на нити вызывающего, не под lock.
+     * 不阻塞（O(1)）：在线程模式下放入队列。队列已满 -> 帧丢失直到 IDR 到来，
+     * 桥接器每个片段收到一次 onNeedAaKeyFrame。回调在调用者线程上调用，不在 lock 下。
      */
     override fun feedFrame(annexB: ByteArray, ptsUs: Long) {
         if (!running) return
@@ -264,7 +263,7 @@ class AaTranscoder(
         }
     }
 
-    /** Колбэки по итогу обработки; только вне lock. */
+    /** 根据处理结果调用回调；仅在 lock 之外。 */
     private fun report(o: Outcome) {
         when (o) {
             Outcome.NeedIdr -> out.onNeedAaKeyFrame()
@@ -273,7 +272,7 @@ class AaTranscoder(
         }
     }
 
-    /** Кормит декодер одним кадром (создаёт его на IDR). Под lock, колбэков [out] не зовёт - итог возвращает. */
+    /** 用一帧喂给解码器（在 IDR 时创建它）。在 lock 下，不调用回调 [out] - 返回结果。 */
     private fun processFrame(f: FeedItem.Frame): Outcome = synchronized(lock) {
         val annexB = f.annexB
         val ptsUs = f.ptsUs
@@ -281,7 +280,7 @@ class AaTranscoder(
         if (decoder == null || (cfgStale && idr)) {
             if (!idr) {
                 winDrop.incrementAndGet()
-                return Outcome.Skip                  // декодеру нужен IDR для старта
+                return Outcome.Skip                  // 解码器需要 IDR 才能启动
             }
             val created = createDecoder(annexB)
             if (created !== Outcome.None) return created
@@ -297,7 +296,7 @@ class AaTranscoder(
             return Outcome.Error("декодер: dequeueInputBuffer: ${e.message}")
         }
         if (idx < 0) {
-            // декодер не успевает: кадр потерян, дальше P нельзя - ждём IDR от AA
+            // 解码器来不及：帧丢失，后续 P 帧不可用 - 等待来自 AA 的 IDR
             winDrop.incrementAndGet()
             needIdr = true
             return Outcome.NeedIdr
@@ -305,14 +304,14 @@ class AaTranscoder(
         val buf = d.codec.getInputBuffer(idx)
         if (buf == null || buf.capacity() < annexB.size) {
             d.codec.queueInputBuffer(idx, 0, 0, ptsUs, 0)
-            // кадр потерян, как и без входного буфера: P после него декодер испортит - ждём IDR от AA
+            // 帧丢失，与没有输入缓冲区时一样：其后的 P 帧会损坏解码器 - 等待来自 AA 的 IDR
             winDrop.incrementAndGet()
             needIdr = true
             return Outcome.NeedIdr
         }
         buf.clear()
         buf.put(annexB)
-        inTimes[ptsUs] = f.atNs                      // от прихода из AA: ожидание в очереди кормления входит в задержку декодера
+        inTimes[ptsUs] = f.atNs                      // 从 AA 到达起算：在喂帧队列中的等待计入解码器延迟
         if (inTimes.size > 256) inTimes.keys.take(128).forEach { inTimes.remove(it) }
         try {
             d.codec.queueInputBuffer(idx, 0, annexB.size, ptsUs, 0)
@@ -323,13 +322,13 @@ class AaTranscoder(
         }
     }
 
-    /** Нить кормления: берёт из очереди кадры и команды, всё с декодером делает здесь. */
+    /** 喂帧线程：从队列中取出帧和命令，所有解码器操作都在此进行。 */
     private fun feedLoop() {
         try {
             while (true) {
                 val item = queue.take(500) ?: if (running) continue else break
                 if (item is FeedItem.Stop) break
-                if (!running) continue               // остановка: декодер уже не трогаем, выходим по Stop или таймауту
+                if (!running) continue               // 停止：不再碰解码器，通过 Stop 或超时退出
                 try {
                     when (item) {
                         is FeedItem.Frame -> report(processFrame(item))
@@ -342,12 +341,12 @@ class AaTranscoder(
                 }
             }
         } finally {
-            // любой выход (Stop, таймаут после running=false, необработанное исключение): декодер освобождает владевшая им нить
+            // 任何退出路径（Stop、running=false 后的超时、未处理的异常）：解码器由拥有它的线程释放
             synchronized(lock) { releaseDecoderLocked() }
         }
     }
 
-    /** Создаёт декодер по SPS/PPS (из CODEC_CONFIG или из самого IDR). Под lock. None = создан. */
+    /** 根据 SPS/PPS（来自 CODEC_CONFIG 或 IDR 本身）创建解码器。在 lock 下。None = 已创建。 */
     private fun createDecoder(idrFrame: ByteArray): Outcome {
         releaseDecoderLocked()
         var s = sps
@@ -374,7 +373,7 @@ class AaTranscoder(
                 try {
                     c.configure(f, surf, null, 0)
                 } catch (e: Exception) {
-                    // без low-latency/priority (не все декодеры принимают)
+                    // 不带 low-latency/priority（并非所有解码器都接受）
                     c.reset()
                     val f2 = MediaFormat.createVideoFormat(MIME, srcWidth, srcHeight)
                     f2.setByteBuffer("csd-0", ByteBuffer.wrap(s))
@@ -383,7 +382,7 @@ class AaTranscoder(
                 }
                 c.start()
             } catch (e: Exception) {
-                // декодер ещё не в поле decoder: releaseDecoderLocked() его не освободит
+                // 解码器尚未写入 decoder 字段：releaseDecoderLocked() 不会释放它
                 try {
                     c.release()
                 } catch (_: Exception) {
@@ -431,7 +430,7 @@ class AaTranscoder(
         }
     }
 
-    /** Не блокирует: в режиме нити команда встаёт в очередь после уже принятых кадров, те до сброса и обработаются. */
+    /** 不阻塞：在线程模式下命令排在已接受帧之后，它们会在重置前被处理。 */
     override fun resetDecoder() {
         if (threaded) queue.post(FeedItem.Reset) else processReset()
     }
@@ -465,7 +464,7 @@ class AaTranscoder(
         inTimes.clear()
     }
 
-    // ---------------- выход энкодера ----------------
+    // ---------------- 编码器输出 ----------------
 
     private fun encodeLoop(c: MediaCodec) {
         val info = MediaCodec.BufferInfo()
@@ -586,7 +585,7 @@ class AaTranscoder(
         const val MIME = "video/avc"
         const val REPEAT_AFTER_US = 100_000L
 
-        /** Реле перерисовывает последний кадр, если новых нет столько мс (как repeat-previous-frame-after у Baidu). */
+        /** 如果这么长时间没有新帧，中继会重绘最后一帧（类似 Baidu 的 repeat-previous-frame-after）。 */
         const val REDRAW_IDLE_MS = 100L
     }
 }

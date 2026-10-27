@@ -13,16 +13,16 @@ import android.os.Looper
 import com.yegorkapomidorka.headswap.link.car.CarMac
 
 /**
- * Подключён ли телефон к машине по Bluetooth (A2DP или HEADSET), публичным API: скрытый `BluetoothDevice.isConnected`
- * не используем. Нужен проверке «переподключи Bluetooth»: ACL машины могла прийти раньше, чем мы начали слушать carlife.
+ * 手机是否通过蓝牙连接到汽车（A2DP 或 HEADSET），使用公开 API：不使用的隐藏 `BluetoothDevice.isConnected`。
+ * 检查「重新连接蓝牙」时需要它：汽车的 ACL 可能比我们开始监听 carlife 更早到达。
  */
 object CarBtState {
     private const val PROXY_TIMEOUT_MS = 2_000L
     private val PROFILES = intArrayOf(BluetoothProfile.A2DP, BluetoothProfile.HEADSET)
 
     /**
-     * Ответ [done] приходит на главной нити, ровно один раз. [mac] - адрес выбранной машины; null (машина не выбрана) -
-     * годится любое подключённое устройство по A2DP или HEADSET. Нет разрешения BLUETOOTH_CONNECT или Bluetooth выключен - false.
+     * 回调 [done] 在主线程上被调用，恰好一次。[mac] - 所选汽车的地址；null（未选择汽车）-
+     * 任何通过 A2DP 或 HEADSET 连接的设备都算。没有 BLUETOOTH_CONNECT 权限或蓝牙已关闭 - false。
      */
     @SuppressLint("MissingPermission")
     fun check(ctx: Context, mac: String?, done: (Boolean) -> Unit) {
@@ -31,14 +31,14 @@ object CarBtState {
         val granted = Build.VERSION.SDK_INT < 31 || ctx.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
         if (adapter == null || !granted || !adapter.isEnabled) return done(false)
         try {
-            if (mac == null) {      // адрес не нужен: прокси не поднимаем
+            if (mac == null) {      // 不需要地址：不拉起代理
                 return done(PROFILES.any { adapter.getProfileConnectionState(it) == BluetoothAdapter.STATE_CONNECTED })
             }
         } catch (_: SecurityException) {
             return done(false)
         }
 
-        // всё ниже мутирует только главная нить: колбэки прокси перекидываем через main.post
+        // 以下所有状态只由主线程修改：代理回调通过 main.post 转发
         var left = PROFILES.size
         var found = false
         var finished = false
@@ -51,7 +51,7 @@ object CarBtState {
             if (ok) found = true
             if (--left == 0) finish()
         }
-        main.postDelayed({ finish() }, PROXY_TIMEOUT_MS)      // прокси может так и не подключиться
+        main.postDelayed({ finish() }, PROXY_TIMEOUT_MS)      // 代理可能一直连不上
         for (profile in PROFILES) {
             val listener = object : BluetoothProfile.ServiceListener {
                 override fun onServiceConnected(p: Int, proxy: BluetoothProfile) {

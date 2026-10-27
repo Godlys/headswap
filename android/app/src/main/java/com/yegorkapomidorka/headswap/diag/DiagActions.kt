@@ -13,7 +13,7 @@ import com.yegorkapomidorka.headswap.ui.Readiness
 import com.yegorkapomidorka.headswap.ui.SettingsSection
 import com.yegorkapomidorka.headswap.update.Updater
 
-/** Кнопки-действия под шагами диагноза (поле action в logdiag_rules.json) -> готовый код приложения. */
+/** 诊断步骤下方的动作按钮（logdiag_rules.json 中的 action 字段）-> 应用现成代码。 */
 object DiagActions {
     private val LABELS = mapOf(
         "open_aa" to R.string.diag_act_open_aa,
@@ -30,7 +30,7 @@ object DiagActions {
         "share_log" to R.string.diag_act_share_log,
     )
 
-    /** Подпись кнопки; null = действие неизвестно, кнопку не показываем. */
+    /** 按钮文本；null = 动作未知，不显示按钮。 */
     fun label(action: String?): Int? = LABELS[action]
 
     fun run(host: MainActivity, action: String) {
@@ -55,7 +55,7 @@ object DiagActions {
         }
     }
 
-    /** Настройки точки доступа (раздел модема), нет такого экрана на прошивке - беспроводные сети. */
+    /** 热点设置（便携式热点分区）；若固件上没有该界面，则打开无线网络设置。 */
     private fun hotspot(ctx: Context) {
         try {
             ctx.startActivity(

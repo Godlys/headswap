@@ -1,17 +1,17 @@
 package com.yegorkapomidorka.headswap.link
 
 /**
- * Свойства транспорта CarLife. Для USB значения ровно те, что были до появления абстракции.
- * kind идёт в лог строкой «транспорт=…» и в WL-лог.
+ * CarLife 传输层属性。对 USB 而言，这些值与抽象出现之前完全相同。
+ * kind 以「transport=…」字符串写入日志和 WL 日志。
  */
 class TransportCaps(
-    /** usb-aoa, tcp-debug (один поток с внешним заголовком), tcp6 (6 сокетов Baidu без внешнего заголовка). */
+    /** usb-aoa、tcp-debug（单流 + 外部头部）、tcp6（6 个 Baidu socket，无外部头部）。 */
     val kind: String,
-    /** Поток с внешним заголовком [chan u32][len u32] (USB AOA, debug-TCP). */
+    /** 带外部头部 [chan u32][len u32] 的流（USB AOA、debug-TCP）。 */
     val outerHeader: Boolean,
-    /** Каждый канал свой сокет, писатель на канал. */
+    /** 每个通道一个独立 socket，写入者面向通道。 */
     val separateSockets: Boolean,
-    /** Обрыв приходит системным событием (USB_ACCESSORY_DETACHED), а не только EOF. */
+    /** 断开以系统事件（USB_ACCESSORY_DETACHED）到达，而非仅 EOF。 */
     val nativeDetach: Boolean,
 ) {
     companion object {
@@ -22,18 +22,18 @@ class TransportCaps(
 }
 
 /**
- * Транспорт CarLife на уровне «канал + inner-сообщение» (inner = внутренний заголовок 8/12 байт + тело).
- * Протокол (CarLifeSession) не знает, как каналы лежат на проводе: один поток с внешним заголовком или свой сокет на канал.
+ * CarLife 传输层，位于「通道 + inner 消息」层级（inner = 8/12 字节内部头部 + 正文）。
+ * 协议（CarLifeSession）不知道通道在线缆上如何分布：带外部头部的单流，或每通道独立 socket。
  */
 interface CarTransport {
     val caps: TransportCaps
 
-    /** Для лога и экрана: описание аксессуара или адреса ГУ. */
+    /** 用于日志和界面：配件或车机地址的描述。 */
     val label: String
 
     /**
-     * Запуск чтения и записи. Вызовы sink сериализованы (одна нить за раз), onWritten тоже.
-     * onClosed вызывается не больше одного раза и только при обрыве со стороны транспорта, не после close().
+     * 启动读取与写入。sink 的调用是串行化的（每次一个线程），onWritten 同样。
+     * onClosed 最多调用一次，且仅在传输侧断开时，而非在 close() 之后。
      */
     fun start(
         sink: (chan: Int, inner: ByteArray) -> Unit,
@@ -41,21 +41,21 @@ interface CarTransport {
         onClosed: (reason: String) -> Unit,
     )
 
-    /** Неблокирующая постановка inner в очередь канала. */
+    /** 非阻塞地将 inner 排入通道队列。 */
     fun send(chan: Int, inner: ByteArray)
 
-    /** Закрыть всё, разбудить нити. Идемпотентно, onClosed не зовёт. */
+    /** 关闭一切，唤醒线程。幂等，且不会调用 onClosed。 */
     fun close()
 
-    /** Принято байт от ГУ (все каналы). */
+    /** 已从车机接收的字节数（所有通道）。 */
     val rxBytes: Long
 
-    /** Сообщений в очереди, где стоит канал chan (у потока одна общая очередь на все каналы). */
+    /** 通道 chan 在队列中的消息数（流对所有通道共用一条队列）。 */
     fun queueSize(chan: Int): Int
 
     val queuedVideoBytes: Long
     val queuedVideoFrames: Int
 
-    /** Скорость слива видео, байт/с (0 = ещё не измерена). */
+    /** 视频排空速率，字节/秒（0 = 尚未测得）。 */
     val drainBytesPerSec: Double
 }

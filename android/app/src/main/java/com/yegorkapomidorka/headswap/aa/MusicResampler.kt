@@ -6,24 +6,24 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Ресэмплер стерео PCM 16 бит LE с 48000 Гц на [outRate] с состоянием между вызовами.
+ * 将 48000 Hz 的 16 位 LE 立体声 PCM 重采样到 [outRate]，并在多次调用之间保持状态。
  *
- * Рациональное отношение L/M (44100 = 147/160, 32000 = 2/3, 24000 = 1/2, 22050 = 147/320), полифазный FIR:
- * прототип ФНЧ рассчитан на частоте 48000·L Гц, на каждый выходной кадр берётся одна фаза из [TAPS_PER_PHASE]
- * коэффициентов, нули при вставке не считаются. ФНЧ - окно Кайзера ([KAISER_BETA]), срез ([CUTOFF_RATIO] от
- * выходной частоты, по уровню -6 дБ) ниже Найквиста выхода. Коэффициенты считаются один раз в конструкторе,
- * усиление каждой фазы нормировано на 1 (постоянная составляющая проходит без искажения уровня).
- * История фильтра и фаза живут между вызовами, поэтому границы пакетов бесшовны: результат не зависит от того,
- * как вход нарезан на куски. Вход - кадры по 4 байта; неполный хвост (размер не кратен 4) отбрасывается.
- * Для 48000 класс не нужен: AaBridge в этом случае пропускает PCM как есть.
+ * 有理数比 L/M（44100 = 147/160，32000 = 2/3，24000 = 1/2，22050 = 147/320），多相 FIR：
+ * 低通滤波器原型在 48000·L Hz 采样率下设计，每个输出帧取一组 [TAPS_PER_PHASE]
+ * 个系数中的某一相，插入的零不参与计算。低通滤波器使用 Kaiser 窗（[KAISER_BETA]），截止点（[CUTOFF_RATIO] ×
+ * 输出频率，-6 dB 电平）低于输出的奈奎斯特频率。系数在构造函数中一次性计算，
+ * 每相增益归一化为 1（直流分量通过时无电平失真）。
+ * 滤波器历史与相位在多次调用之间保持，因此数据包边界无缝：结果与输入的切块方式无关。
+ * 输入为 4 字节一帧；不完整的尾部（大小不是 4 的倍数）会被丢弃。
+ * 48000 Hz 时不需要本类：AaBridge 在这种情况下原样透传 PCM。
  */
 class MusicResampler(val outRate: Int) {
     private val up: Int                       // L
     private val down: Int                     // M
-    private val coef: FloatArray              // [phase * TAPS_PER_PHASE + j]: вес кадра x[i0 - j]
-    private val hist = ShortArray(HIST * 2)   // последние HIST входных кадров (L, R) предыдущих вызовов
-    private var work = ShortArray(0)          // историю и новый вход кладём подряд; растёт по мере надобности
-    private var pos = 0                       // позиция следующего выхода на сетке 48000·L Гц относительно начала нового входа
+    private val coef: FloatArray              // [phase * TAPS_PER_PHASE + j]：帧 x[i0 - j] 的权重
+    private val hist = ShortArray(HIST * 2)   // 上次调用保留的最后 HIST 个输入帧 (L, R)
+    private var work = ShortArray(0)          // 历史和新的输入依次存放；按需扩容
+    private var pos = 0                       // 下一个输出在 48000·L Hz 网格上的位置，相对新输入起点
 
     init {
         require(outRate in 1 until IN_RATE) { "outRate=$outRate" }
@@ -58,9 +58,9 @@ class MusicResampler(val outRate: Int) {
         var u = pos
         var o = 0
         for (k in 0 until outFrames) {
-            val i0 = u / up                       // последний входной кадр, влияющий на выход
+            val i0 = u / up                       // 影响输出的最后一个输入帧
             val cb = (u - i0 * up) * TAPS_PER_PHASE
-            var base = (HIST + i0) * 2            // свёртка идёт назад по времени
+            var base = (HIST + i0) * 2            // 卷积沿时间向后进行
             var l = 0f
             var r = 0f
             for (j in 0 until TAPS_PER_PHASE) {
@@ -96,10 +96,10 @@ class MusicResampler(val outRate: Int) {
 
         private fun gcd(a: Int, b: Int): Int = if (b == 0) a else gcd(b, a % b)
 
-        /** Прототип ФНЧ на 48000·L Гц длиной L·TAPS_PER_PHASE, разложенный по L фазам; сумма каждой фазы = 1. */
+        /** 48000·L Hz 采样率上的低通滤波器原型，长度 L·TAPS_PER_PHASE，按 L 相展开；每相之和 = 1。 */
         private fun design(up: Int, outRate: Int): FloatArray {
             val len = up * TAPS_PER_PHASE
-            val fc = CUTOFF_RATIO * outRate / (IN_RATE.toDouble() * up)    // относительно частоты дискретизации прототипа
+            val fc = CUTOFF_RATIO * outRate / (IN_RATE.toDouble() * up)    // 相对原型的采样率
             val mid = (len - 1) / 2.0
             val h = DoubleArray(len)
             for (j in 0 until len) {

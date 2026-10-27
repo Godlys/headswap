@@ -11,9 +11,9 @@ import android.os.Handler
 import android.os.Looper
 
 /**
- * Диагностика звука телефона в логе (префикс AUDIO): выходные устройства (A2DP/SCO/USB...) и активные плееры.
- * Без разрешений: BLUETOOTH_CONNECT не нужен, видны только аудио-маршруты. Нужна, чтобы понять, кто и куда играет
- * при автоплее по BT (Mazda CX-5).
+ * 在日志中对手机声音的诊断（前缀 AUDIO）：输出设备（A2DP/SCO/USB...）和活跃的播放器。
+ * 无需权限：不需要 BLUETOOTH_CONNECT，只能看到音频路由。用于弄清在通过 BT 自动播放
+ * （马自达 CX-5）时是谁在播、播到哪里。
  */
 class AudioDiag {
     private var am: AudioManager? = null

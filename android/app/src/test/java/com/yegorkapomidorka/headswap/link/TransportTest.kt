@@ -38,9 +38,9 @@ class TransportTest {
         WLog.sink = { wl += it }
     }
 
-    // ---------------- StreamTransport: то, что уходит в USB, не меняется ни на байт ----------------
+    // ---------------- StreamTransport：进入 USB 的数据一个字节都不会变 ----------------
 
-    /** Пишет каждый write() отдельной записью, flush отмечает отдельно. */
+    /** 每次 write() 单独记一条记录，flush 单独标记。 */
     private class RecordingOut : OutputStream() {
         val calls = Collections.synchronizedList(ArrayList<ByteArray>())
         @Volatile var flushes = 0
@@ -103,7 +103,7 @@ class TransportTest {
         val ver = Wire.cmdInner(Msg.HU_PROTOCOL_VERSION, byteArrayOf(8, 2, 16, 0))
         val hb = Wire.dataInner(Msg.VIDEO_HEARTBEAT, 0, null)
         val wire = Wire.outerHeader(Ch.CMD, ver.size) + ver + Wire.outerHeader(Ch.VIDEO, hb.size) + hb
-        for (b in wire) pout.write(b.toInt())   // по байту: границы чтения не важны
+        for (b in wire) pout.write(b.toInt())   // 逐字节写入：读取边界无关紧要
         pout.close()
         assertTrue(closedLatch.await(5, TimeUnit.SECONDS))
         assertEquals("EOF чтения (ГУ отключилось)", reason.get())
@@ -128,9 +128,9 @@ class TransportTest {
         assertEquals(0, calls)
     }
 
-    // ---------------- InnerCodec: inner без внешнего заголовка ----------------
+    // ---------------- InnerCodec：不带外部报头的 inner ----------------
 
-    /** Отдаёт по одному байту за read: проверка сборки заголовка и тела из кусков. */
+    /** 每次 read 只给一个字节：验证从多个分片拼接报头和正文的逻辑。 */
     private class Trickle(private val b: ByteArray) : InputStream() {
         private var p = 0
         override fun read(): Int = if (p < b.size) b[p++].toInt() and 0xFF else -1
@@ -166,7 +166,7 @@ class TransportTest {
 
     @Test
     fun codecRejectsForeignType() {
-        // CMD-тип на TOUCH-сокете: заголовок чужого канала = разрыв, а не резинк
+        // TOUCH socket 上出现 CMD 类型：外部通道的报头 = 断开连接而不是重同步
         val wrong = Wire.cmdInner(Msg.HU_INFO, byteArrayOf(1, 2))
         try {
             readInners(Ch.TOUCH, ByteArrayInputStream(wrong))
@@ -178,7 +178,7 @@ class TransportTest {
 
     @Test
     fun codecSkipsHeartbeatOnCmd() {
-        // h129, VW CNS3 Tiguan L Pro: 0x20002 с длиной 0 в CMD-сокете, CMD-кадр 8 байт
+        // h129，VW CNS3 Tiguan L Pro：CMD socket 中出现长度 0 的 0x20002，CMD 帧为 8 字节
         val hb = Wire.cmdInner(Msg.VIDEO_HEARTBEAT, null)
         val a = Wire.cmdInner(0x0001800F, ByteArray(12) { 3 })
         val b = Wire.cmdInner(Msg.VIDEO_ENCODER_START, null)
@@ -187,7 +187,7 @@ class TransportTest {
         for (s in listOf<InputStream>(ByteArrayInputStream(wire), Trickle(wire))) {
             assertEquals(want, readInners(Ch.CMD, BufferedInputStream(s)).map { it.toList() })
         }
-        // 12-байтный видео-heartbeat [0][тип][метка] в CMD-сокете: хвост метки пропущен, поток не сбит
+        // CMD socket 中的 12 字节视频 heartbeat [0][类型][标记]：跳过标记尾部，流不会错乱
         val hb12 = ByteArray(12)
         Wire.putU32(hb12, 4, Msg.VIDEO_HEARTBEAT)
         Wire.putU32(hb12, 8, 0x12345678)
@@ -240,7 +240,7 @@ class TransportTest {
         }
     }
 
-    // ---------------- Tcp6Listener + MultiSocketTransport на loopback ----------------
+    // ---------------- 基于 loopback 的 Tcp6Listener + MultiSocketTransport ----------------
 
     private val zeroPorts = Tcp6Ports.DEFAULT.mapValues { 0 }
 
@@ -275,7 +275,7 @@ class TransportTest {
         try {
             val ver = Wire.cmdInner(Msg.HU_PROTOCOL_VERSION, byteArrayOf(8, 2, 16, 0))
             val touch = Wire.cmdInner(Msg.TOUCH_ACTION, byteArrayOf(8, 0, 16, 10, 24, 20))
-            hu.send(Ch.VIDEO, Wire.dataInner(Msg.VIDEO_HEARTBEAT, 0, null))   // вычитывается и не доходит до протокола
+            hu.send(Ch.VIDEO, Wire.dataInner(Msg.VIDEO_HEARTBEAT, 0, null))   // 会被读走但不会送达协议层
             hu.send(Ch.CMD, ver)
             hu.send(Ch.TOUCH, touch)
             assertTrue(two.await(5, TimeUnit.SECONDS))
@@ -308,7 +308,7 @@ class TransportTest {
             dup.soTimeout = 3000
             assertEquals("второй CMD закрыт сразу", -1, try { dup.getInputStream().read() } catch (_: java.net.SocketException) { -1 })
             dup.close()
-            // первый CMD жив
+            // 第一个 CMD 仍存活
             t.send(Ch.CMD, Wire.cmdInner(Msg.FOREGROUND, null))
             assertEquals(8, hu.readExactly(Ch.CMD, 8).size)
             assertTrue(wl.any { it.startsWith("WL tcp reject") && "why=dup" in it })
@@ -329,7 +329,7 @@ class TransportTest {
             hu.socks.getValue(Ch.TOUCH).close()
             assertTrue("сессия не зависла", done.await(5, TimeUnit.SECONDS))
             assertTrue(reason.get(), reason.get().startsWith("tcp6 TOUCH("))
-            // остальные сокеты транспорт закрыл сам
+            // 其余 socket 由 transport 自行关闭
             val cmd = hu.socks.getValue(Ch.CMD)
             cmd.soTimeout = 3000
             assertEquals(-1, try { cmd.getInputStream().read() } catch (_: java.net.SocketException) { -1 })
@@ -349,7 +349,7 @@ class TransportTest {
         val done = CountDownLatch(1)
         t.start({ _, _ -> }, { _, _ -> }, { reason.set(it); done.countDown() })
         try {
-            hu.send(Ch.MEDIA, Wire.dataInner(Msg.VIDEO_DATA, 0, ByteArray(4)))   // тип видео на MEDIA-сокете
+            hu.send(Ch.MEDIA, Wire.dataInner(Msg.VIDEO_DATA, 0, ByteArray(4)))   // 在 MEDIA socket 上发送视频类型
             assertTrue(done.await(5, TimeUnit.SECONDS))
             assertTrue(reason.get(), reason.get().startsWith("tcp6 MEDIA(") && "плохой заголовок" in reason.get())
         } finally {
@@ -376,7 +376,7 @@ class TransportTest {
 
     @Test
     fun tcp6PeerFilterRejectsForeignSubnet() {
-        // ветка B: пускаем только адреса из подсетей маяка; loopback сюда не входит
+        // 分支 B：只放行来自信标子网的地址；loopback 不在其中
         val l = Tcp6Listener(InetAddress.getLoopbackAddress(), zeroPorts, dataPort = null, clock = clock, peerOk = { false }).open()
         val s = Socket()
         try {
@@ -406,7 +406,7 @@ class TransportTest {
 
     @Test
     fun wlogHasNoHexDumps() {
-        // транспортные WL-строки не содержат байтов рукопожатия: ни одной последовательности из 4+ hex-пар
+        // transport 的 WL 行不包含握手字节：不应出现任何 4 组以上 hex 对的序列
         tcp6RoundTripWithoutOuterHeader()
         val hex = Regex("""(\b[0-9a-fA-F]{2}\s){4,}""")
         for (line in wl) assertTrue(line, !hex.containsMatchIn(line))

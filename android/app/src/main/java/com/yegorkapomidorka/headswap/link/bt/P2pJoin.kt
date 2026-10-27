@@ -23,20 +23,20 @@ import java.net.InetAddress
 import java.net.NetworkInterface
 
 /**
- * Ветка A, шаг Wi-Fi Direct: телефон входит клиентом в P2P-группу ГУ (реквизиты из TARGET_INFO по Bluetooth).
- * Сначала напрямую по ssid и паролю (WifiP2pConfig.Builder), если не вышло - находим ГУ среди пиров по имени
- * и подключаемся PBC с groupOwnerIntent=0 (владелец группы - ГУ). Когда у интерфейса p2p* есть IPv4,
- * зовём [onJoined]: адрес телефона уходит ГУ в MD_WIFI_IP, ГУ подключает TCP-каналы.
- * Группа распалась (ГУ сняла её, например ушла в своё меню и закрыла CarLife) - сбрасываем вход целиком и зовём
- * [onLost]: следующий TARGET_INFO от ГУ (она переподключает Bluetooth) входит заново, а не теряется на «уже вхожу».
- * Вызовы из любых потоков, состояние - на главной нити.
- * Поиск пиров повторяем раз в [DISCOVER_RETRY_MS], пока не вошли: после короткой стоянки ГУ поднимает группу
- * позже, чем при холодном старте, и одного поиска не хватает (h214, Mazda G6S). ERROR/BUSY от discoverPeers тоже
- * повторяем: сначала через stopPeerDiscovery, после двух неудач подряд - на свежем канале. BUSY при поднятой точке
- * доступа - это она мешает Wi-Fi Direct (Samsung): сообщаем [onBusy] один раз за попытку.
- * Новый TARGET_INFO, пока не вошли, начинает попытку заново с новыми реквизитами (h126). Wi-Fi выключен (P2P тогда
- * тоже): зовём [onWifi] (false) и ждём WIFI_P2P_STATE_ENABLED, потом входим. Поколение [gen] отсекает колбэки и
- * отложенные шаги прошлой попытки.
+ * A 分支，Wi-Fi Direct 步骤：手机作为客户端加入车机的 P2P 组（凭据来自 Bluetooth 上的 TARGET_INFO）。
+ * 首先直接用 ssid 和密码（WifiP2pConfig.Builder）；若失败 - 按名称在对端中找到车机，
+ * 并以 groupOwnerIntent=0（组主为车机）通过 PBC 连接。当 p2p* 接口有 IPv4 时，
+ * 调用 [onJoined]：手机地址通过 MD_WIFI_IP 发给车机，车机连接 TCP 通道。
+ * 组解散了（车机撤销了它，例如进入自己的菜单并关闭 CarLife）- 完全重置加入流程并调用
+ * [onLost]：来自车机的下一个 TARGET_INFO（它重新连接 Bluetooth）会重新加入，而不会卡在「已在加入」。
+ * 可从任意线程调用，状态在主线程上。
+ * 对端搜索每 [DISCOVER_RETRY_MS] 重复一次，直到加入：短停后车机建组晚于冷启动，
+ * 一次搜索不够（h214，Mazda G6S）。discoverPeers 的 ERROR/BUSY 也会重试：先通过 stopPeerDiscovery，
+ * 连续两次失败后 - 在新通道上。热点开启时的 BUSY - 是热点干扰了 Wi-Fi Direct（Samsung）：
+ * 每次尝试只报告一次 [onBusy]。
+ * 在加入前收到新 TARGET_INFO 会用新凭据重新开始尝试（h126）。Wi-Fi 关闭（此时 P2P 也关闭）：
+ * 调用 [onWifi]（false）并等待 WIFI_P2P_STATE_ENABLED，然后加入。代次 [gen] 会过滤掉上一次尝试的
+ * 回调和延迟步骤。
  */
 class P2pJoin(
     private val ctx: Context,
@@ -49,28 +49,28 @@ class P2pJoin(
     private val mgr: WifiP2pManager? = ctx.getSystemService(WifiP2pManager::class.java)
     private var channel: WifiP2pManager.Channel? = null
     private var target: P2pTarget? = null
-    /** Когда началась текущая попытка: тот же TARGET_INFO в первые [JOIN_TIMEOUT_MS] её не перезапускает. */
+    /** 当前尝试开始的时间：相同的 TARGET_INFO 在其开始后的前 [JOIN_TIMEOUT_MS] 内不会重启它。 */
     private var startedAt = 0L
     private var receiver: BroadcastReceiver? = null
-    /** Поколение попытки: колбэки и отложенные шаги прошлой (после стопа или рестарта) с ним не совпадут и ничего не сделают. */
+    /** 尝试的代次：上一次（停止或重启后）的回调和延迟步骤不会与它匹配，也不会做任何事。 */
     private var gen = 0
-    /** Wi-Fi был выключен на старте: входим, когда P2P включится. */
+    /** 启动时 Wi-Fi 已关闭：等 P2P 开启后再进入。 */
     private var waitingWifi = false
-    /** Мы подключились (или подключаемся): при stop снимаем группу. */
+    /** 我们已连接（或正在连接）：stop 时移除组。 */
     private var connecting = false
     private var peerMode = false
-    /** Когда ушёл connect по пиру: приглашение без ответа дольше [CONNECT_STALE_MS] снимаем и ищем снова. */
+    /** 何时发出了按对端的 connect：超过 [CONNECT_STALE_MS] 无响应的邀请被撤销并重新搜索。 */
     private var connectAt = 0L
     private var discoverRuns = 0
     private var busyReported = false
-    /** Неудачных discoverPeers подряд: после [REINIT_AFTER_FAILS] пересоздаём канал. */
+    /** 连续失败的 discoverPeers 次数：超过 [REINIT_AFTER_FAILS] 后重建通道。 */
     private var discoverFails = 0
-    /** Группа собрана, ждём IPv4 по DHCP: приглашение уже не висит. */
+    /** 组已组建，等待 DHCP 分配 IPv4：邀请已不再挂起。 */
     private var formed = false
     private var joinedIp: Inet4Address? = null
     @Volatile private var iface: LanIface? = null
 
-    /** Адрес из P2P-подсети, куда мы вошли (для фильтра входящих TCP). */
+    /** 我们所加入 P2P 子网中的地址（用于过滤入站 TCP）。 */
     fun owns(a: InetAddress): Boolean = iface?.contains(a) == true
 
     fun hasPermission(): Boolean {
@@ -85,7 +85,7 @@ class P2pJoin(
     @SuppressLint("MissingPermission")
     private fun startMain(t: P2pTarget) {
         if (target != null && joinedIp != null && p2pIface() == null) {
-            // вошли, но интерфейса уже нет, а CONNECTION_CHANGED о распаде не пришёл
+            // 已进入，但接口已不存在，且 CONNECTION_CHANGED 解散通知未到达
             WLog.ev(WLog.P2P, "lost", "how" to "нет p2p-интерфейса при новом TARGET_INFO")
             lostMain()
         }
@@ -115,14 +115,14 @@ class P2pJoin(
         WLog.ev(WLog.P2P, "start", "bySsid" to t.canJoinBySsid, "peerName" to (t.deviceName != null), "freq" to t.freqMhz)
         AppLog.i("Wi-Fi Direct: вхожу в группу ГУ (${if (t.canJoinBySsid) "по ssid" else "по имени пира"})")
         if (!wifiEnabled()) {
-            // без Wi-Fi P2P выключен: discover/connect ответят BUSY. Таймаут и повторы не взводим, ждём включения Wi-Fi
+            // 没有 Wi-Fi 时 P2P 关闭：discover/connect 会返回 BUSY。不启动超时和重试，等待 Wi-Fi 开启
             waitingWifi = true
             WLog.ev(WLog.P2P, "wifi-off")
             AppLog.i("Wi-Fi Direct: Wi-Fi на телефоне выключен, жду включения")
             onWifi(false)
             return
         }
-        onWifi(true)      // Wi-Fi включили до нового TARGET_INFO: снять просьбу, если висела
+        onWifi(true)      // 新 TARGET_INFO 之前 Wi-Fi 已开启：若请求还挂着则撤销
         begin(m, ch, t)
     }
 
@@ -140,7 +140,7 @@ class P2pJoin(
         main.postDelayed(retry, DISCOVER_RETRY_MS)
     }
 
-    /** Wi-Fi включили, пока ждали: P2P поднялся, входим в группу. */
+    /** 等待期间 Wi-Fi 已开启：P2P 已就绪，进入组。 */
     private fun onP2pState(enabled: Boolean) {
         val m = mgr ?: return
         val ch = channel ?: return
@@ -166,7 +166,7 @@ class P2pJoin(
                     connecting = false
                 }
                 if (!connecting) when {
-                    // ERROR/BUSY без хотспота (h214, Samsung): фреймворк застрял, свежий канал помогает, как ручной перезапуск
+                    // 无热点的 ERROR/BUSY（h214，Samsung）：框架卡住，新通道有效，如同手动重启
                     discoverFails >= REINIT_AFTER_FAILS -> {
                         WLog.ev(WLog.P2P, "reinit", "fails" to discoverFails)
                         ch.close()
@@ -237,7 +237,7 @@ class P2pJoin(
                 discoverFails++
                 val hotspot = hotspotUp()
                 WLog.ev(WLog.P2P, "discover", "res" to "fail", "reason" to reasonName(reason), "n" to n, "hotspot" to hotspot)
-                // BUSY бывает и без хотспота (h214): тогда просто повторяем, подсказку не показываем
+                // BUSY 也可能在没有热点时发生（h214）：那就直接重试，不显示提示
                 if (reason == WifiP2pManager.BUSY && hotspot && !busyReported && target != null) {
                     busyReported = true
                     AppLog.i("Wi-Fi Direct занят (BUSY): включена точка доступа на телефоне")
@@ -245,7 +245,7 @@ class P2pJoin(
                 }
             }
         })
-        // первые пиры могли прийти до нового поиска: проверяем уже известный список
+        // 第一批对端可能在新搜索之前就已到达：检查已知的列表
         if (n > 1) onPeers()
     }
 
@@ -303,7 +303,7 @@ class P2pJoin(
         }
     }
 
-    /** IPv4 на p2p-интерфейсе появляется после DHCP, иногда через секунду-две после groupFormed. */
+    /** p2p 接口上的 IPv4 在 DHCP 之后出现，有时在 groupFormed 之后一两秒。 */
     private fun awaitIp(g: Int, attempt: Int) {
         if (g != gen || target == null || joinedIp != null) return
         val lan = p2pIface()
@@ -320,7 +320,7 @@ class P2pJoin(
         onJoined(lan.ip)
     }
 
-    /** Точка доступа телефона поднята: swlan* у Samsung, ap* у остальных, с IPv4. */
+    /** 手机热点已开启：Samsung 为 swlan*，其他为 ap*，带 IPv4。 */
     private fun hotspotUp(): Boolean = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().any { ni ->
         (ni.name.startsWith("swlan") || ni.name.startsWith("ap")) && ni.isUp && ni.inetAddresses.toList().any { it is Inet4Address }
     }

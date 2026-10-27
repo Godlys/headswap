@@ -3,21 +3,21 @@ package com.yegorkapomidorka.headswap.link.car
 import android.content.Context
 
 /**
- * Wi-Fi точка доступа машины (ГУ раздаёт её сам): по ней телефон входит в сеть машины через WifiNetworkSpecifier, не теряя
- * интернет основной сети. Отдельный файл prefs `car_wifi`, исключён из бэкапа (res/xml/backup_rules.xml, data_extraction_rules.xml).
- * SSID и пароль не пишем никуда, кроме этого файла и экрана настроек: ни в WLog, ни в AppLog, ни в отчёт.
+ * 汽车的 Wi-Fi 热点（车机自己开启）：手机通过 WifiNetworkSpecifier 加入汽车网络，同时不丢失
+ * 主网络的互联网。独立 prefs 文件 `car_wifi`，已从备份中排除（res/xml/backup_rules.xml、data_extraction_rules.xml）。
+ * SSID 和密码除了这个文件和设置界面，不写入任何地方：不写 WLog、不写 AppLog、不写报告。
  */
 class CarWifi(ctx: Context) {
     private val sp = ctx.applicationContext.getSharedPreferences("car_wifi", Context.MODE_PRIVATE)
 
     val ssid: String? get() = sp.getString("ssid", null)
 
-    /** Пароль WPA2/WPA3; пустая строка (или null) - открытая сеть. */
+    /** WPA2/WPA3 密码；空字符串（或 null）表示开放网络。 */
     val pass: String get() = sp.getString("pass", null).orEmpty()
 
     val isSet: Boolean get() = !ssid.isNullOrEmpty()
 
-    /** 6/6 уже поднимались в этой сети: ГУ подключается через свой Wi-Fi, сеть машины просим без ожидания. Сбрасывается сменой SSID. */
+    /** 曾在此网络中成功连上 6/6：车机通过自己的 Wi-Fi 接入，请求汽车网络时无需等待。更换 SSID 时重置。 */
     val proven: Boolean get() = sp.getBoolean("proven", false)
 
     fun markProven() {
@@ -25,8 +25,8 @@ class CarWifi(ctx: Context) {
     }
 
     /**
-     * Защита, с которой вход в сеть машины уже удался ("open"/"wpa2"/"wpa3"), или null. Android считает WPA2 и WPA3 с одним
-     * SSID разными сетями и даёт им разные случайные MAC: ГУ видит новое устройство (Павел 2026-10-19: 4 дубля в Known devices).
+     * 已成功加入汽车网络的安全方式（"open"/"wpa2"/"wpa3"），或为 null。Android 会将同一 SSID 的 WPA2 和 WPA3
+     * 视为不同网络，并分配不同的随机 MAC：车机会看到一个新设备（帕维尔 2026-10-19：Known devices 里出现 4 个重复）。
      */
     val sec: String? get() = sp.getString("sec", null)
 

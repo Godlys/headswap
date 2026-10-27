@@ -10,37 +10,37 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Самопроверка транскодера без AA и USB: `--es cmd transcode_test`. Берёт самый крупный aa-*.h264 (сырой Annex-B от AA, кладётся в getExternalFilesDir через adb push),
- * гонит его через декодер -> энкодер ~10 с (30 fps, посреди пауза 3 с без входных кадров: энкодер обязан
- * повторять кадр) и логирует кадры на входе/выходе, fps, первые NAL выхода, задержку.
+ * 无需 AA 和 USB 的转码器自检：`--es cmd transcode_test`。选取最大的 aa-*.h264（来自 AA 的原始 Annex-B，通过 adb push 放入 getExternalFilesDir），
+ * 让它经过解码器 -> 编码器约 10 秒（30 fps，中途有 3 秒无输入帧的暂停：编码器必须
+ * 重复帧），并记录输入/输出帧、fps、输出的前几个 NAL、延迟。
  *
- * Строка настроек идёт extra-ом `opts` (в AaTranscoder уходит как tuning) и разбирается по подстрокам. Токены самой проверки
- * (в транскодер не передаются): `slowout=NN`, `resetevery=NN`, `burst`, `nopause`, `placeholder`, `phonly`.
- * Остальное (`nogl`, `nobase`, `cbr`, `norealtime`, `nolowlat`) уходит в транскодер как есть.
+ * 配置字符串通过 extra `opts` 传入（作为 tuning 交给 AaTranscoder），按子字符串解析。自检自身的令牌
+ * （不会传给转码器）：`slowout=NN`、`resetevery=NN`、`burst`、`nopause`、`placeholder`、`phonly`。
+ * 其余（`nogl`、`nobase`、`cbr`、`norealtime`、`nolowlat`）原样传给转码器。
  *
- * Как и мост, проверка после потери кадра (onNeedAaKeyFrame) и после resetDecoder() перестаёт подавать P-кадры
- * и подаёт ближайший IDR из файла с SPS/PPS.
+ * 与桥接器一样，自检在丢帧（onNeedAaKeyFrame）之后和 resetDecoder() 之后停止喂 P 帧，
+ * 改为喂文件中带 SPS/PPS 的最近 IDR。
  *
- * Запуск (лог в AppLog, `adb logcat -s Headswap` или файл лога приложения; ищи `transcode_test`):
+ * 运行（日志进入 AppLog，`adb logcat -s Headswap` 或应用日志文件；搜索 `transcode_test`）：
  * ```
  * adb shell am start -n com.yegorkapomidorka.headswap/.MainActivity --es cmd transcode_test
- * # медленный слив в ГУ / занятый монитор моста: onEncoderFrame спит 20 мс (петля энкодер -> GL -> декодер -> вход).
- * # Ждём: нет остановки, кадры выхода идут (реже), есть потери и запросы IDR
+ * # 向车机缓慢输出 / 桥接器监视器繁忙：onEncoderFrame 睡眠 20 毫秒（编码器 -> GL -> 解码器 -> 输入回路）。
+ * # 预期：不停止，输出帧继续（更少），有丢失和 IDR 请求
  * adb shell am start -n com.yegorkapomidorka.headswap/.MainActivity --es cmd transcode_test --es opts "slowout=20"
  * adb shell am start -n com.yegorkapomidorka.headswap/.MainActivity --es cmd transcode_test --es opts "slowout=80"
- * # resetDecoder() с другой нити раз в 700 мс (как START после PAUSE). Ждём: декодер пересоздаётся на следующем IDR, выход возобновляется
+ * # 每 700 毫秒从另一线程调用 resetDecoder()（如 PAUSE 后的 START）。预期：解码器在下一个 IDR 重建，输出恢复
  * adb shell am start -n com.yegorkapomidorka.headswap/.MainActivity --es cmd transcode_test --es opts "resetevery=700"
- * # пачки: 10 кадров без задержки, пауза 330 мс (переполнение очереди кормления). Ждём: потери и восстановление по IDR, без зависания
+ * # 突发：10 帧无延迟，暂停 330 毫秒（喂帧队列溢出）。预期：有丢失并通过 IDR 恢复，不挂起
  * adb shell am start -n com.yegorkapomidorka.headswap/.MainActivity --es cmd transcode_test --es opts "burst"
- * # всё вместе
+ * # 全部组合
  * adb shell am start -n com.yegorkapomidorka.headswap/.MainActivity --es cmd transcode_test --es opts "slowout=30 resetevery=900 burst"
  * ```
- * Сторожок: выход энкодера молчит > 3 с вне запланированной паузы -> `!!!!!! выход энкодера молчит N с`.
- * В конце ИТОГ2 и проверка нитей `aa-trans-*` / `aa-gl-relay` через 2 с после stop().
+ * 看门狗：编码器输出在计划暂停之外静默 > 3 秒 -> `!!!!!! 编码器输出静默 N 秒`。
+ * 最后输出第二条汇总日志，并在 stop() 后 2 秒检查 `aa-trans-*` / `aa-gl-relay` 线程。
  */
 object TranscodeSelfCheck {
     private const val TOTAL_MS = 10_000L
-    private const val PAUSE_AT_FRAME = 90          // после 3 с при 30 fps
+    private const val PAUSE_AT_FRAME = 90          // 30 fps 下约 3 秒后
     private const val PAUSE_MS = 3_000L
     private const val FRAME_MS = 33L
     private const val BURST_FRAMES = 10
@@ -71,7 +71,7 @@ object TranscodeSelfCheck {
             return
         }
 
-        // токены самой проверки; в транскодер уходит строка без них
+        // 自检自身的令牌；不带它们的字符串传给转码器
         val slowOutMs = Regex("""slowout=(\d+)""").find(tuning)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
         val resetEveryMs = Regex("""resetevery=(\d+)""").find(tuning)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
         val burst = Regex("""\bburst\b""").containsMatchIn(tuning)
@@ -80,8 +80,8 @@ object TranscodeSelfCheck {
             AppLog.i("transcode_test: режим: slowout=$slowOutMs мс, resetevery=$resetEveryMs мс, burst=$burst; в транскодер tuning='$tcTuning'")
         }
 
-        // выход энкодера как он уходит на ГУ (SPS/PPS склеены только с первым IDR, как в AaBridge.onEncoderFrame):
-        // enc-out.h264 рядом, смотреть ffmpeg на ПК
+        // 编码器输出，与发往车机时相同（SPS/PPS 仅与第一个 IDR 拼接，如 AaBridge.onEncoderFrame 中）：
+        // enc-out.h264 就在旁边，可在 PC 上用 ffmpeg 查看
         val dump = File(dir, "enc-out.h264").outputStream().buffered()
         var dumpGotIdr = false
 
@@ -94,8 +94,8 @@ object TranscodeSelfCheck {
             @Volatile var pauseStartFrames = -1L
             @Volatile var pauseEndFrames = -1L
             @Volatile var errors = 0
-            @Volatile var gotIdr = false               // как AaBridge.gotIdr: false -> P-кадры не подаём, ждём IDR из файла
-            @Volatile var lastFrameMs = 0L             // время последнего кадра выхода (0 - ещё не было)
+            @Volatile var gotIdr = false               // 同 AaBridge.gotIdr：false -> 不喂 P 帧，等待文件中的 IDR
+            @Volatile var lastFrameMs = 0L             // 最后一帧输出的时间（0 - 还没有）
             @Volatile var maxGapMs = 0L
             @Volatile var silentReported = false
 
@@ -109,7 +109,7 @@ object TranscodeSelfCheck {
                 if (prev > 0 && now - prev > maxGapMs) maxGapMs = now - prev
                 lastFrameMs = now
                 silentReported = false
-                if (slowOutMs > 0) Thread.sleep(slowOutMs)      // медленный слив в ГУ / занятый монитор моста
+                if (slowOutMs > 0) Thread.sleep(slowOutMs)      // 向车机缓慢输出 / 桥接器监视器繁忙
                 if (frames.getAndIncrement() == 0L) {
                     val c = csd
                     firstNals = AnnexB.nalTypes(if (c != null) AnnexB.glue(c, data) else data)
@@ -136,7 +136,7 @@ object TranscodeSelfCheck {
         }
 
         val out = Out()
-        // "placeholder": параллельно второй энкодер заглушки, как в живой сессии (VideoSource + транскодер)
+        // "placeholder"：并行运行第二个占位编码器，如在真实会话中（VideoSource + 转码器）
         val ph = if (tuning.contains("placeholder")) try {
             com.yegorkapomidorka.headswap.VideoSource(1280, 720, 30, 4_000_000, object : com.yegorkapomidorka.headswap.VideoSource.Listener {
                 override fun onConfig(csd: ByteArray) {}
@@ -160,7 +160,7 @@ object TranscodeSelfCheck {
             AppLog.e("transcode_test: транскодер не создан", e)
             return
         }
-        var dropSum = 0L                                // "потеряно" из statsLine (окна сбрасываются при каждом вызове)
+        var dropSum = 0L                                // 来自 statsLine 的「丢失」计数（每次调用时窗口重置）
         fun stats(): String {
             val s = t.statsLine()
             dropSum += Regex("""потеряно (\d+)""").find(s)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
@@ -170,19 +170,19 @@ object TranscodeSelfCheck {
         t.requestSyncFrame()
         val t0 = SystemClock.elapsedRealtime()
         var fed = 0
-        var skippedP = 0                                // P-кадры файла, не поданные из-за ожидания IDR
+        var skippedP = 0                                // 因等待 IDR 而未喂入的文件 P 帧
         var idx = firstIdr
         var pauseStartMs = -1L
         val pauseEndMs = AtomicLong(-1L)
         var lastStats = t0
         val inPause = AtomicBoolean(false)
-        val active = AtomicBoolean(true)                // вспомогательные нити работают, пока идёт подача
+        val active = AtomicBoolean(true)                // 喂帧进行期间辅助线程工作
         val resets = AtomicInteger()
-        val resetGen = AtomicInteger()                  // счётчик reset-ов: подающая нить по нему узнаёт, что надо ждать IDR
+        val resetGen = AtomicInteger()                  // reset 计数器：喂帧线程据此得知需要等待 IDR
         val silentEpisodes = AtomicInteger()
         val maxSilentMs = AtomicLong()
 
-        // сторожок: выход энкодера молчит > 3 с вне запланированной паузы
+        // 看门狗：编码器输出在计划暂停之外静默 > 3 秒
         val watch = Thread({
             try {
                 while (active.get()) {
@@ -202,7 +202,7 @@ object TranscodeSelfCheck {
             }
         }, "transcode-test-watch").also { it.isDaemon = true; it.start() }
 
-        // resetevery: resetDecoder() с другой нити, как мост на START после PAUSE
+        // resetevery：从另一线程调用 resetDecoder()，如桥接器在 PAUSE 后 START 时
         val resetter = if (resetEveryMs > 0) Thread({
             try {
                 while (active.get()) {
@@ -232,26 +232,26 @@ object TranscodeSelfCheck {
                 AppLog.i("transcode_test: пауза кончилась: за ${(pauseEnd - pauseStartMs) / 1000.0} с энкодер выдал ${out.pauseEndFrames - out.pauseStartFrames} кадров = %.1f fps".format((out.pauseEndFrames - out.pauseStartFrames) * 1000.0 / (pauseEnd - pauseStartMs)))
             }
             val gen = resetGen.get()
-            if (gen != seenGen) {                       // был reset: до ближайшего IDR из файла P не подаём
+            if (gen != seenGen) {                       // 发生过 reset：在文件中的下一个 IDR 之前不喂 P 帧
                 seenGen = gen
                 out.gotIdr = false
             }
-            if (idx >= aus.size) idx = firstIdr          // конец файла: по кругу с IDR
+            if (idx >= aus.size) idx = firstIdr          // 文件结束：从 IDR 开始循环
             val au = aus[idx++]
             if (out.gotIdr) {
                 t.feedFrame(au.data, fed * 33_333L)
                 fed++
             } else if (au.idr) {
-                // первый IDR после старта/потери кадра/reset: SPS/PPS из конфига, если в самом кадре их нет (после reset транскодер их забыл)
+                // 启动/丢帧/reset 后的第一个 IDR：如果帧本身没有 SPS/PPS（reset 后转码器已忘记它们），则使用 config 中的 SPS/PPS
                 val types = AnnexB.nalTypes(au.data)
                 val payload = if (AnnexB.startsWithSps(au.data) && 8 in types) au.data else AnnexB.glue(cfg, au.data)
-                out.gotIdr = true                        // до feedFrame: он может сам позвать onNeedAaKeyFrame
+                out.gotIdr = true                        // 在 feedFrame 之前：它可能自己调用 onNeedAaKeyFrame
                 t.feedFrame(payload, fed * 33_333L)
                 fed++
                 t.requestSyncFrame()
             } else {
                 skippedP++
-                continue                                 // IDR в дампе AA раз в ~минуту: к нему шагаем без задержки, как мост по сокету
+                continue                                 // AA 转储中约每分钟一个 IDR：无延迟地跳到它，如桥接器通过 socket 一样
             }
             if (SystemClock.elapsedRealtime() - lastStats >= 5000) {
                 AppLog.i("transcode_test: ${stats()}")

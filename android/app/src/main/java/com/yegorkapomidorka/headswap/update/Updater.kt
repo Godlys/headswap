@@ -32,11 +32,11 @@ import java.net.URL
 import java.security.MessageDigest
 import java.util.Locale
 
-/** Настройки и кэш обновлений (отдельный файл prefs): последний найденный релиз переживает перезапуск. */
+/** 更新设置与缓存（独立的 prefs 文件）：最近一次找到的 release 在重启后仍然保留。 */
 class UpdatePrefs(ctx: Context) {
     private val sp: SharedPreferences = ctx.getSharedPreferences("update", Context.MODE_PRIVATE)
 
-    /** Автопроверка при открытии приложения; по умолчанию вкл. */
+    /** 打开应用时自动检查更新；默认开启。 */
     var enabled: Boolean
         get() = sp.getBoolean("enabled", true)
         set(v) = sp.edit().putBoolean("enabled", v).apply()
@@ -45,7 +45,7 @@ class UpdatePrefs(ctx: Context) {
         get() = sp.getLong("lastCheck", 0)
         set(v) = sp.edit().putLong("lastCheck", v).apply()
 
-    /** Версия, плашку которой закрыли на главном экране: до следующей версии не показываем. */
+    /** 在主屏幕上被关闭了横幅的版本：在该版本之前不再显示横幅。 */
     var dismissed: String
         get() = sp.getString("dismissed", "") ?: ""
         set(v) = sp.edit().putString("dismissed", v).apply()
@@ -66,9 +66,9 @@ class UpdatePrefs(ctx: Context) {
 }
 
 /**
- * Обновление из приложения: последний релиз GitHub (UpdateLogic), APK в cacheDir/update, установка через PackageInstaller.
- * Подтверждение установки показывает система; подпись нового APK она же сверяет с установленным.
- * Состояние для экранов - поля [step], [progress], [error] (экраны опрашивают их в tick).
+ * 在应用内更新：GitHub 最新 release（UpdateLogic），APK 存放在 cacheDir/update，通过 PackageInstaller 安装。
+ * 安装确认框由系统显示；新 APK 的签名也由系统与已安装版本比对。
+ * 供界面使用的状态是 [step]、[progress]、[error] 字段（界面在 tick 中轮询它们）。
  */
 object Updater {
     enum class Step { IDLE, CHECKING, DOWNLOADING, INSTALLING }
@@ -77,12 +77,12 @@ object Updater {
     var step = Step.IDLE
         private set
 
-    /** 0..100, пока [step] = DOWNLOADING. */
+    /** 0..100，当 [step] = DOWNLOADING 时有效。 */
     @Volatile
     var progress = 0
         private set
 
-    /** Последняя ошибка проверки, скачивания или установки; сбрасывается следующим действием. */
+    /** 最近一次检查、下载或安装的错误；会被下一次操作清零。 */
     @Volatile
     var error: UiText? = null
         private set
@@ -91,7 +91,7 @@ object Updater {
     private var installed: String? = null
     private var cleaned = false
 
-    /** Ошибка с текстом для пользователя; message - для лога. */
+    /** 带用户可读文本的错误；message 用于日志。 */
     private class Fail(val text: UiText, message: String) : Exception(message)
 
     fun installedVersion(ctx: Context): String = installed ?: (
@@ -102,11 +102,11 @@ object Updater {
         } ?: "?"
         ).also { installed = it }
 
-    /** Сохранённый релиз, если он новее установленной версии. */
+    /** 已保存的 release，前提是它比已安装的版本更新。 */
     fun available(ctx: Context): UpdateLogic.Release? =
         UpdatePrefs(ctx).release()?.takeIf { UpdateLogic.isNewer(it.version, installedVersion(ctx)) }
 
-    /** Плашка на главном экране: проверка включена, есть новее и её не закрыли. */
+    /** 主屏幕横幅：自动检查已开启、存在更新版本且未被关闭。 */
     fun banner(ctx: Context): UpdateLogic.Release? {
         val p = UpdatePrefs(ctx)
         if (!p.enabled) return null
@@ -117,7 +117,7 @@ object Updater {
         UpdatePrefs(ctx).dismissed = version
     }
 
-    /** При открытии приложения: проверить, если включено и пора; заодно убрать APK уже установленных версий. */
+    /** 打开应用时：如果已开启且到时间了就检查；顺带清理已安装版本的 APK。 */
     fun maybeCheck(ctx: Context) {
         if (!cleaned && step == Step.IDLE) {
             cleaned = true
@@ -130,7 +130,7 @@ object Updater {
         if (UpdateLogic.shouldCheck(p.enabled, p.lastCheck, System.currentTimeMillis())) check(ctx, manual = false)
     }
 
-    /** Запросить последний релиз в фоне. manual: ошибку показать тостом. */
+    /** 在后台请求最新 release。manual：出错时用 toast 提示。 */
     fun check(ctx: Context, manual: Boolean) {
         synchronized(this) {
             if (step != Step.IDLE) return
@@ -160,8 +160,8 @@ object Updater {
     }
 
     /**
-     * Кнопка «Обновить»: разрешение на установку, диалог с описанием релиза, затем скачивание и установка.
-     * confirm = false (кнопка в настройках) - без диалога: при крупном системном шрифте его кнопки бывают не видны.
+     * “更新”按钮：安装权限、带 release 说明的对话框，然后下载并安装。
+     * confirm = false（设置中的按钮）时不弹对话框：系统字体较大时，对话框按钮可能看不见。
      */
     fun start(act: Activity, confirm: Boolean = true) {
         val rel = available(act) ?: return
@@ -195,8 +195,8 @@ object Updater {
     }
 
     /**
-     * Тело диалога обновления: описание релиза в окошке со своим скроллом, под ним размер и прочее.
-     * Через setMessage длинное описание на части прошивок растягивает диалог и выталкивает кнопки за экран.
+     * 更新对话框的内容：release 说明放在带独立滚动条的窗口里，其下方显示大小等信息。
+     * 用 setMessage 时，长说明在部分固件上会把对话框拉长并把按钮挤出屏幕。
      */
     private fun dialogBody(ctx: Context, notes: String, footer: String): View {
         val pad = ctx.dp(24)
@@ -255,7 +255,7 @@ object Updater {
         }, "update-download").start()
     }
 
-    /** Итог сессии PackageInstaller (InstallReceiver). При успехе процесс обычно убит раньше, чем это придёт. */
+    /** PackageInstaller 会话的结果（InstallReceiver）。成功时，进程通常在收到该结果前就已被终止。 */
     fun onInstallStatus(ctx: Context, status: Int, message: String?, confirm: Intent?) {
         when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
@@ -299,7 +299,7 @@ object Updater {
         main.post { Toast.makeText(app, text.get(AppLocale.wrap(app)), Toast.LENGTH_LONG).show() }
     }
 
-    // --- сеть ---
+    // --- 网络 ---
 
     private fun open(url: String, app: Context): HttpURLConnection = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 15_000
@@ -321,7 +321,7 @@ object Updater {
         return fetchFromPage(app)
     }
 
-    /** Без API: github.com/.../releases/latest отвечает редиректом на страницу тега; APK по имени headswap-<версия>.apk. */
+    /** 不走 API：github.com/.../releases/latest 会重定向到 tag 页面；APK 按 headswap-<版本>.apk 命名。 */
     private fun fetchFromPage(app: Context): UpdateLogic.Release {
         val c = open(UpdateLogic.PAGE_LATEST, app)
         c.instanceFollowRedirects = false
@@ -355,7 +355,7 @@ object Updater {
         )
     }
 
-    /** APK в cacheDir/update; уже скачанный и совпавший по размеру и SHA-256 не качаем заново (установку могли отменить). */
+    /** APK 存放在 cacheDir/update；已下载且大小和 SHA-256 匹配的文件不重复下载（安装可能被取消过）。 */
     private fun fetchApk(app: Context, rel: UpdateLogic.Release): File {
         val dir = File(app.cacheDir, "update").apply { mkdirs() }
         val f = File(dir, "headswap-${rel.version}.apk")
@@ -397,7 +397,7 @@ object Updater {
         }
     }
 
-    /** Наш пакет и версия новее установленной: иначе система откажет уже после подтверждения пользователя. */
+    /** 必须是我们自己的包且版本比已安装的更新：否则系统会在用户确认之后拒绝安装。 */
     @Suppress("DEPRECATION")
     private fun checkApk(app: Context, f: File) {
         val pm = app.packageManager
@@ -428,7 +428,7 @@ object Updater {
                     f.inputStream().use { it.copyTo(out) }
                     s.fsync(out)
                 }
-                // FLAG_MUTABLE: установщик дописывает в intent статус и intent подтверждения
+                // FLAG_MUTABLE：安装器会向 intent 中写入状态及确认用的 intent
                 val pi = PendingIntent.getBroadcast(
                     app, id, Intent(app, InstallReceiver::class.java),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
@@ -461,7 +461,7 @@ object Updater {
     private fun hex(b: ByteArray): String = b.joinToString("") { "%02x".format(it) }
 }
 
-/** Статус сессии PackageInstaller -> Updater (подтверждение установки, ошибки). */
+/** PackageInstaller 会话状态 -> Updater（安装确认、错误）。 */
 class InstallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)

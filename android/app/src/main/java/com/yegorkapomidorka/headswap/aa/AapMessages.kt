@@ -7,7 +7,7 @@ import com.yegorkapomidorka.headswap.PbText
 import com.yegorkapomidorka.headswap.Schema
 import java.io.ByteArrayOutputStream
 
-/** Protobuf (proto2) руками для AAP: varint, строки и вложенные сообщения; поля пишутся в порядке вызова. */
+/** 手写 AAP 用 Protobuf（proto2）：varint、字符串和嵌套消息；字段按调用顺序写入。 */
 class AapPb {
     private val out = ByteArrayOutputStream()
 
@@ -25,7 +25,7 @@ class AapPb {
 
     private fun tag(field: Int, wire: Int) = raw(((field shl 3) or wire).toLong())
 
-    /** Любой varint-тип (int32/enum/bool/uint). Отрицательный Int расширяется знаком: 10 байт, как в protoc. */
+    /** 任意 varint 类型（int32/enum/bool/uint）。负 Int 符号扩展：10 字节，与 protoc 一致。 */
     fun v(field: Int, value: Long): AapPb {
         tag(field, 0)
         raw(value)
@@ -50,15 +50,15 @@ class AapPb {
     fun toByteArray(): ByteArray = out.toByteArray()
 }
 
-/** Канал, тип и protobuf-байты исходящего сообщения. */
+/** 出站消息的通道、类型和 protobuf 字节。 */
 class AapOut(val chan: Int, val type: Int, val payload: ByteArray)
 
-/** Параметры ServiceDiscoveryResponse; по умолчанию как в pc-headunit (доказано на AA 17.7). */
+/** ServiceDiscoveryResponse 的参数；默认值与 pc-headunit 相同（已在 AA 17.7 上验证）。 */
 data class AapSdOptions(
     val resolution: String = "1280x720",
     val fps: Int = 30,
     val density: Int = 160,
-    /** margin_width / margin_height VideoConfiguration: AA оставляет такие поля (пополам по краям), интерфейс только внутри. */
+    /** VideoConfiguration 的 margin_width / margin_height：Android Auto 保留这些边距（两侧各半），界面只在边距内侧。 */
     val marginW: Int = 0,
     val marginH: Int = 0,
     val mic: Boolean = true,
@@ -66,12 +66,12 @@ data class AapSdOptions(
     val fullAudio: Boolean = false,
     val extraServices: Boolean = true,
     val vehicleId: String = "headlessunit-001",
-    /** Марка автомобиля вместо «Google» (поле 2 и 17.1; производитель ГУ и модель не трогаем); null = по умолчанию. Эксперимент: логотип на кнопке выхода AA. */
+    /** 车辆品牌替代「Google」（字段 2 和 17.1；不动车机厂商和型号）；null = 默认。实验：Android Auto 退出按钮上的徽标。 */
     val carMake: String? = null,
 )
 
 object AapMessages {
-    // --- каналы (headunit-revived Channel.kt) ---
+    // --- 通道（headunit-revived Channel.kt）---
     const val CH_CONTROL = 0
     const val CH_SENSOR = 1
     const val CH_VIDEO = 2
@@ -93,7 +93,7 @@ object AapMessages {
 
     fun channelName(chan: Int) = CHANNEL_NAMES[chan] ?: "CH$chan"
 
-    // --- control (ControlMsgType) ---
+    // --- control（ControlMsgType）---
     const val VERSION_REQUEST = 1
     const val VERSION_RESPONSE = 2
     const val ENCAPSULATED_SSL = 3
@@ -125,7 +125,7 @@ object AapMessages {
         0x00FF to "UNEXPECTED_MESSAGE", 0xFFFF to "FRAMING_ERROR",
     )
 
-    // --- media (video/audio/mic) ---
+    // --- media（video/audio/mic）---
     const val MEDIA_DATA = 0x0000
     const val MEDIA_CODEC_CONFIG = 0x0001
     const val MEDIA_SETUP = 0x8000
@@ -145,7 +145,7 @@ object AapMessages {
         0x8009 to "UPDATE_UI_CONFIG_REQUEST", 0x800A to "UPDATE_UI_CONFIG_REPLY", 0x800B to "AUDIO_UNDERFLOW",
     )
 
-    // --- sensor / input (те же 0x80xx, смысл по каналу) ---
+    // --- sensor / input（同为 0x80xx，含义取决于通道）---
     const val SENSOR_START_REQUEST = 0x8001
     const val SENSOR_START_RESPONSE = 0x8002
     const val SENSOR_EVENT = 0x8003
@@ -160,7 +160,7 @@ object AapMessages {
         0x8007 to "NAVIGATION_CURRENT_POSITION",
     )
 
-    /** Статус плеера (ch9), состояние/дистанция/позиция навигации (ch10) идут примерно раз в секунду: в UI-лог не пишем (смену трека и манёвра громко пишет MetaRelay). */
+    /** 播放器状态（ch9）、导航状态/距离/位置（ch10）大约每秒一次：不写入 UI 日志（曲目切换和转弯提示由 MetaRelay 显式记录）。 */
     fun isPeriodicMeta(chan: Int, type: Int) =
         (chan == CH_MEDIA_PLAYBACK && type == AaMeta.MEDIA_STATUS) ||
             (chan == CH_NAVIGATION && (type == AaMeta.NAV_DISTANCE || type == AaMeta.NAV_STATE || type == AaMeta.NAV_POSITION))
@@ -172,7 +172,7 @@ object AapMessages {
 
     fun messageName(chan: Int, type: Int): String {
         if (type in CONTROL_NAMES && (type <= 26 || type == 0x00FF || type == 0xFFFF)) {
-            // 1 на медиа-каналах = CODEC_CONFIG
+            // 媒体通道上的 1 = CODEC_CONFIG
             if (!(type == 1 && isMediaChan(chan))) return CONTROL_NAMES.getValue(type)
         }
         if (chan == CH_SENSOR) SENSOR_NAMES[type]?.let { return it }
@@ -184,27 +184,27 @@ object AapMessages {
         return "UNKNOWN_0x%04x".format(type)
     }
 
-    // --- сырые (нешифрованные) сообщения ---
+    // --- 原始（未加密）消息 ---
     const val VERSION_MAJOR = 1
     const val VERSION_MINOR = 2
 
-    /** [type=1][major=1][minor=2]; в кадре: 00 03 00 06 00 01 00 01 00 02. */
+    /** [type=1][major=1][minor=2]；帧内：00 03 00 06 00 01 00 01 00 02。 */
     fun versionRequestBody(): ByteArray =
         byteArrayOf(0, VERSION_REQUEST.toByte(), 0, VERSION_MAJOR.toByte(), 0, VERSION_MINOR.toByte())
 
-    /** AuthResponse{status = 0}; в кадре: 00 03 00 04 00 04 08 00. */
+    /** AuthResponse{status = 0}；帧内：00 03 00 04 00 04 08 00。 */
     val AUTH_COMPLETE_DATA = byteArrayOf(0x08, 0x00)
 
     class VersionResponse(val major: Int, val minor: Int, val status: Int, val options: ByteArray)
 
-    /** Тело после type: major u16, minor u16, status i16, опции. */
+    /** type 之后的消息体：major u16、minor u16、status i16、选项。 */
     fun parseVersionResponse(body: ByteArray): VersionResponse? {
         if (body.size < 6) return null
         fun u16(i: Int) = ((body[i].toInt() and 0xFF) shl 8) or (body[i + 1].toInt() and 0xFF)
         return VersionResponse(u16(0), u16(2), u16(4).toShort().toInt(), body.copyOfRange(6, body.size))
     }
 
-    // --- билдеры: что шлёт головное устройство ---
+    // --- 构建器：head unit 发送的消息 ---
     fun channelOpenResponse(chan: Int) = AapOut(chan, CHANNEL_OPEN_RESPONSE, AapPb().v(1, 0).toByteArray())
 
     fun pingResponse(timestamp: Long) = AapOut(CH_CONTROL, PING_RESPONSE, AapPb().v(1, timestamp).toByteArray())
@@ -214,19 +214,19 @@ object AapMessages {
     fun navFocusNotification(chan: Int = CH_CONTROL) =
         AapOut(chan, NAV_FOCUS_NOTIFICATION, AapPb().v(1, NAV_FOCUS_PROJECTED).toByteArray())
 
-    /** Всегда выдаём фокус: AapControl.kt:450-455. request: 1 GAIN, 2 TRANSIENT, 3 MAY_DUCK, 4 RELEASE. */
+    /** 始终授予焦点：AapControl.kt:450-455。request：1 GAIN、2 TRANSIENT、3 MAY_DUCK、4 RELEASE。 */
     fun audioFocusResponse(request: Int, chan: Int = CH_CONTROL): AapOut? {
         val state = when (request) {
-            1 -> 1      // STATE_GAIN
-            2 -> 2      // STATE_GAIN_TRANSIENT
-            3 -> 7      // STATE_GAIN_TRANSIENT_GUIDANCE_ONLY
-            4 -> 3      // STATE_LOSS
+            1 -> 1      // STATE_GAIN（获得焦点）
+            2 -> 2      // STATE_GAIN_TRANSIENT（临时获得）
+            3 -> 7      // STATE_GAIN_TRANSIENT_GUIDANCE_ONLY（仅临时获得以播报指引）
+            4 -> 3      // STATE_LOSS（焦点丢失）
             else -> return null
         }
         return AapOut(chan, AUDIO_FOCUS_NOTIFICATION, AapPb().v(1, state).toByteArray())
     }
 
-    /** Сразу после Config на аудио-канале (AapControl.kt:123-131). */
+    /** 紧跟音频通道上的 Config 之后（AapControl.kt:123-131）。 */
     fun audioFocusGainUnsolicited() =
         AapOut(CH_CONTROL, AUDIO_FOCUS_NOTIFICATION, AapPb().v(1, 1).bool(2, true).toByteArray())
 
@@ -237,7 +237,7 @@ object AapMessages {
     fun byebyeResponse() = AapOut(CH_CONTROL, BYEBYE_RESPONSE, ByteArray(0))
 
     fun mediaConfig(chan: Int, maxUnacked: Int) =
-        AapOut(chan, MEDIA_CONFIG, AapPb().v(1, 2).v(2, maxUnacked).v(3, 0).toByteArray())     // STATUS_READY, index 0
+        AapOut(chan, MEDIA_CONFIG, AapPb().v(1, 2).v(2, maxUnacked).v(3, 0).toByteArray())     // STATUS_READY，索引 0
 
     fun videoFocusNotification(projected: Boolean = true, unsolicited: Boolean = true) =
         AapOut(CH_VIDEO, MEDIA_VIDEO_FOCUS_NOTIFICATION, AapPb().v(1, if (projected) 1 else 2).bool(2, unsolicited).toByteArray())
@@ -247,18 +247,18 @@ object AapMessages {
     fun micResponse(success: Boolean, sessionId: Int = 0) =
         AapOut(CH_MIC, MEDIA_MIC_RESPONSE, AapPb().v(1, if (success) 0 else -7).v(2, sessionId).toByteArray())
 
-    /** DATA микрофона HU -> телефон: канал MIC, type 0, [timestamp u64 BE мкс][PCM16 mono 16 кГц]; кадр шифрованный, флаги 0x0b. */
+    /** 车机 → 手机的麦克风 DATA：通道 MIC，type 0，[timestamp u64 BE 微秒][PCM16 单声道 16 kHz]；帧已加密，标志 0x0b。 */
     fun micData(tsUs: Long, pcm: ByteArray) = AapOut(CH_MIC, MEDIA_DATA, AaMicFormat.dataPayload(tsUs, pcm))
 
     fun bindingResponse(chan: Int = CH_INPUT) = AapOut(chan, INPUT_BINDING_RESPONSE, AapPb().v(1, 0).toByteArray())
 
     fun sensorStartResponse(chan: Int = CH_SENSOR) = AapOut(chan, SENSOR_START_RESPONSE, AapPb().v(1, 0).toByteArray())
 
-    /** SensorBatch{driving_status=[{status}]}; 0 = UNRESTRICTED. */
+    /** SensorBatch{driving_status=[{status}]}；0 = UNRESTRICTED。 */
     fun drivingStatusEvent(status: Int = 0) =
         AapOut(CH_SENSOR, SENSOR_EVENT, AapPb().msg(13, AapPb().v(1, status)).toByteArray())
 
-    /** SensorBatch{night_mode=[{is_night_mode}]}. */
+    /** SensorBatch{night_mode=[{is_night_mode}]}。 */
     fun nightModeEvent(night: Boolean = false) =
         AapOut(CH_SENSOR, SENSOR_EVENT, AapPb().msg(10, AapPb().bool(1, night)).toByteArray())
 
@@ -268,13 +268,13 @@ object AapMessages {
     const val TOUCH_POINTER_DOWN = 5
     const val TOUCH_POINTER_UP = 6
 
-    /** Один палец: InputReport{timestamp ns, touch_event{pointer, action_index 0, action}}. */
+    /** 单指：InputReport{timestamp ns, touch_event{pointer, action_index 0, action}}。 */
     fun touchEvent(action: Int, x: Int, y: Int, timestampNs: Long, pointerId: Int = 0): AapOut =
         touchEvent(action, 0, listOf(TouchPoint(pointerId, x, y)), timestampNs)
 
     /**
-     * InputReport{timestamp ns, touch_event{pointer x N, action_index, action}}: все активные пальцы в одном событии,
-     * action_index = позиция в [points] пальца, вызвавшего POINTER_DOWN/UP (как MotionEvent.getActionIndex).
+     * InputReport{timestamp ns, touch_event{pointer × N, action_index, action}}：所有活动手指在同一事件中，
+     * action_index = 触发 POINTER_DOWN/UP 的手指在 [points] 中的位置（类似 MotionEvent.getActionIndex）。
      */
     fun touchEvent(action: Int, actionIndex: Int, points: List<TouchPoint>, timestampNs: Long): AapOut {
         val touch = AapPb()
@@ -283,23 +283,23 @@ object AapMessages {
         return AapOut(CH_INPUT, INPUT_EVENT, AapPb().v(1, timestampNs).msg(3, touch).toByteArray())
     }
 
-    /** InputReport{timestamp ns, key_event{keys=[{keycode, down, metastate 0, longpress false}]}}. */
+    /** InputReport{timestamp ns, key_event{keys=[{keycode, down, metastate 0, longpress false}]}}。 */
     fun keyEvent(timestampNs: Long, keycode: Int, down: Boolean): AapOut {
         val key = AapPb().v(1, keycode).bool(2, down).v(3, 0).bool(4, false)
         return AapOut(CH_INPUT, INPUT_EVENT, AapPb().v(1, timestampNs).msg(4, AapPb().msg(1, key)).toByteArray())
     }
 
-    /** Android KEYCODE_ROTARY_CONTROLLER (AA): шайба, двигает фокус по элементам интерфейса. */
+    /** Android KEYCODE_ROTARY_CONTROLLER（Android Auto）：旋钮，在界面元素间移动焦点。 */
     const val KEYCODE_ROTARY_CONTROLLER = 65536
 
-    /** InputReport{timestamp ns, relative_event{data=[{keycode ROTARY_CONTROLLER, delta}]}}; delta > 0 по часовой. */
+    /** InputReport{timestamp ns, relative_event{data=[{keycode ROTARY_CONTROLLER, delta}]}}；delta > 0 为顺时针。 */
     fun rotaryEvent(timestampNs: Long, delta: Int): AapOut {
         val rel = AapPb().v(1, KEYCODE_ROTARY_CONTROLLER).v(2, delta)
         return AapOut(CH_INPUT, INPUT_EVENT, AapPb().v(1, timestampNs).msg(6, AapPb().msg(1, rel)).toByteArray())
     }
 
     // --- ServiceDiscoveryResponse ---
-    /** KeyCode.supported из headunit-revived (input/KeyCode.kt:9-61), номера Android KeyEvent. */
+    /** 来自 headunit-revived 的 KeyCode.supported（input/KeyCode.kt:9-61），Android KeyEvent 编号。 */
     val KEYCODES_SUPPORTED: List<Int> = listOf(
         1, 2, 4, 19, 20, 21, 22, 23, 126, 127, 85, 87, 88, 84, 5, 209, 24, 25, 61, 62, 66, 3, 79, 86,
         6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
@@ -324,7 +324,7 @@ object AapMessages {
         val vehicleType = o.vehicleType ?: if (o.mic) VEHICLE_TYPE_CAR else VEHICLE_TYPE_MOTORCYCLE
         val carMake = o.carMake?.takeIf { it.isNotBlank() }
         var vehicleId = if (vehicleType == VEHICLE_TYPE_MOTORCYCLE) o.vehicleId + "-moto" else o.vehicleId
-        // другой vehicleId - AA заводит новый профиль машины, а не берёт закешированный с «Google»
+        // 不同的 vehicleId - Android Auto 会创建新的车辆配置文件，而不是使用「Google」的缓存配置
         if (carMake != null) vehicleId += "-" + carMake.lowercase().filter { it.isLetterOrDigit() }
         val make = carMake ?: "Google"
         val (width, height) = o.resolution.split("x").map { it.toInt() }
@@ -337,18 +337,18 @@ object AapMessages {
         }
         val r = AapPb()
 
-        // sensor
+        // 传感器
         r.msg(1, AapPb().v(1, CH_SENSOR).msg(2, AapPb()
             .msg(1, AapPb().v(1, SENSOR_DRIVING_STATUS))
             .msg(1, AapPb().v(1, SENSOR_NIGHT))))
 
-        // video
+        // 视频
         val vc = AapPb().v(1, resCode).v(2, if (o.fps == 30) 2 else 1).v(3, o.marginW).v(4, o.marginH).v(5, o.density)
             .v(8, 10000).v(10, MEDIA_CODEC_VIDEO_H264_BP)
         r.msg(1, AapPb().v(1, CH_VIDEO).msg(3, AapPb()
             .v(1, MEDIA_CODEC_VIDEO_H264_BP).v(2, AUDIO_NONE).msg(4, vc).bool(5, true)))
 
-        // input
+        // 输入
         val input = AapPb()
         for (k in KEYCODES_SUPPORTED) input.v(1, k)
         input.msg(2, AapPb().v(1, width).v(2, height))
@@ -370,20 +370,20 @@ object AapMessages {
 
         if (o.extraServices) {
             r.msg(1, AapPb().v(1, CH_MEDIA_PLAYBACK).msg(9, AapPb()))
-            r.msg(1, AapPb().v(1, CH_NAVIGATION).msg(8, AapPb().v(1, 1000).v(2, 2)))    // ImageCodesOnly
+            r.msg(1, AapPb().v(1, CH_NAVIGATION).msg(8, AapPb().v(1, 1000).v(2, 2)))    // ImageCodesOnly（仅图像编码）
         }
 
         r.str(2, make).str(3, "Desktop Head Unit").str(4, "2025").str(5, vehicleId)
-            .v(6, 0)                                                // DRIVER_POSITION_LEFT
+            .v(6, 0)                                                // DRIVER_POSITION_LEFT（左侧驾驶位）
             .str(7, "Google").str(8, "Desktop Head Unit").str(9, "1").str(10, "0.1.0")
-            .bool(11, false).bool(12, false).v(13, 0).str(14, carMake ?: "Open Headunit")   // подпись плитки выхода в лаунчере AA
+            .bool(11, false).bool(12, false).v(13, 0).str(14, carMake ?: "Open Headunit")   // Android Auto 启动器中退出磁贴的标签
         r.msg(17, AapPb()
             .str(1, make).str(2, "Desktop Head Unit").str(3, "2025").str(4, vehicleId)
             .str(5, "Google").str(6, "Desktop Head Unit").str(7, "1").str(8, "0.1.0").v(9, vehicleType))
         return AapOut(CH_CONTROL, SERVICE_DISCOVERY_RESPONSE, r.toByteArray())
     }
 
-    // --- разбор входящих (для логики и лога) ---
+    // --- 入站消息解析（供逻辑和日志使用）---
     private fun s(name: String, vararg f: Pair<Int, FieldDef>) = Schema(name, f.toMap())
     private fun i(n: String) = FieldDef(n, Kind.INT)
     private fun b(n: String) = FieldDef(n, Kind.BOOL)
@@ -425,7 +425,7 @@ object AapMessages {
         INPUT_BINDING_RESPONSE to s("BindingResponse", 1 to i("status")),
     )
 
-    // ch9 / ch10 (aasdk mediaplayback / navigationstatus)
+    // ch9 / ch10（aasdk 的 mediaplayback / navigationstatus）
     private val PLAYBACK_SCHEMAS: Map<Int, Schema> = mapOf(
         AaMeta.MEDIA_STATUS to s(
             "MediaPlaybackStatus", 1 to i("state"), 2 to t("media_source"), 3 to i("playback_seconds"),
@@ -469,7 +469,7 @@ object AapMessages {
         ),
     )
 
-    /** Одна строка: протобуф-тело с именами полей, если схема известна, иначе hex-префикс. */
+    /** 单行输出：已知 schema 时输出带字段名的 protobuf 消息体，否则输出 hex 前缀。 */
     fun describe(chan: Int, type: Int, payload: ByteArray, maxLen: Int = 600): String {
         val schema = when {
             type == MEDIA_CODEC_CONFIG && isMediaChan(chan) -> null

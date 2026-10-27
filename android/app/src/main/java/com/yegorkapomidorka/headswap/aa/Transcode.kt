@@ -2,72 +2,72 @@ package com.yegorkapomidorka.headswap.aa
 
 import com.yegorkapomidorka.headswap.AnnexB
 
-/** Куда транскодер отдаёт результат (реализует ядро моста). Вызовы идут с нитей MediaCodec. */
+/** 转码器输出结果的目标（由桥接器核心实现）。调用发生在 MediaCodec 线程上。 */
 interface TranscodeOutput {
-    /** SPS+PPS энкодера (Annex-B, 4-байтные старт-коды). */
+    /** 编码器的 SPS+PPS（Annex-B，4 字节起始码）。 */
     fun onEncoderConfig(csd: ByteArray)
 
-    /** Кадр энкодера (Annex-B). */
+    /** 编码器帧（Annex-B）。 */
     fun onEncoderFrame(data: ByteArray, key: Boolean)
 
     fun onTranscodeError(msg: String)
 
-    /** Декодеру нужен новый IDR от AA (кадр потерян). */
+    /** 解码器需要 Android Auto 发来新的 IDR（帧已丢失）。 */
     fun onNeedAaKeyFrame()
 }
 
 /**
- * AA H.264 -> декодер (Surface) -> Surface входа энкодера -> H.264 для CarLife. Реализация на MediaCodec
- * (AaTranscoder); ядро моста работает с интерфейсом, чтобы логика проверялась на JVM.
+ * Android Auto H.264 → 解码器（Surface）→ 编码器输入 Surface → 供 CarLife 使用的 H.264。基于 MediaCodec
+ * 的实现（AaTranscoder）；桥接器核心面向接口编程，以便逻辑可在 JVM 上测试。
  */
 interface VideoTranscoder {
     /**
-     * CODEC_CONFIG AA (SPS+PPS). Новый SPS -> декодер будет пересоздан на следующем IDR.
-     * Не блокирует, обрабатывается на нити транскодера; "nofeedthread" в tuning - старый синхронный путь.
+     * Android Auto 的 CODEC_CONFIG（SPS+PPS）。新的 SPS → 解码器将在下一个 IDR 时重建。
+     * 不阻塞，在转码器线程上处理；tuning 中的 "nofeedthread" 是旧的同步路径。
      */
     fun feedConfig(annexB: ByteArray)
 
     /**
-     * Кадр AA (access unit). Первый кадр декодеру должен быть IDR.
-     * Не блокирует, обрабатывается на нити транскодера (очередь полна -> кадр теряется до IDR, onNeedAaKeyFrame);
-     * "nofeedthread" в tuning - старый синхронный путь.
+     * Android Auto 帧（access unit）。给解码器的第一帧必须是 IDR。
+     * 不阻塞，在转码器线程上处理（队列满 → 帧被丢弃直到 IDR，onNeedAaKeyFrame）；
+     * tuning 中的 "nofeedthread" 是旧的同步路径。
      */
     fun feedFrame(annexB: ByteArray, ptsUs: Long)
 
     /**
-     * Сбросить декодер (новая AA-сессия): энкодер остаётся жить. Не блокирует, выполняется на нити транскодера
-     * после уже принятых кадров; "nofeedthread" в tuning - старый синхронный путь.
+     * 重置解码器（新的 Android Auto 会话）：编码器继续存活。不阻塞，在已接收的帧之后于转码器线程上执行；
+     * tuning 中的 "nofeedthread" 是旧的同步路径。
      */
     fun resetDecoder()
 
     fun requestSyncFrame()
 
-    /** Начать переход с кадра заглушки в картинку AA (зум-растворение) с первого следующего кадра. Без GL - ничего. */
+    /** 从下一帧开始，由占位帧过渡到 Android Auto 画面（缩放溶解）。没有 GL 则不做任何事。 */
     fun startIntro(banner: android.graphics.Bitmap) {}
 
-    /** Целевая частота выхода (0 = не ограничивается). */
+    /** 目标输出帧率（0 = 不限制）。 */
     val targetFps: Int get() = 0
 
-    /** Сменить целевую частоту на лету, без пересоздания кодека. */
+    /** 动态更改目标帧率，无需重建编解码器。 */
     fun setTargetFps(fps: Int) {}
 
-    /** Текущий битрейт энкодера, бит/с (0 = неизвестен). */
+    /** 编码器当前比特率，比特/秒（0 = 未知）。 */
     val currentBitrate: Int get() = 0
 
-    /** Сменить битрейт энкодера на лету (адаптация под скорость слива ГУ), без пересоздания кодека. Ошибки не бросает. */
+    /** 动态更改编码器比特率（适配车机排空速度），无需重建编解码器。不抛异常。 */
     fun setBitrate(bps: Int) {}
 
-    /** Строка статистики за окно с прошлого вызова (задержка декодер->энкодер, fps, повторы). */
+    /** 自上次调用以来的窗口统计字符串（解码器→编码器延迟、fps、重复帧数）。 */
     fun statsLine(): String
 
     fun stop()
 }
 
-/** Разбор Annex-B потока H.264 (чистая JVM-логика): NAL-ы и access unit-ы. */
+/** 解析 Annex-B H.264 流（纯 JVM 逻辑）：NAL 单元和 access unit。 */
 object H264Stream {
     class AccessUnit(val data: ByteArray, val idr: Boolean)
 
-    /** NAL-ы потока целиком, каждый с 4-байтным старт-кодом. */
+    /** 整个流的 NAL 单元，每个带 4 字节起始码。 */
     fun nalUnits(stream: ByteArray): List<ByteArray> {
         val d = AnnexB.normalize(stream)
         val starts = ArrayList<Int>()
@@ -90,16 +90,16 @@ object H264Stream {
 
     fun nalType(nal: ByteArray): Int = if (nal.size > 4) nal[4].toInt() and 0x1F else -1
 
-    /** SPS и PPS (первые) из конфига/потока. */
+    /** 从配置/流中取 SPS 和 PPS（第一个）。 */
     fun spsPps(stream: ByteArray): Pair<ByteArray?, ByteArray?> {
         val nals = nalUnits(stream)
         return Pair(nals.firstOrNull { nalType(it) == 7 }, nals.firstOrNull { nalType(it) == 8 })
     }
 
     /**
-     * Делит поток на access unit-ы: новая картинка начинается на слайсе с first_mb_in_slice == 0
-     * (старший бит первого байта после заголовка NAL = 1) либо на SPS/PPS/SEI/AUD после слайсов.
-     * Возвращает (SPS+PPS первого кадра, список AU).
+     * 将流切分为 access unit：新图像从 first_mb_in_slice == 0 的 slice 开始
+     * （NAL 头之后第一个字节的最高位 = 1），或者从 slice 之后的 SPS/PPS/SEI/AUD 开始。
+     * 返回（第一帧的 SPS+PPS，AU 列表）。
      */
     fun split(stream: ByteArray): Pair<ByteArray?, List<AccessUnit>> {
         val nals = nalUnits(stream)

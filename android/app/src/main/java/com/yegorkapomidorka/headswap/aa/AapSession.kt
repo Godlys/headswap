@@ -13,27 +13,27 @@ import java.util.concurrent.atomic.AtomicLong
 import com.yegorkapomidorka.headswap.aa.AapFraming as F
 import com.yegorkapomidorka.headswap.aa.AapMessages as M
 
-/** Куда падает видео от AA: чистый Annex-B без заголовков AAP. */
+/** AA 的视频去向:纯 Annex-B,不带 AAP 头。 */
 interface AaVideoSink {
-    /** CODEC_CONFIG: SPS+PPS. */
+    /** CODEC_CONFIG: SPS+PPS。 */
     fun onCodecConfig(annexB: ByteArray)
 
-    /** DATA: один кадр (8-байтный timestamp AAP снят), ptsUs из этого timestamp. */
+    /** DATA:一帧(8 字节 AAP timestamp 已剥离),ptsUs 取自该 timestamp。 */
     fun onFrame(annexB: ByteArray, ptsUs: Long)
 
-    /** Телефон просит VIDEO_FOCUS NATIVE (плитка «Выйти» в AA). Ответ AA отправляет вызывающий позже (AaPeer.sendVideoFocusNative). */
+    /** 手机请求 VIDEO_FOCUS NATIVE(AA 中的「退出」磁贴)。AA 应答由调用方稍后发送(AaPeer.sendVideoFocusNative)。 */
     fun onAaNativeFocusRequest() {}
 }
 
 class AapOptions(
     val host: String = "127.0.0.1",
     val port: Int = 5277,
-    /** Сторож тишины только до первого VIDEO MEDIA_START; после него сессия молчать может (статичный экран, нет Ping). */
+    /** 静默看门狗只到第一个 VIDEO MEDIA_START;之后会话可保持静默(静态画面,无 Ping)。 */
     val preVideoTimeoutMs: Long = 30_000,
-    val maxUnackedVideo: Int = 12,         // AapControl.kt maxUnackedFor(): 12 для сокета
+    val maxUnackedVideo: Int = 12,         // AapControl.kt maxUnackedFor():12 用于套接字
     val maxUnackedAudio: Int = 30,
     val sd: AapSdOptions = AapSdOptions(),
-    /** Если задан, SDR строится в момент запроса телефона (мост: звук зависит от FEATURE_CONFIG ГУ). */
+    /** 若设置,则在手机发起请求时构建 SDR(桥:声音取决于车机的 FEATURE_CONFIG)。 */
     val sdProvider: (() -> AapSdOptions)? = null,
     val tls12Only: Boolean = false,
 )
@@ -48,38 +48,38 @@ class AapStats {
 }
 
 /**
- * Одна сессия Android Auto head unit: TCP-клиент к серверу ГУ в AA (127.0.0.1:5277). Порт
- * pc-headunit/aap/session.py: Version -> TLS в plain-кадрах -> AuthComplete -> шифрованный обмен ->
- * ByeBye / shutdownOutput / дочитать до EOF / close (сервер 5277 одноразовый, грязный обрыв его глушит).
+ * 单个 Android Auto head unit 会话:到 AA 中车机服务器的 TCP 客户端(127.0.0.1:5277)。
+ * 流程 pc-headunit/aap/session.py:Version -> plain 帧内 TLS -> AuthComplete -> 加密通信 ->
+ * ByeBye / shutdownOutput / 读到 EOF / close(5277 服务器一次性,脏断开会使其沉默)。
  *
- * Своя нить; sendTouch/requestStop можно звать из любой. log(line, ui): ui=false для потока видео-кадров.
+ * 独立线程;sendTouch/requestStop 可从任意线程调用。log(line, ui):视频帧流时 ui=false。
  */
-/** Что мост требует от AA-сессии. */
-/** Палец AA-тача: pointer_id и координаты кадра AA. */
+/** 桥接层对 AA 会话的要求。 */
+/** AA 触摸的手指:pointer_id 与 AA 帧坐标。 */
 data class TouchPoint(val id: Int, val x: Int, val y: Int)
 
 interface AaPeer {
-    /** Тач со всеми активными пальцами; action_index - позиция в [points] пальца, вызвавшего POINTER_DOWN/UP. */
+    /** 带全部活动手指的触摸;action_index 是触发 POINTER_DOWN/UP 的手指在 [points] 中的位置。 */
     fun sendTouch(action: Int, actionIndex: Int, points: List<TouchPoint>)
 
-    /** Один палец с id 0. */
+    /** 单个 id 为 0 的手指。 */
     fun sendTouch(action: Int, x: Int, y: Int) = sendTouch(action, 0, listOf(TouchPoint(0, x, y)))
 
     fun requestKeyFrame()
 
-    /** Нажатие кнопки (Android KeyEvent keycode): down, затем up. По умолчанию игнорируется. */
+    /** 按键(Android KeyEvent keycode):先 down,再 up。默认忽略。 */
     fun sendKey(keycode: Int) {}
 
-    /** Поворот шайбы на delta щелчков (> 0 по часовой). По умолчанию игнорируется. */
+    /** 旋钮旋转 delta 格(> 0 顺时针)。默认忽略。 */
     fun sendRotary(delta: Int) {}
 
-    /** PCM16 mono 16 кГц микрофона -> телефону, пока открыта микрофонная сессия AA. По умолчанию игнорируется. */
+    /** 麦克风 PCM16 单声道 16 kHz -> 发送给手机,在 AA 麦克风会话打开期间。默认忽略。 */
     fun sendMicPcm(pcm: ByteArray, capturedAtUs: Long) {}
 
-    /** VideoFocusNotification NATIVE (unsolicited = false): ГУ ушёл с проекции. По умолчанию игнорируется. */
+    /** VideoFocusNotification NATIVE(unsolicited = false):车机已退出投屏。默认忽略。 */
     fun sendVideoFocusNative() {}
 
-    /** Ночной режим AA (сенсор NIGHT): запоминается и уходит, как только телефон запустил сенсор. По умолчанию игнорируется. */
+    /** AA 夜间模式(NIGHT 传感器):先记住,等手机启动传感器后发出。默认忽略。 */
     fun sendNightMode(night: Boolean) {}
 }
 
@@ -102,11 +102,11 @@ class AapSession(
     @Volatile var established = false
         private set
 
-    /** TCP к серверу ГУ установлен (false в конце сессии = connection refused / недоступен). */
+    /** 已建立到车机服务器的 TCP(false 在会话结束时 = connection refused / 不可达)。 */
     @Volatile var connected = false
         private set
 
-    /** Телефон открыл видеоканал (VIDEO MEDIA_START). */
+    /** 手机已打开视频通道(VIDEO MEDIA_START)。 */
     @Volatile var videoStarted = false
         private set
     private var establishedAtNs = 0L
@@ -149,7 +149,7 @@ class AapSession(
         thread?.join(timeoutMs)
     }
 
-    /** Корректное завершение: нить сама отправит ByeBye и закроет сокет. */
+    /** 正常结束:线程自行发送 ByeBye 并关闭套接字。 */
     fun requestStop(reason: String) {
         userStop = true
         stop(reason)
@@ -159,14 +159,14 @@ class AapSession(
         if (stopReason == null) stopReason = reason
     }
 
-    /** action 0 DOWN, 1 UP, 2 MOVE, 5 POINTER_DOWN, 6 POINTER_UP; координаты в пикселях кадра AA. Игнорируется до готовности сессии. */
+    /** action 0 DOWN, 1 UP, 2 MOVE, 5 POINTER_DOWN, 6 POINTER_UP;坐标单位为 AA 帧像素。会话就绪前忽略。 */
     override fun sendTouch(action: Int, actionIndex: Int, points: List<TouchPoint>) {
         if (!established || stopReason != null) {
             log("AA touch($action,$actionIndex,$points) пропущен: сессия ${if (established) "завершается" else "ещё не готова"}", true)
             return
         }
         try {
-            // uint64 нс, строго > 0 и монотонно; System.nanoTime() сам по себе может быть отрицательным/произвольным
+            // uint64 纳秒,严格 > 0 且单调递增;System.nanoTime() 本身可能是负数/任意值
             val ts = System.nanoTime() - clockBaseNs + 1_000_000_000L
             outQueue.offer(MsgJob(M.touchEvent(action, actionIndex, points, ts), false, "touch ts=${ts}ns"))
         } catch (e: Throwable) {
@@ -174,7 +174,7 @@ class AapSession(
         }
     }
 
-    /** Нажатие кнопки: down, затем up (Android KeyEvent keycode). Игнорируется до готовности сессии. */
+    /** 按键:先 down,再 up(Android KeyEvent keycode)。会话就绪前忽略。 */
     override fun sendKey(keycode: Int) {
         if (!established || stopReason != null) {
             log("AA key($keycode) пропущен: сессия ${if (established) "завершается" else "ещё не готова"}", true)
@@ -189,7 +189,7 @@ class AapSession(
         }
     }
 
-    /** Поворот шайбы: relative_event KEYCODE_ROTARY_CONTROLLER. Игнорируется до готовности сессии. */
+    /** 旋钮旋转:relative_event KEYCODE_ROTARY_CONTROLLER。会话就绪前忽略。 */
     override fun sendRotary(delta: Int) {
         if (!established || stopReason != null) {
             log("AA rotary($delta) пропущен: сессия ${if (established) "завершается" else "ещё не готова"}", true)
@@ -204,8 +204,8 @@ class AapSession(
     }
 
     /**
-     * Просит у телефона ключевой кадр циклом VideoFocus NATIVE -> (пауза) -> PROJECTED unsolicited
-     * (headunit-revived AapTransport.sendKeyframeCycleRelease + focusCycleGainRunnable).
+     * 通过 VideoFocus NATIVE -> (暂停) -> PROJECTED unsolicited 循环向手机请求关键帧
+     * (headunit-revived AapTransport.sendKeyframeCycleRelease + focusCycleGainRunnable)。
      */
     override fun requestKeyFrame() {
         if (!established || !videoStarted || stopReason != null || !writerActive) {
@@ -227,7 +227,7 @@ class AapSession(
         t.start()
     }
 
-    /** VideoFocus NATIVE одним сообщением (без возврата в PROJECTED): ГУ покинул CarLife после «Выйти». */
+    /** 单个 VideoFocus NATIVE 消息(不回到 PROJECTED):车机在「退出」后离开了 CarLife。 */
     override fun sendVideoFocusNative() {
         if (!established || stopReason != null || !writerActive) {
             log("AA VideoFocus NATIVE пропущен: сессия ${if (!established) "не готова" else "завершается"}", true)
@@ -255,13 +255,13 @@ class AapSession(
         outQueue.offer(MsgJob(M.nightModeEvent(night), false, "night=$night"))
     }
 
-    /** PCM микрофона: нарезается на кадры по 128 мс и уходит в окно maxUnacked; без открытой микрофонной сессии игнорируется. */
+    /** 麦克风 PCM:按 128 ms 切成帧并进入 maxUnacked 窗口;没有打开的麦克风会话则忽略。 */
     override fun sendMicPcm(pcm: ByteArray, capturedAtUs: Long) {
         if (stopReason != null || !writerActive) return
         if (uplink.feed(pcm, capturedAtUs) == AaMicUplink.Feed.OVERFLOW) micAbort("телефон не подтверждает кадры микрофона (очередь переполнена)")
     }
 
-    /** Закрыть микрофонную сессию по инициативе HU: телефону уходит ошибка, источнику звука - close. */
+    /** 由 HU 主动关闭麦克风会话:向手机发送错误,向音频源发送 close。 */
     private fun micAbort(why: String) {
         val sum = uplink.close() ?: return
         log("AA MIC прервана: $why; $sum", true)
@@ -275,10 +275,10 @@ class AapSession(
         val ms = micSink
         if (open) {
             if (ms == null) {
-                send(M.micResponse(success = false))                    // захвата нет: открытие отклоняем
+                send(M.micResponse(success = false))                    // 无采集:拒绝打开
                 return
             }
-            if (uplink.isOpen) {                                         // повторный Open: та же сессия
+            if (uplink.isOpen) {                                         // 重复 Open:同一会话
                 send(M.micResponse(success = true, sessionId = micSid))
                 return
             }
@@ -298,14 +298,14 @@ class AapSession(
             if (!accepted) {
                 uplink.close()
                 log("AA MIC open отклонён (нет источника звука)", true)
-                send(M.micResponse(success = false))                    // как раньше: отказ с session_id 0
+                send(M.micResponse(success = false))                    // 同以前:以 session_id 0 拒绝
                 return
             }
             micSeq = sid
             micSid = sid
             log("AA MIC open принят: session=$sid, окно maxUnacked=$window, кадры по ${AaMicFormat.CHUNK_BYTES} Б", true)
             send(M.micResponse(success = true, sessionId = sid))
-            uplink.activate()                                            // DATA только после ответа в очереди
+            uplink.activate()                                            // 仅在应答入队后发送 DATA
         } else {
             val sid = micSid
             val sum = uplink.close()
@@ -336,7 +336,7 @@ class AapSession(
                     Socket().also { it.connect(InetSocketAddress(opts.host, opts.port), 5000) }
                 }).invoke()
             } catch (e: IOException) {
-                // сервер ГУ не слушает: тихий выход без ByeBye и итогов, мост сам повторит
+                // 车机服务器未监听:静默退出,不发 ByeBye 和总结,桥接层会自行重试
                 log("AA сервер ${opts.host}:${opts.port} недоступен: ${e.javaClass.simpleName}: ${e.message}", false)
                 stopReason = "$UNAVAILABLE_REASON${e.javaClass.simpleName}"
                 return
@@ -393,7 +393,7 @@ class AapSession(
         }
     }
 
-    // --- сокет / кадры ---
+    // --- 套接字 / 帧 ---
     private fun sendRaw(data: ByteArray) {
         stats.txFrames++
         sock.getOutputStream().write(data)
@@ -427,10 +427,10 @@ class AapSession(
         return frames.removeFirst()
     }
 
-    // --- исходящая очередь ---
-    // После handshake ВСЕ исходящие кадры (сообщения, touch, ответы TLS-слоя) идут через одну очередь и
-    // одну нить: wrap и write строго атомарно, иначе запись TLS с номером N может уйти после N+1
-    // (или не уйти вовсе), и телефон рвёт TLS. До handshake пишет сама нить сессии напрямую.
+    // --- 出站队列 ---
+    // handshake 之后,所有出站帧(消息、touch、TLS 层应答)都经过同一个队列和同一条线程:
+    // wrap 和 write 严格原子,否则编号 N 的 TLS 记录可能在 N+1 之后发出(或根本不发出),
+    // 手机会断开 TLS。handshake 之前由会话线程直接写入。
     private sealed interface Job
     private class MsgJob(val out: AapOut, val media: Boolean, val note: String) : Job
     private object TlsFlushJob : Job
@@ -469,7 +469,7 @@ class AapSession(
                     }
                 }
             } catch (e: Throwable) {
-                // wrap мог пройти, а запись нет: поток TLS рассинхронизирован, продолжать нельзя
+                // wrap 可能已成功而写入失败:TLS 流已失步,不能继续
                 fatal = true
                 peerClosed = true
                 if (stopReason == null) stopReason = "сбой исходящей записи: ${e.javaClass.simpleName}: ${e.message}"
@@ -482,10 +482,10 @@ class AapSession(
         }
     }
 
-    /** Ставит сообщение в исходящую очередь (никогда не пишет в сокет из вызывающей нити). */
+    /** 将消息放入出站队列(绝不在调用线程中写套接字)。 */
     private fun send(out: AapOut, media: Boolean = false, note: String = "") {
         if (!writerActive) {
-            if (fatal) return                       // writer умер: сессия уже закрывается
+            if (fatal) return                       // writer 已死:会话已在关闭
             throw IllegalStateException("writer не запущен")
         }
         outQueue.offer(MsgJob(out, media, note))
@@ -495,7 +495,7 @@ class AapSession(
         if (tls.wantsWrap()) outQueue.offer(TlsFlushJob)
     }
 
-    /** Дождаться, пока writer отправит всё накопленное (или сдохнет). */
+    /** 等待 writer 发完所有积压数据(或退出)。 */
     private fun flushWriter(timeoutMs: Long) {
         if (!writerActive) return
         val latch = CountDownLatch(1)
@@ -525,7 +525,7 @@ class AapSession(
         )
     }
 
-    // --- handshake ---
+    // --- 握手 ---
     private fun versionExchange() {
         val body = M.versionRequestBody()
         val frame = F.buildFrame(F.CHANNEL_CONTROL, F.FLAGS_PLAIN_BULK, body)
@@ -581,7 +581,7 @@ class AapSession(
         sendRaw(F.buildPlain(F.CHANNEL_CONTROL, M.AUTH_COMPLETE, M.AUTH_COMPLETE_DATA))
     }
 
-    // --- основной цикл ---
+    // --- 主循环 ---
     private fun serve() {
         while (stopReason == null) {
             readMore(POLL_MS)
@@ -623,8 +623,8 @@ class AapSession(
         }
         val type = u16(fr.body, 0)
         if (type == M.ENCAPSULATED_SSL) {
-            // Пост-handshake записи TLS (тикеты TLS 1.3) могут прийти plain-кадрами; они обязаны пройти
-            // через TLS-слой: он считает записи, пропуск сломал бы расшифровку всех следующих.
+            // handshake 之后的 TLS 记录(TLS 1.3 ticket)可能以 plain 帧到达;它们必须经过 TLS 层:
+            // TLS 层会计数记录,跳过会破坏之后所有记录的解密。
             tls.decrypt(fr.body.copyOfRange(2, fr.body.size), drain = false)
             log("AA RX CONTROL(0) ENCAPSULATED_SSL len=${fr.body.size - 2} post-handshake TLS (plain frame)", false)
             flushTls()
@@ -639,7 +639,7 @@ class AapSession(
             onMediaData(chan, type, payload)
             return
         }
-        // ack микрофона идёт 8 раз в секунду, статус плеера и дистанция навигации - раз в секунду: в файл, не в UI
+        // 麦克风 ack 每秒 8 次,播放器状态和导航距离每秒 1 次:写入文件,不进 UI
         logMsg("RX", chan, type, payload, media = (chan == M.CH_MIC && type == M.MEDIA_ACK) || M.isPeriodicMeta(chan, type))
 
         if (type == M.CHANNEL_OPEN_REQUEST) {
@@ -652,7 +652,7 @@ class AapSession(
             chan == M.CH_SENSOR -> onSensor(type, payload)
             chan == M.CH_INPUT -> if (type == M.INPUT_BINDING_REQUEST) send(M.bindingResponse(chan))
             chan == M.CH_VIDEO || chan in M.AUDIO_CHANNELS || chan == M.CH_MIC -> onMediaControl(chan, type, payload)
-            // MEDIA_PLAYBACK / NAVIGATION: телефон только присылает статус, отвечать нечего; метаданные -> мост
+            // MEDIA_PLAYBACK / NAVIGATION:手机只发送状态,无需应答;元数据 -> 桥接层
             chan == M.CH_MEDIA_PLAYBACK || chan == M.CH_NAVIGATION -> AaMeta.dispatch(chan, type, payload, metaSink)?.let {
                 log("AA META ${M.channelName(chan)} ${M.messageName(chan, type)}: $it", !M.isPeriodicMeta(chan, type))
             }
@@ -681,7 +681,7 @@ class AapSession(
                 exitOk = true
             }
             M.VOICE_SESSION_NOTIFICATION -> audioSink?.onVoiceSession((firstVarint(payload, 1) ?: 0L).toInt())
-            // CHANNEL_CLOSE_NOTIFICATION и прочее: только лог
+            // CHANNEL_CLOSE_NOTIFICATION 等:仅记录日志
         }
     }
 
@@ -690,7 +690,7 @@ class AapSession(
         val sensorType = firstVarint(payload, 1)?.toInt()
         send(M.sensorStartResponse())
         if (sensorType == 10) {                                            // NIGHT
-            nightSensorStarted = true                                      // до send: смена темы в этот момент уйдёт следом
+            nightSensorStarted = true                                      // 在 send 之前:此刻主题切换会随后发出
             send(M.nightModeEvent(nightMode))
             log("AA SENSOR NIGHT запущен, night=$nightMode", true)
         }
@@ -715,12 +715,12 @@ class AapSession(
                 if (mode == 1) send(M.videoFocusNotification(projected = true, unsolicited = false))
                 else if (mode == 2) {
                     log("AA VIDEO_FOCUS_REQUEST NATIVE («Выйти»)", true)
-                    sink.onAaNativeFocusRequest()      // не отвечаем: NATIVE уйдёт, когда ГУ реально выйдет из CarLife
+                    sink.onAaNativeFocusRequest()      // 不回复:NATIVE 将在车机真正退出 CarLife 时发出
                 }
             }
             type == M.MEDIA_MIC_REQUEST && chan == M.CH_MIC -> onMicRequest(payload)
             type == M.MEDIA_ACK && chan == M.CH_MIC -> onMicAck(payload)
-            // MEDIA_STOP, MEDIA_ACK остальных каналов, UPDATE_UI_CONFIG_*: только лог
+            // 其余通道的 MEDIA_STOP、MEDIA_ACK、UPDATE_UI_CONFIG_*:仅记录日志
         }
     }
 
@@ -758,15 +758,15 @@ class AapSession(
         }
 
         logMsg("RX", chan, type, body, media = true, note = note, text = "")
-        // Видео подтверждает и DATA, и CODEC_CONFIG (AapTransport.kt dispatchVideo), аудио только DATA.
+        // 视频同时确认 DATA 和 CODEC_CONFIG(AapTransport.kt dispatchVideo),音频只确认 DATA。
         if (chan == M.CH_VIDEO || isData) send(M.mediaAck(chan, sessionIds[chan] ?: 0), media = true)
     }
 
-    // --- завершение ---
+    // --- 结束 ---
     /**
-     * ByeBye, ждём ответ, закрываем так, чтобы сервер увидел чистый конец: ByeByeRequest (если телефон
-     * не закончил сам), ждём ByeByeResponse или EOF до 2 с, shutdownOutput, дочитываем до EOF до 1.5 с
-     * (закрытие с непрочитанными данными шлёт RST), и только потом close.
+     * 发送 ByeBye,等待应答,以服务器能看到干净结尾的方式关闭:ByeByeRequest(如果手机未自行结束),
+     * 等待 ByeByeResponse 或 EOF 最多 2 秒,shutdownOutput,读到 EOF 最多 1.5 秒
+     * (带未读数据关闭会发送 RST),最后才 close。
      */
     private fun shutdown() {
         log("AA завершаю: ${stopReason ?: "конец"}", true)
@@ -782,7 +782,7 @@ class AapSession(
         } catch (e: Exception) {
             log("AA при отправке ByeBye: ${e.javaClass.simpleName}: ${e.message}", true)
         }
-        stopWriter()                                               // всё накопленное уходит до shutdownOutput
+        stopWriter()                                               // 所有积压数据在 shutdownOutput 前发出
         try {
             try {
                 sock.shutdownOutput()
@@ -798,7 +798,7 @@ class AapSession(
         }
     }
 
-    /** Читаем (и отвечаем на bye телефона) до ByeByeResponse, EOF или таймаута. */
+    /** 读取(并应答手机的 bye)直到 ByeByeResponse、EOF 或超时。 */
     private fun waitBye(timeoutMs: Long) {
         val deadline = System.nanoTime() + timeoutMs * 1_000_000
         try {
@@ -841,10 +841,10 @@ class AapSession(
     private fun u16(b: ByteArray, i: Int) = ((b[i].toInt() and 0xFF) shl 8) or (b[i + 1].toInt() and 0xFF)
 
     companion object {
-        /** Начало причины конца сессии, когда TCP к серверу ГУ не установился (дальше имя исключения; ConnectException = отказ). */
+        /** 会话结束原因的开头,用于 TCP 未能连上车机服务器时(后面接异常名;ConnectException = 拒绝)。 */
         const val UNAVAILABLE_REASON = "сервер недоступен: "
 
-        /** Начало причины конца сессии, когда TCP принят, но VERSION_RESPONSE не пришёл. */
+        /** 会话结束原因的开头,用于 TCP 已连接但未收到 VERSION_RESPONSE。 */
         const val NO_VERSION_RESPONSE_REASON = "нет VERSION_RESPONSE"
 
         private const val VERSION_TIMEOUT_MS = 10_000L      // AapTransport.kt HANDSHAKE_TIMEOUT_MS

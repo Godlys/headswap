@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="diag_title">自我诊断</string>
+    <string name="diag_analyzing">正在分析日志…</string>
+    <string name="diag_failed">无法分析日志。</string>
+    <string name="diag_send">将日志发送给开发者</string>
+    <string name="diag_privacy">分析在手机上进行，日志不会发送到任何地方</string>
+    <string name="diag_home_btn">自我诊断</string>
+    <string name="diag_settings_item">连接诊断</string>
+
+    <string name="diag_lead_one">我们找到了一个可能的原因。</string>
+    <plurals name="diag_lead_many">
+        <item quantity="one">我们发现 %d 个可能的原因。先从第一个开始——它最有可能。</item>
+        <item quantity="other">我们发现 %d 个可能的原因。先从第一个开始——它最有可能。</item>
+    </plurals>
+    <string name="diag_lead_next">然后尝试下一个。</string>
+    <string name="diag_lead_all_failed">所有建议都无效——请发送日志，我们会进行调查。</string>
+
+    <string name="diag_chip_likely">最有可能</string>
+    <string name="diag_chip_maybe">可能</string>
+    <string name="diag_chip_not_helped">无效</string>
+    <string name="diag_how_to_fix">如何修复</string>
+    <string name="diag_show_log">日志内容 ⌄</string>
+    <string name="diag_hide_log">日志内容 ⌃</string>
+    <string name="diag_show_solution">显示解决方案 ⌄</string>
+    <string name="diag_helped">有效</string>
+    <string name="diag_not_helped">无效</string>
+
+    <string name="diag_done_title">太好了，问题解决了</string>
+    <string name="diag_done_sub">提示“%1$s”有效</string>
+    <string name="diag_done">完成</string>
+
+    <string name="diag_works_title">没有明显故障</string>
+    <string name="diag_none_title">未找到原因</string>
+    <string name="diag_none_text">日志中没有显示原因。请将日志发送给开发者——我们会进行调查并添加提示。</string>
+
+    <string name="diag_old_version">建议更新 Headswap：已经修复了很多问题。</string>
+    <string name="diag_old_update">更新</string>
+
+    <string name="diag_act_open_aa">打开 Android Auto</string>
+    <string name="diag_act_video">视频设置</string>
+    <string name="diag_act_audio">声音设置</string>
+    <string name="diag_act_battery">电池设置</string>
+    <string name="diag_act_autostart">自启动</string>
+    <string name="diag_act_app_settings">权限</string>
+    <string name="diag_act_wifi">Wi-Fi 设置</string>
+    <string name="diag_act_hotspot">热点</string>
+    <string name="diag_act_bluetooth">Bluetooth</string>
+    <string name="diag_act_onboarding">重新运行设置</string>
+    <string name="diag_act_update">检查更新</string>
+    <string name="diag_act_share_log">发送日志</string>
+</resources>

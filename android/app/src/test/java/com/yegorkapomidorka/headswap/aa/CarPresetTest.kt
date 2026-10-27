@@ -7,7 +7,7 @@ import org.junit.Test
 class CarPresetTest {
     @Test
     fun presetsApplyAsWritten() {
-        // режим с кропом без перекодирования молча стал бы 1280×720: такой пресет «изменён вручную» сразу после выбора
+        // 带裁剪但不转码的模式会静默变成 1280×720：这种预设在选择后立即被视为“手动修改”
         for (p in CarPreset.values()) {
             assertEquals(p.name, p.settings.videoMode, p.settings.videoMode.effective(p.settings.transcode))
             assertEquals(p.name, p.settings.aaDensity, AaDensity.parse(p.settings.aaDensity))

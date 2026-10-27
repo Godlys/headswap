@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 默认语言为英语；俄语位于 values-ru。分区相关字符串位于 strings_<area>.xml。 -->
+<resources>
+    <string name="app_name" translatable="false">Headswap</string>
+    <string name="notif_channel_bridge" translatable="false">Headswap</string>
+    <string name="action_stop">停止</string>
+    <string name="action_open_aa">打开 Android Auto</string>
+
+    <string name="lang_title">语言</string>
+    <string name="lang_system">跟随系统</string>
+    <!-- 语言名称以其自身语言书写，不做翻译。 -->
+    <string name="lang_en" translatable="false">English</string>
+    <string name="lang_ru" translatable="false">Русский</string>
+</resources>

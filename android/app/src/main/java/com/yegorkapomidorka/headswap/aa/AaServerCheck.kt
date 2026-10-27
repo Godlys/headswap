@@ -15,33 +15,33 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-/** Итог одной пробы сервера ГУ (127.0.0.1:5277). */
+/** 一次车机服务器（127.0.0.1:5277）探测的结果。 */
 enum class ProbeResult {
-    /** Полное рукопожатие прошло, сессия закрыта штатно. */
+    /** 完整握手已通过，会话正常关闭。 */
     ALIVE,
 
-    /** ECONNREFUSED: порт никто не слушает. */
+    /** ECONNREFUSED：没有进程监听该端口。 */
     REFUSED,
 
-    /** TCP принят, но VERSION_RESPONSE или TLS не пришли (или порт не принимает подключения). */
+    /** TCP 已接受，但 VERSION_RESPONSE 或 TLS 未到达（或端口不接受连接）。 */
     HUNG,
 
-    /** Прочее: нет сертификатов, сервер сразу закрыл соединение, TLS отвергнут, сбой сокета. */
+    /** 其他：没有证书、服务器立即关闭连接、TLS 被拒绝、套接字故障。 */
     ERROR,
 }
 
-/** Одна попытка пробы. Настоящая - AaSessionProbe, в тестах подменяется. */
+/** 一次探测尝试。真实实现是 AaSessionProbe，在测试中会被替换。 */
 fun interface ServerProbe {
     fun probeOnce(): ProbeResult
 }
 
 /**
- * Проба живости сервера ГУ: настоящая AA-сессия (AapSession, как в мосте и AaProbe), а не голый connect.
- * Голое connect/close без рукопожатия вешает сервер 5277, поэтому после TCP попытка идёт до конца:
- * VERSION, TLS, AuthComplete, ответ на SERVICE_DISCOVERY_REQUEST и сразу штатное закрытие (ByeBye, EOF, close).
- * Видео и каналы не открываем: после SDR телефон шлёт запросы каналов, но сессия уже останавливается.
- * Возвращается только когда сессия закрылась полностью (onEnd): иначе мост подключился бы поверх неё.
- * Автоматически не запускается: даже короткая проба сбивает Android Auto, следующее подключение машины получало отказ или зависание.
+ * 车机服务器存活探测：真实的 AA 会话（AapSession，与桥接器和 AaProbe 相同），而非裸 connect。
+ * 不带握手的裸 connect/close 会挂起 5277 服务器，因此 TCP 之后探测会走完全程：
+ * VERSION、TLS、AuthComplete、对 SERVICE_DISCOVERY_REQUEST 的响应，随即正常关闭（ByeBye、EOF、close）。
+ * 不打开视频和通道：SDR 之后手机会发送通道请求，但会话已经停止。
+ * 仅在会话完全关闭（onEnd）后才返回：否则桥接器就会连接到它上面。
+ * 不会自动运行：即使短暂的探测也会干扰 Android Auto，汽车下次连接时会收到拒绝或挂起。
  */
 class AaSessionProbe(
     private val loadCreds: () -> AapCredentials,
@@ -57,7 +57,7 @@ class AaSessionProbe(
         override fun onFrame(annexB: ByteArray, ptsUs: Long) {}
     }
 
-    /** Чем кончилась последняя попытка (ошибка подключения или причина конца сессии): для тоста при ERROR. */
+    /** 上次尝试如何结束（连接错误或会话结束原因）：用于 ERROR 时的 toast 提示。 */
     @Volatile var lastDetail: String = ""
         private set
 
@@ -77,10 +77,10 @@ class AaSessionProbe(
         val session = AapSession(
             creds, NoSink, AapOptions(host = host, port = port, sdProvider = sd),
             log = { line, _ ->
-                // "AA " -> "aa ": LogDiag/logdiag.py ищут маркеры моста ("AA TCP подключено", "AA сервер ... недоступен") подстрокой по всей строке
+                // "AA " -> "aa "：LogDiag/logdiag.py 在整个字符串中按子串搜索桥接器标记（如「AA TCP 已连接」「AA 服务器...不可用」）
                 log("SRVCHECK | " + (if (line.startsWith("AA ")) "aa " + line.substring(3) else line), false)
-                // телефон спросил возможности ГУ: это последний шаг, дальше штатное закрытие. Ответ на SDR
-                // лог-хук опережает (dispatch логирует до onControl), но в очереди он встанет раньше ByeBye
+                // 手机询问车机能力：这是最后一步，接下来是正常关闭。SDR 的响应
+                // 早于日志钩子（dispatch 在 onControl 之前记录日志），但在队列中它会排在 ByeBye 之前
                 if ("RX CONTROL(0) SERVICE_DISCOVERY_REQUEST" in line) ref.get()?.requestStop("проба: SDR получен")
             },
             socketFactory = {
@@ -104,8 +104,8 @@ class AaSessionProbe(
         )
         ref.set(session)
         session.start()
-        // Пока TCP принят, прерывать нельзя: stop до TLS закрыл бы сокет без ByeBye. Сессия сама ограничена
-        // таймаутами (version 10 с, TLS 15 с, bye и EOF ещё несколько секунд), поэтому ждём её конца.
+        // TCP 一旦被接受就不能中断：TLS 之前的 stop 会在没有 ByeBye 的情况下关闭套接字。会话自身受
+        // 超时限制（version 10 秒、TLS 15 秒、bye 和 EOF 还有几秒），因此等待它结束。
         var establishedAtMs = 0L
         var interrupted = false
         var polls = 0
@@ -113,7 +113,7 @@ class AaSessionProbe(
             try {
                 if (ended.await(50, TimeUnit.MILLISECONDS)) break
             } catch (_: InterruptedException) {
-                interrupted = true      // нить не бросаем: сессия ещё держит сокет
+                interrupted = true      // 不丢弃线程：会话仍持有套接字
             }
             if (session.established) {
                 val nowMs = System.nanoTime() / 1_000_000
@@ -139,13 +139,13 @@ class AaSessionProbe(
     companion object {
         const val CONNECT_TIMEOUT_MS = 3000
         const val SDR_WAIT_MS = 3000L
-        private const val MAX_POLLS = 120 * 20      // 120 с при опросе раз в 50 мс
+        private const val MAX_POLLS = 120 * 20      // 每 50 毫秒轮询一次，共 120 秒
 
-        /** Итог по тому, докуда дошла сессия. Таймауты рукопожатия = HUNG, всё остальное необычное = ERROR. */
+        /** 根据会话进行到哪一步得出的结果。握手超时 = HUNG，其他一切异常 = ERROR。 */
         fun classify(connectError: Throwable?, connected: Boolean, established: Boolean, endReason: String): ProbeResult = when {
             !connected -> when {
                 connectError is ConnectException && connectError.message?.contains("refused", ignoreCase = true) == true -> ProbeResult.REFUSED
-                connectError is SocketTimeoutException -> ProbeResult.HUNG       // backlog полон: порт не принимает
+                connectError is SocketTimeoutException -> ProbeResult.HUNG       // backlog 已满：端口不接受连接
                 else -> ProbeResult.ERROR
             }
             established -> ProbeResult.ALIVE
@@ -156,24 +156,24 @@ class AaSessionProbe(
 }
 
 /**
- * Ручная проба из «Для разработчиков»: одна попытка в фоновой нити, без серий и повторов.
- * Не стартует при живом мосте и подключённом USB (одноразовый сервер 5277 тогда нужен им) и не параллельно с другой.
- * Попытку, дошедшую до TCP, прервать нельзя, поэтому мост перед подключением ждёт её конца (awaitIdle).
- * Результат на состояние главного экрана не влияет.
+ * “开发者选项”中的手动探测：后台线程中尝试一次，无系列和重试。
+ * 在桥接器活跃且 USB 已连接时不会启动（此时一次性 5277 服务器是它们需要的），也不会与另一次并行。
+ * 到达 TCP 的尝试无法中断，因此桥接器在连接前会等待它结束（awaitIdle）。
+ * 结果不影响主屏幕状态。
  */
 class ManualServerCheck(
     private val probe: ServerProbe,
     private val busy: () -> Refusal?,
     private val log: (String) -> Unit,
 ) {
-    /** Почему пробу не запустили. */
+    /** 为什么没有启动探测。 */
     enum class Refusal { BRIDGE, USB, RUNNING }
 
     private val lock = ReentrantLock()
     private val idle = lock.newCondition()
     private var running = false
 
-    /** null = проба запущена, onDone позовётся из рабочей нити (detail - текст сбоя, если проба упала исключением); иначе причина отказа. */
+    /** null = 探测已启动，onDone 将从工作线程调用（detail - 如果探测因异常失败，则为故障文本）；否则为拒绝原因。 */
     fun start(onDone: (ProbeResult, String?) -> Unit): Refusal? {
         lock.withLock {
             if (running) return Refusal.RUNNING
@@ -203,7 +203,7 @@ class ManualServerCheck(
         return null
     }
 
-    /** Дождаться конца идущей пробы; false = не закончилась за timeoutMs. */
+    /** 等待进行中的探测结束；false = 在 timeoutMs 内未结束。 */
     fun awaitIdle(timeoutMs: Long): Boolean = lock.withLock {
         var left = TimeUnit.MILLISECONDS.toNanos(timeoutMs)
         var interrupted = false
@@ -220,23 +220,23 @@ class ManualServerCheck(
 }
 
 /**
- * Пассивная диагностика сервера ГУ по настоящим подключениям моста (AaConnector), сама к серверу не ходит:
- * как долго он подряд отказывает (ECONNREFUSED) и сколько раз подряд принял TCP, но не прислал VERSION_RESPONSE.
- * Короткие отказы (~6 с после ByeBye, пока AA снова слушает порт) норма: решает главный экран (HomeLogic) по порогам.
- * Серия принадлежит одному циклу коннектора: reset() в начале и в конце, старые отказы в новую поездку не попадают.
+ * 基于桥接器（AaConnector）真实连接的被动式车机服务器诊断，本身不访问服务器：
+ * 它连续拒绝（ECONNREFUSED）了多久，以及连续多少次接受了 TCP 但没有发送 VERSION_RESPONSE。
+ * 短暂拒绝（ByeBye 后约 6 秒，直到 AA 重新监听端口）是正常的：由主屏幕（HomeLogic）按阈值决定。
+ * 序列属于连接器的一个周期：开始和结束时 reset()，旧拒绝不会进入新行程。
  */
 class ServerFailures(private val now: () -> Long = { System.nanoTime() / 1_000_000 }) {
     @Volatile private var refusedSince = NONE
 
-    /** Подряд принятых по TCP подключений без VERSION_RESPONSE. */
+    /** 连续接受 TCP 连接但没有 VERSION_RESPONSE 的次数。 */
     @Volatile var versionHangs = 0
         private set
 
-    /** Хоть раз за процесс установилась настоящая AA-сессия: сервер работал. Не сбрасывается. */
+    /** 进程运行期间至少建立过一次真正的 AA 会话：服务器工作过。不会重置。 */
     @Volatile var worked = false
         private set
 
-    /** Сколько миллисекунд сервер отказывает без перерыва (0 = не отказывает). */
+    /** 服务器连续拒绝了多少毫秒（0 = 未拒绝）。 */
     val refusedForMs: Long get() = refusedSince.let { if (it == NONE) 0L else now() - it }
 
     fun onRefused() {
@@ -244,7 +244,7 @@ class ServerFailures(private val now: () -> Long = { System.nanoTime() / 1_000_0
         versionHangs = 0
     }
 
-    /** TCP принят: порт уже не отказывает (дальше решит VERSION_RESPONSE). */
+    /** TCP 已接受：端口不再拒绝（接下来由 VERSION_RESPONSE 决定）。 */
     fun onTcpAccepted() {
         refusedSince = NONE
     }
@@ -254,20 +254,20 @@ class ServerFailures(private val now: () -> Long = { System.nanoTime() / 1_000_0
         versionHangs++
     }
 
-    /** Сессия установилась: сервер работает, серии обнуляются. */
+    /** 会话已建立：服务器工作正常，序列清零。 */
     fun onEstablished() {
         reset()
         worked = true
     }
 
     /**
-     * Пора просить пользователя включить сервер (текст заглушки на ГУ): зависания подряд, отказ у сервера, который
-     * в этом процессе ещё не работал, или отказ дольше [START_HINT_REFUSED_MS] у работавшего (как HomeLogic.REFUSED_DOWN_MS).
+     * 该请求用户开启服务器了（车机上的占位文本）：连续挂起、本进程中尚未工作过的服务器被拒绝，
+     * 或曾工作过的服务器被拒绝超过 [START_HINT_REFUSED_MS]（如 HomeLogic.REFUSED_DOWN_MS）。
      */
     fun needsStart(): Boolean =
         versionHangs >= START_HINT_HANGS || (refusedSince != NONE && (!worked || refusedForMs >= START_HINT_REFUSED_MS))
 
-    /** Любой другой исход (голый EOF, TLS и т.п.), начало и конец цикла коннектора. */
+    /** 任何其他结果（裸 EOF、TLS 等），连接器周期的开始和结束。 */
     fun reset() {
         refusedSince = NONE
         versionHangs = 0
@@ -280,12 +280,12 @@ class ServerFailures(private val now: () -> Long = { System.nanoTime() / 1_000_0
     }
 }
 
-/** Ручная проба для кнопки в «Для разработчиков» (Actions.checkServer) и ожидание её конца перед подключением моста. */
+/** “开发者选项”中按钮（Actions.checkServer）的手动探测，以及在桥接器连接前等待其结束。 */
 object AaServerCheck {
     @Volatile private var manual: ManualServerCheck? = null
     @Volatile private var probe: AaSessionProbe? = null
 
-    /** Сколько мост ждёт конец ручной пробы перед подключением. Попытка сама укладывается в ~35 с. */
+    /** 桥接器在连接前等待手动探测结束的时间。尝试本身约需 35 秒。 */
     private const val AWAIT_MS = 45_000L
 
     private fun checker(ctx: Context): ManualServerCheck {
@@ -316,11 +316,11 @@ object AaServerCheck {
         }
     }
 
-    /** Кнопка в «Для разработчиков». null = проба пошла, onDone позовётся из рабочей нити (detail - причина при ERROR). */
+    /** “开发者选项”中的按钮。null = 探测已开始，onDone 将从工作线程调用（detail - ERROR 时的原因）。 */
     fun start(ctx: Context, onDone: (ProbeResult, String?) -> Unit): ManualServerCheck.Refusal? =
         checker(ctx).start { result, err -> onDone(result, err ?: if (result == ProbeResult.ERROR) probe?.lastDetail else null) }
 
-    /** AaConnector перед каждым подключением к серверу ГУ (нить коннектора, не main): ручная проба не должна держать сервер. */
+    /** AaConnector 每次连接到车机服务器前（连接器线程，非 main）：手动探测不应占用服务器。 */
     fun beforeBridgeConnect() {
         val c = manual ?: return
         if (!c.awaitIdle(AWAIT_MS)) AppLog.i("SRVCHECK проба не закончилась за $AWAIT_MS мс, подключаюсь всё равно")

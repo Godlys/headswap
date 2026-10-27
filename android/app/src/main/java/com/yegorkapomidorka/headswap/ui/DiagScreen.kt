@@ -15,8 +15,8 @@ import com.yegorkapomidorka.headswap.diag.DiagRunner
 import com.yegorkapomidorka.headswap.diag.LogDiag
 
 /**
- * «Почему не подключается»: вероятные причины по логу приложения, анализ на телефоне (diag/LogDiag).
- * Первая причина раскрыта, у каждой шаги решения с кнопками-действиями (diag/DiagActions) и отметка «Помогло / Не помогло».
+ * 「为什么连不上」：根据应用日志在手机上分析出的可能原因（diag/LogDiag）。
+ * 第一条原因默认展开，每条解决步骤都带动作按钮（diag/DiagActions）和「帮到了 / 没帮到」标记。
  */
 class DiagScreen(host: MainActivity) : Screen(host) {
     override val view: View
@@ -93,7 +93,7 @@ class DiagScreen(host: MainActivity) : Screen(host) {
         addSend(top.isEmpty() || notHelped.isNotEmpty())
     }
 
-    // ------------------------------------------------------------ карточки
+    // ------------------------------------------------------------ 卡片
 
     private fun chip(text: String, fill: Int, fg: Int): TextView = ctx.text(text, 12f, 600, fg).apply {
         background = ctx.shape(fill, 12)
@@ -136,8 +136,8 @@ class DiagScreen(host: MainActivity) : Screen(host) {
     }
 
     /**
-     * Что случилось, шаги, «Что в логе». Общее для причин и заметки works. Шагов в правиле нет -
-     * совет показывается одним шагом без номера (adviceFallback).
+     * 发生了什么、解决步骤、「日志里有什么」。原因和 works 备注通用。规则中没有步骤时，
+     * 建议以不带编号的单步形式展示（adviceFallback）。
      */
     private fun addDetails(box: LinearLayout, cause: LogDiag.Cause, withLog: Boolean = true, adviceFallback: Boolean = true) {
         val c = ctx
@@ -232,7 +232,7 @@ class DiagScreen(host: MainActivity) : Screen(host) {
         }
     }
 
-    /** Кнопка «Помогло»: заливка ok-цветом (pill из Kit приватный, строим тем же способом). */
+    /** 「帮到了」按钮：用 ok 色填充（Kit 中的 pill 是私有的，这里用同样的方式实现）。 */
     private fun okButton(label: String): LinearLayout {
         val c = ctx
         return c.hbox().apply {
@@ -277,7 +277,7 @@ class DiagScreen(host: MainActivity) : Screen(host) {
         }
     }
 
-    /** Нет причин: «Явных сбоев нет» с описанием заметки works или «Причина не найдена». */
+    /** 没有原因：显示「没有明显故障」（含 works 备注说明）或「未找到原因」。 */
     private fun emptyCard(): View {
         val c = ctx
         val works = note("works")
@@ -302,7 +302,7 @@ class DiagScreen(host: MainActivity) : Screen(host) {
         }
     }
 
-    /** Заметка old_version: версия старая, у многих причин «лечение» уже в релизе. */
+    /** old_version 备注：版本过旧，许多原因的「解法」已包含在最新版本中。 */
     private fun oldVersionNote(): View {
         val c = ctx
         return c.hbox(12).apply {

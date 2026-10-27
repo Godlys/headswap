@@ -25,7 +25,7 @@ class ReadinessStepsTest {
     fun unknownSourcesIsOptionalAndManual() {
         val s = Readiness.info(StepId.AA_UNKNOWN)
         assertEquals("aa_unknown", s.id.key)
-        // «Уже сделано» ведёт дальше и ставит ручную отметку; шаг ничего не требует и не блокирует онбординг
+        // “已完成”会继续下一步并打上手动标记；该步骤不要求任何操作，也不阻塞引导流程
         assertEquals(R.string.onb_already_done, s.skip)
         assertEquals(R.string.step_aa_unknown_hint, s.hint)
         assertNull(s.extra)
@@ -34,7 +34,7 @@ class ReadinessStepsTest {
 
     @Test
     fun serverStepIsManualWithoutExtra() {
-        // службы спецвозможностей нет: выполненность шага - только ручная отметка «Понятно»
+        // 没有无障碍服务：步骤是否完成只能靠手动标记“知道了”
         val s = Readiness.info(StepId.AUTOSTART)
         assertEquals(R.string.onb_got_it, s.skip)
         assertEquals(R.string.step_autostart_primary, s.primary)
@@ -57,7 +57,7 @@ class ReadinessStepsTest {
     @Test
     fun extraOnlyOnBackgroundStep() {
         assertEquals(listOf(StepId.BACKGROUND), Readiness.STEPS.filter { it.extra != null }.map { it.id })
-        // шаги 1 и 5 без подсказки
+        // 第 1 和第 5 步没有提示
         assertNull(Readiness.info(StepId.AA_DEV).hint)
         assertNull(Readiness.info(StepId.BACKGROUND).hint)
     }

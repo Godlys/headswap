@@ -1,15 +1,15 @@
 package com.yegorkapomidorka.headswap.link.car
 
-/** Чистая логика автостарта по Bluetooth машины, без android.*: проверяется JVM-тестами. */
+/** 汽车蓝牙自动启动的纯逻辑，不含 android.*：由 JVM 测试验证。 */
 object CarMac {
-    /** Один и тот же адрес? Регистр не важен (CDM отдаёт MAC строчными, BluetoothDevice - заглавными), null никогда не равен. */
+    /** 是同一个地址吗？大小写不重要（CDM 返回小写 MAC，BluetoothDevice 返回大写），null 永远不相等。 */
     fun same(a: String?, b: String?): Boolean = a != null && b != null && a.equals(b, ignoreCase = true)
 }
 
 /**
- * Debounce отключения машины: ГУ при переподключении даёт всплески ACL_DISCONNECTED/ACL_CONNECTED (в логе Vezel 5 циклов за 7 с),
- * гасить ожидание сразу нельзя. [arm] запускает отсчёт (повторный - сдвигает), [cancel] снимает (пришёл ACL_CONNECTED),
- * [fire] по таймеру отвечает, пора ли гасить: срок вышел и отмены не было; срабатывает один раз. Нить одна (главная).
+ * 汽车断开连接的防抖：车机在重连时会产生 ACL_DISCONNECTED/ACL_CONNECTED 的突发（Vezel 日志中 7 秒内 5 个周期），
+ * 不能立即熄灭等待。[arm] 启动倒计时（重复调用会顺延），[cancel] 取消（收到了 ACL_CONNECTED），
+ * [fire] 由定时器回答是否该熄灭了：期限已过且没有取消；只触发一次。单线程（主线程）。
  */
 class AutoOffDebounce(private val delayMs: Long, private val clock: () -> Long) {
     private var dueAt = -1L
@@ -31,7 +31,7 @@ class AutoOffDebounce(private val delayMs: Long, private val clock: () -> Long) 
     }
 }
 
-/** Не чаще раза в [intervalMs]: чужие устройства шлют ACL постоянно, лог не засоряем. */
+/** 不超过每 [intervalMs] 一次：陌生设备会持续发送 ACL，我们不污染日志。 */
 class MinInterval(private val intervalMs: Long, private val clock: () -> Long) {
     private var last = -1L
 
@@ -43,7 +43,7 @@ class MinInterval(private val intervalMs: Long, private val clock: () -> Long) {
     }
 }
 
-/** Какой защитой входить в сеть машины. Удачная защита запоминается ([CarWifi.sec]), дальше без перебора: одна сеть - один MAC. */
+/** 用哪种加密方式进入汽车网络。成功的加密会被记住（[CarWifi.sec]），之后不再穷举：一个网络对应一个 MAC。 */
 object CarSecPolicy {
     fun first(remembered: String?, hasPass: Boolean): String = when {
         !hasPass -> "open"
@@ -51,45 +51,45 @@ object CarSecPolicy {
         else -> "wpa2"
     }
 
-    /** Повтор WPA3 после неудачи WPA2 - только пока удачная защита неизвестна (иначе машина просто не в эфире). */
+    /** 在 WPA2 失败后重试 WPA3 —— 仅当成功加密尚不可知时（否则汽车根本不在线）。 */
     fun retryWpa3(remembered: String?, tried: String, hasPass: Boolean): Boolean =
         hasPass && tried == "wpa2" && remembered == null
 }
 
-/** Через сколько ожидания по Wi-Fi без 6/6 просим вход в сеть машины (до этого ГУ может успеть сама прийти в сеть телефона). */
+/** Wi-Fi 等待多久仍无 6/6 时请求进入汽车网络（在此之前车机可能已经自行连入手机网络）。 */
 const val CAR_NET_DELAY_MS = 15_000L
 
 /**
- * Машина была на связи (сессия USB/воздух, сеть машины) не дольше этого назад: сеть машины просим сразу, без
- * [CAR_NET_DELAY_MS]. Выдернули кабель, оборвался Wi-Fi: машина рядом, ждать её в сети телефона незачем (лог Павла
- * 2026-10-17: 15 с тишины на каждом переключении провод -> воздух).
+ * 汽车在此时间之前仍保持联络（USB/无线会话、汽车网络）：立即请求汽车网络，无需
+ * [CAR_NET_DELAY_MS]。拔掉线缆、Wi-Fi 中断：汽车就在附近，没必要在手机网络里等它（Pavel 的日志
+ * 2026-10-17：每次有线 -> 无线切换都有 15 秒静默）。
  */
 const val CAR_RECENT_MS = 60_000L
 
-/** Сколько система ищет сеть машины и ждёт одобрения; не нашла - подсказка про Wi-Fi вручную. */
+/** 系统搜索汽车网络并等待批准的时长；没找到 - 提示手动开启 Wi-Fi。 */
 const val CAR_NET_TIMEOUT_MS = 90_000L
 
-/** Через сколько ожидания без accept на RFCOMM `carlife` подсказываем переподключить Bluetooth (ГУ открывает его только при подключении BT). */
+/** RFCOMM `carlife` 上等待多久仍无 accept 时提示重新连接 Bluetooth（车机只在 BT 连接时打开它）。 */
 const val BT_HINT_MS = 15_000L
 
-/** Как выбранная машина подключается по воздуху; привязано к её Bluetooth-адресу (см. CarProfile). */
+/** 所选汽车如何无线连接；与它的 Bluetooth 地址绑定（参见 CarProfile）。 */
 enum class CarConnMode {
     UNKNOWN,
-    /** ГУ присылала TARGET_INFO по Bluetooth: Wi-Fi Direct, телефон входит в её группу. */
+    /** 车机通过 Bluetooth 发来过 TARGET_INFO：Wi-Fi Direct，手机加入它的组。 */
     BT_CARLIFE,
-    /** 6/6 поднялись с пира из подсети маяка, без Wi-Fi Direct. */
+    /** 6/6 是与信标子网中的对端建立起来的，没有 Wi-Fi Direct。 */
     HOTSPOT,
 }
 
-/** События, при которых решается судьба запроса сети машины. */
+/** 决定汽车网络请求命运的事件。 */
 enum class CarNetEvent { AUTO_OFF, STOP, USB_WINS, DESTROY, SESSION_START, SESSION_END }
 
-/** Чистая логика запроса сети машины, без android.*: проверяется JVM-тестами. */
+/** 汽车网络请求的纯逻辑，不含 android.*：由 JVM 测试验证。 */
 object CarNetPolicy {
     /**
-     * Пора ли слать запрос: сеть машины задана, идёт ожидание по Wi-Fi (авто или ручное), никакой сессии (ни USB, ни
-     * воздух) и 6/6 ещё нет, запрос не висит и не выдан, с начала ожидания прошло не меньше [delayMs].
-     * Wi-Fi Direct-машине ([wifiDirectCar]) сеть не запрашиваем: телефон входит в группу ГУ, а запрос только мешает.
+     * 是否该发送请求：已设置汽车网络，正在进行 Wi-Fi 等待（自动或手动），没有任何会话（既无 USB 也无
+     * 无线），6/6 尚未就绪，请求未挂起也未发出，自等待开始已过去不少于 [delayMs]。
+     * 对 Wi-Fi Direct 汽车（[wifiDirectCar]）不请求网络：手机会加入车机组，请求只会碍事。
      */
     fun shouldRequest(
         carWifiSet: Boolean,
@@ -105,18 +105,18 @@ object CarNetPolicy {
         !sixOfSixReady && !wifiDirectCar && waitedMs >= delayMs
 
     /**
-     * Задержка запроса сети машины: 0, если машина была на связи меньше [CAR_RECENT_MS] назад ([sinceCarMs], null = не
-     * была) или выбранная машина сейчас подключена по Bluetooth ([carBtNear]): она рядом и включена, ждать её в сети
-     * телефона незачем (Павел 2026-10-18: первое нажатие плитки CarLife на ГУ падало «не найдено», пока шли 15 с).
-     * Также 0, если 6/6 уже поднимались в сети этой машины ([carNetProven]): ГУ раздаёт свой Wi-Fi и в сеть телефона не
-     * ходит, а выбрать машину по Bluetooth получается не у всех (Павел 2026-10-19: CDM падал, 15 с на каждом старте).
+     * 汽车网络请求的延迟：0，如果汽车在 [CAR_RECENT_MS] 之前仍保持联络（[sinceCarMs]，null = 从未）或所选汽车
+     * 当前通过 Bluetooth 连接（[carBtNear]）：它在附近且已开机，没必要在手机网络中等待（Pavel 2026-10-18：
+     * 在 15 秒等待期间，车机上首次点击 CarLife 磁贴报「未找到」）。
+     * 如果 6/6 已在该汽车的网络中建立过（[carNetProven]），同样为 0：车机广播自己的 Wi-Fi 且不会进入手机网络，
+     * 而并非所有人都能通过 Bluetooth 选择汽车（Pavel 2026-10-19：CDM 崩溃，每次启动 15 秒）。
      */
     fun delayMs(sinceCarMs: Long?, carBtNear: Boolean = false, carNetProven: Boolean = false): Long =
         if (carBtNear || carNetProven || (sinceCarMs != null && sinceCarMs in 0 until CAR_RECENT_MS)) 0L else CAR_NET_DELAY_MS
 
     /**
-     * Отпускать ли сеть. Остановка ожидания, кабель и смерть сервиса - да. Начало и конец беспроводной сессии - нет: сеть
-     * машины держит её TCP, а после конца сессии ожидание обычно возобновляется на той же сети.
+     * 是否释放网络。停止等待、线缆和服务死亡 - 是。无线会话的开始和结束 - 否：汽车网络
+     * 承载着它的 TCP，而会话结束后等待通常会在同一网络上恢复。
      */
     fun shouldRelease(event: CarNetEvent): Boolean = when (event) {
         CarNetEvent.AUTO_OFF, CarNetEvent.STOP, CarNetEvent.USB_WINS, CarNetEvent.DESTROY -> true
@@ -124,13 +124,12 @@ object CarNetPolicy {
     }
 }
 
-/** Чистая логика подсказки «переподключи Bluetooth»: без android.*, проверяется JVM-тестами. */
+/** 「重新连接 Bluetooth」提示的纯逻辑：不含 android.*，由 JVM 测试验证。 */
 object BtReconnectHint {
     /**
-     * Показывать ли: идёт ожидание без сессии уже [BT_HINT_MS], ГУ ни разу не подключилась к RFCOMM `carlife`, хотя
-     * телефон с машиной по Bluetooth соединён (Mazda открывает carlife только в момент подключения BT), а по хотспоту
-     * эта машина раньше не подключалась. Один показ на ожидание. ГУ уже прислала TARGET_INFO ([targetInfoThisWait]) -
-     * carlife она открыла, переподключать Bluetooth незачем.
+     * 是否显示：已无会话等待 [BT_HINT_MS]，车机一次也未连接到 RFCOMM `carlife`，尽管手机与汽车已通过 Bluetooth
+     * 连接（Mazda 只在 BT 连接时刻打开 carlife），而且这辆汽车之前从未通过热点连接过。每次等待只显示一次。
+     * 车机已发来 TARGET_INFO（[targetInfoThisWait]）——它已打开 carlife，无需重新连接 Bluetooth。
      */
     fun shouldShow(
         waiting: Boolean,

@@ -5,7 +5,7 @@ import android.os.Build
 import android.os.PowerManager
 import com.yegorkapomidorka.headswap.aa.ThermalSource
 
-/** Нагрев телефона из PowerManager: статус (API 29) и прогноз headroom на 10 с (API 30; на старых и без HAL - NaN). */
+/** 来自 PowerManager 的手机温度：状态（API 29）和 10 秒 headroom 预测（API 30；旧版本和无 HAL 时为 NaN）。 */
 class PhoneThermal(ctx: Context) : ThermalSource {
     private val pm = ctx.getSystemService(PowerManager::class.java)
 

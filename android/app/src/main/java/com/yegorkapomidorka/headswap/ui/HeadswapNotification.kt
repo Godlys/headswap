@@ -17,8 +17,8 @@ import com.yegorkapomidorka.headswap.CarLifeState
 import com.yegorkapomidorka.headswap.R
 
 /**
- * Уведомление foreground-сервиса по Notification.dc.html: заголовок = состояние, текст = этапы, действие «Стоп».
- * Сервис только вызывает build(); пока он работает, тикер раз в секунду обновляет уведомление, если состояние изменилось.
+ * 前台服务通知，参照 Notification.dc.html：标题 = 状态，正文 = 阶段，动作 =「停止」。
+ * 服务只调用 build()；运行期间，ticker 每秒检查一次，若状态发生变化则更新通知。
  */
 object HeadswapNotification {
     private const val AA_PACKAGE = "com.google.android.projection.gearhead"
@@ -35,7 +35,7 @@ object HeadswapNotification {
     }
 
     private fun from(ctx: Context, channel: String, st: HomeState): Notification {
-        val loc = AppLocale.wrap(ctx)       // applicationContext не знает выбранного языка на Android 10-12
+        val loc = AppLocale.wrap(ctx)       // Android 10-12 上 applicationContext 感知不到所选语言
         val b = Notification.Builder(ctx, channel)
             .setSmallIcon(R.drawable.ic_stat_headswap)
             .setColor(0xFFF2B33D.toInt())
@@ -75,7 +75,7 @@ object HeadswapNotification {
         val nm = app.getSystemService(NotificationManager::class.java)
         handler.postDelayed(object : Runnable {
             override fun run() {
-                val st = HeadswapStatus.current(app)       // заодно обновляет переходы состояния
+                val st = HeadswapStatus.current(app)       // 顺带更新状态流转
                 if (!CarLifeState.running) {
                     ticking = false
                     lastKey = ""
@@ -93,7 +93,7 @@ object HeadswapNotification {
     }
 }
 
-/** Кнопка «Стоп» в уведомлении: пометить остановку пользователем и отдать сервису ACTION_STOP. */
+/** 通知中的「停止」按钮：标记为用户主动停止，并向服务发送 ACTION_STOP。 */
 class StopReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Actions.stopBridge(context)

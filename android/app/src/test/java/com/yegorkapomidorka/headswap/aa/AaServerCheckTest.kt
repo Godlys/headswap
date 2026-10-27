@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
-/** Ручная проба сервера ГУ на фейковом транспорте, пассивные счётчики отказов, классификация и настоящая проба по loopback. */
+/** 在假传输上的车机服务器手动探测、被动失败计数器、结果分类，以及经 loopback 的真实探测。 */
 class AaServerCheckTest {
     private class FakeProbe(private val result: ProbeResult = ProbeResult.ALIVE) : ServerProbe {
         val calls = AtomicInteger()
@@ -50,7 +50,7 @@ class AaServerCheckTest {
         }
     }
 
-    // --- ручная проба ---
+    // --- 手动探测 ---
 
     @Test
     fun manualProbeRunsOnceAndReportsResult() {
@@ -137,7 +137,7 @@ class AaServerCheckTest {
         assertTrue(c.awaitIdle(5000))
     }
 
-    // --- пассивные счётчики отказов ---
+    // --- 被动失败计数器 ---
 
     @Test
     fun refusedStreakCountsFromFirstRefusal() {
@@ -194,7 +194,7 @@ class AaServerCheckTest {
         assertTrue("reset не забывает, что сервер работал", f.worked)
     }
 
-    // --- классификация итога настоящей пробы ---
+    // --- 真实探测结果的分类 ---
 
     @Test
     fun classifyConnectFailures() {
@@ -217,7 +217,7 @@ class AaServerCheckTest {
         assertEquals(ProbeResult.ERROR, c.classify(null, true, false, "TLS handshake не прошёл: SSLHandshakeException"))
     }
 
-    // --- настоящая AapSession против фейкового "телефона" по loopback (как AapSessionTest) ---
+    // --- 真实 AapSession 对 loopback 上的假"手机"（类似 AapSessionTest）---
 
     private val creds by lazy { AapCerts.load(TestAssets.opener, "jvc") }
 
@@ -242,11 +242,11 @@ class AaServerCheckTest {
             assertTrue(accepted.await(5, TimeUnit.SECONDS))
             phone.join(10_000)
             assertFalse("скрипт телефона завис", phone.isAlive)
-            // скрипт no_video проверяет: SDR получил ответ, затем пришёл именно ByeBye, и только потом EOF
+            // no_video 脚本验证：SDR 收到响应，随后收到的正是 ByeBye，最后才是 EOF
             assertNull("ошибка телефона: ${phone.error}\n" + logs.joinToString("\n"), phone.error)
             assertTrue("HU не закрыл сокет штатно (EOF)", phone.sawEof && !phone.reset)
             assertTrue(logs.any { it.contains("SRVCHECK сессия: connected=true established=true закрытие чистое=true") })
-            // строки сессии пробы не должны совпасть с маркерами моста в LogDiag ("AA TCP подключено" и т.п.)
+            // 探测会话的日志行不应与 LogDiag 中的桥接标记（"AA TCP подключено" 等）重合
             assertTrue(logs.any { it.contains("SRVCHECK | aa TCP подключено") })
             assertFalse(logs.any { it.contains("AA TCP подключено") || it.contains("AA сессия установлена") })
         }

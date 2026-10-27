@@ -1,6 +1,6 @@
 package com.yegorkapomidorka.headswap.aa
 
-/** Элемент очереди кормления транскодера: кадр AA или команда нити кормления. */
+/** 转码器喂帧队列的元素：Android Auto 帧或喂帧线程的命令。 */
 sealed class FeedItem {
     class Frame(val annexB: ByteArray, val ptsUs: Long, val idr: Boolean, val atNs: Long) : FeedItem()
     class Config(val annexB: ByteArray) : FeedItem()
@@ -11,11 +11,11 @@ sealed class FeedItem {
 enum class Offer { ACCEPTED, DROPPED_FULL, DROPPED_GATED }
 
 /**
- * Очередь между нитью AA и нитью кормления декодера (чистая JVM-логика). Вход никогда не блокируется.
- * Кадры ограничены [maxFrames]: при переполнении кадр теряется и очередь «закрывается» до следующего IDR
- * (P без опорного кадра декодеру не нужны). IDR самодостаточен: он вытесняет все ожидающие кадры
- * (команды остаются на местах), снимает закрытие и проходит всегда. Команды ([post]) не отказывают.
- * Один потребитель ([take]), несколько производителей.
+ * Android Auto 线程与解码器喂帧线程之间的队列（纯 JVM 逻辑）。入口从不阻塞。
+ * 帧数受 [maxFrames] 限制：溢出时帧被丢弃，队列「关闭」直到下一个 IDR
+ * （没有参考帧的 P 帧解码器不需要）。IDR 自给自足：它驱逐所有等待中的帧
+ * （命令保持原位），解除关闭状态并始终通过。命令（[post]）不会被拒绝。
+ * 单一消费者（[take]），多个生产者。
  */
 class FeedQueue(private val maxFrames: Int = DEFAULT_MAX_FRAMES) {
     private val items = ArrayDeque<FeedItem>()
@@ -26,10 +26,10 @@ class FeedQueue(private val maxFrames: Int = DEFAULT_MAX_FRAMES) {
 
     val pendingFrames: Int get() = synchronized(mon) { frames }
 
-    /** Максимум глубины по кадрам с прошлого [resetMaxPending] (без сброса). */
+    /** 自上次 [resetMaxPending] 以来的最大帧深度（不重置）。 */
     val maxPendingSeen: Int get() = synchronized(mon) { maxSeen }
 
-    /** Возвращает максимум глубины с прошлого вызова и начинает окно заново с текущей глубины. */
+    /** 返回自上次调用以来的最大深度，并从当前深度重新开始统计窗口。 */
     fun resetMaxPending(): Int = synchronized(mon) {
         val m = maxSeen
         maxSeen = frames
@@ -55,7 +55,7 @@ class FeedQueue(private val maxFrames: Int = DEFAULT_MAX_FRAMES) {
         Offer.ACCEPTED
     }
 
-    /** Config/Reset/Stop: кладётся в хвост всегда, независимо от заполнения. */
+    /** Config/Reset/Stop：无论队列满否，始终放入队尾。 */
     fun post(cmd: FeedItem) {
         require(cmd !is FeedItem.Frame) { "кадры - через offerFrame" }
         synchronized(mon) {
@@ -64,7 +64,7 @@ class FeedQueue(private val maxFrames: Int = DEFAULT_MAX_FRAMES) {
         }
     }
 
-    /** Ждёт элемент до [timeoutMs] мс; null - таймаут (или прерывание нити). */
+    /** 等待元素最多 [timeoutMs] 毫秒；null = 超时（或线程被中断）。 */
     fun take(timeoutMs: Long): FeedItem? = synchronized(mon) {
         val deadline = System.nanoTime() + timeoutMs * 1_000_000L
         while (items.isEmpty()) {
@@ -82,7 +82,7 @@ class FeedQueue(private val maxFrames: Int = DEFAULT_MAX_FRAMES) {
         x
     }
 
-    /** Выбросить всё и снять закрытие. */
+    /** 清空全部并解除关闭状态。 */
     fun clear() = synchronized(mon) {
         items.clear()
         frames = 0
@@ -91,9 +91,9 @@ class FeedQueue(private val maxFrames: Int = DEFAULT_MAX_FRAMES) {
 
     companion object {
         /**
-         * ~0,5 с при 30 fps. Декодер создаётся 80-300 мс (на 60 fps это до 18 кадров), и эти кадры должны дождаться
-         * его, а не выбить IDR-запрос к AA на каждом старте. На 4 кадрах пачка из 10 кадров переполняла очередь
-         * прямо во время createDecoder (transcode_test burst, 23.10.2026).
+         * 30 fps 时约 0.5 秒。解码器创建需要 80-300 毫秒（60 fps 时最多 18 帧），这些帧必须等待解码器就绪，
+         * 而不是在每次启动时向 Android Auto 触发 IDR 请求。在 4 帧容量下，10 帧的一批数据会在
+         * createDecoder 期间直接溢出队列（transcode_test burst，2026.10.23）。
          */
         const val DEFAULT_MAX_FRAMES = 16
     }

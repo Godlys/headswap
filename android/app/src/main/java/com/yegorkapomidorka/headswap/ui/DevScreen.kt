@@ -34,7 +34,7 @@ import com.yegorkapomidorka.headswap.aa.TouchDecimation
 import com.yegorkapomidorka.headswap.aa.TtsPreroll
 import com.yegorkapomidorka.headswap.aa.VoiceChunk
 
-/** «Для разработчиков» (Dev.dc.html): отладочные флажки, кнопки, статус и живой лог (последние ~200 строк). */
+/** 「开发者」（Dev.dc.html）：调试开关、按钮、状态和实时日志（最近约 200 行）。 */
 class DevScreen(host: MainActivity) : Screen(host) {
     private val aa = AaPrefs(ctx)
     private lateinit var statusView: TextView
@@ -58,7 +58,7 @@ class DevScreen(host: MainActivity) : Screen(host) {
     private val ttsPrerollRows = LinkedHashMap<TtsPreroll, RadioRow>()
     private val touchDecimationRows = LinkedHashMap<TouchDecimation, RadioRow>()
 
-    /** AVC-энкодеры телефона (null = список получить не удалось, тогда размер не проверяем). Список не меняется, считаем один раз. */
+    /** 手机的 AVC 编码器列表（null = 获取失败，此时不校验尺寸）。列表不会变化，只计算一次。 */
     private val avcEncoders: List<MediaCodecInfo.VideoCapabilities>? by lazy {
         try {
             MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
@@ -274,7 +274,7 @@ class DevScreen(host: MainActivity) : Screen(host) {
     private fun row(title: String, sub: String, checked: Boolean, onChange: (Boolean) -> Unit) =
         ToggleRow(ctx, title, sub, checked, 64, false, 16f, 13f, onChange)
 
-    /** Карточка из строк-переключателей с разделителями. */
+    /** 由带分隔线的开关行组成的卡片。 */
     private fun group(rows: List<ToggleRow>): LinearLayout {
         val c = ctx
         val card = c.card()
@@ -285,7 +285,7 @@ class DevScreen(host: MainActivity) : Screen(host) {
         return card
     }
 
-    /** Карточка «Своё разрешение»: переключатель и, когда включено, поля ширины/высоты с живым расчётом. */
+    /** 「自定义分辨率」卡片：一个开关，开启后显示宽/高输入框并实时计算。 */
     private fun customResCard(): LinearLayout {
         val c = ctx
         val card = c.card()
@@ -371,7 +371,7 @@ class DevScreen(host: MainActivity) : Screen(host) {
         return card
     }
 
-    /** Поле ввода числа: как wifiField в настройках, но 18sp/500; высота 52dp задаётся при добавлении. */
+    /** 数字输入框：同设置页的 wifiField，但为 18sp/500；高度 52dp 在添加时指定。 */
     private fun customField(): EditText = EditText(ctx).apply {
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
         setTextColor(ctx.clr(R.color.on))
@@ -384,14 +384,14 @@ class DevScreen(host: MainActivity) : Screen(host) {
         filters = arrayOf(InputFilter.LengthFilter(4))
     }
 
-    /** Кнопка «Как просит ГУ» видна, только когда ГУ уже называла размер. */
+    /** 「按车机请求的尺寸」按钮仅在车机已上报过尺寸时可见。 */
     private fun refreshCustomFromHu() {
         val ok = aa.lastHuW > 0 && aa.lastHuH > 0
         customFromHu?.visibility = if (ok) View.VISIBLE else View.GONE
         if (ok) customFromHuText?.text = ctx.getString(R.string.dev_custom_from_hu, aa.lastHuW, aa.lastHuH)
     }
 
-    /** Проверка введённого размера: ошибка = не сохраняем, предупреждения сохранению не мешают. */
+    /** 校验输入的尺寸：出错则不保存，警告不影响保存。 */
     private fun validateCustom() {
         val c = ctx
         val w = customWField?.text?.toString()?.toIntOrNull() ?: 0
@@ -478,7 +478,7 @@ class DevScreen(host: MainActivity) : Screen(host) {
         if (atBottom) logScroll.post { logScroll.fullScroll(View.FOCUS_DOWN) }
     }
 
-    /** Время приглушено, ошибки/предупреждения/успех окрашены. */
+    /** 时间戳调暗显示，错误/警告/成功分别着色。 */
     private fun colorize(lines: List<String>): CharSequence {
         val c = ctx
         val dim = (c.clr(R.color.on2) and 0x00FFFFFF) or 0xBF000000.toInt()

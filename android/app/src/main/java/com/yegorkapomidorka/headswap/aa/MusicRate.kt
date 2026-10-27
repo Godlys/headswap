@@ -3,8 +3,8 @@ package com.yegorkapomidorka.headswap.aa
 import com.yegorkapomidorka.headswap.R
 
 /**
- * Настройка «Частота музыки»: Авто (48 кГц, для ГУ Hyundai CN7 - 32 кГц) или фиксированная для любой ГУ.
- * Мост фиксирует частоту в момент MEDIA INIT, поэтому смена действует со следующего INIT (подключение или новый трек).
+ * 「音乐采样率」设置：自动（48 kHz，Hyundai CN7 车机为 32 kHz）或为任意车机指定固定值。
+ * 桥接器在 MEDIA INIT 时固定采样率，因此修改从下一次 INIT（重新连接或新曲目）开始生效。
  */
 enum class MusicRate(val titleRes: Int, val hz: Int?) {
     AUTO(R.string.mrate_auto, null),
@@ -17,7 +17,7 @@ enum class MusicRate(val titleRes: Int, val hz: Int?) {
     companion object {
         val DEFAULT = AUTO
 
-        /** По имени из prefs; неизвестное/пустое = по умолчанию. */
+        /** 按 prefs 中的名称解析；未知/为空 = 默认值。 */
         fun parse(key: String?): MusicRate = values().firstOrNull { it.name == key } ?: DEFAULT
     }
 }

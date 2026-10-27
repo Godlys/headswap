@@ -4,11 +4,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Профиль воздуха (план Э3, 5.3). Профиль USB проверяет BitratePolicyTest без правок. */
+/** 无线（Wi-Fi）配置档（计划 Э3，5.3）。USB 配置档由 BitratePolicyTest 无改动地验证。 */
 class BitratePolicyWifiTest {
     private val ceiling = 4_000_000
 
-    /** Модель очереди как в BitratePolicyTest, но слив меняется во времени (шейпер). */
+    /** 与 BitratePolicyTest 相同的队列模型，但排水速率随时间变化（整形器）。 */
     private class Run(val policy: BitratePolicy, val stepMs: Long = 100, val drainBpsAt: (Long) -> Double) {
         var queue = 0.0
         var now = 0L
@@ -47,7 +47,7 @@ class BitratePolicyWifiTest {
 
     @Test
     fun shaperDipReactsFastAndRecoversToStartWithinSixtySeconds() {
-        // полоса 6 Мбит/с, с 20 с на 5 с падает до 1 Мбит/с (сценарий стенда 6->1)
+        // 带宽 6 Mbps，从 20 秒到 25 秒降到 1 Mbps（测试台 6->1 场景）
         val mbps = 1_000_000 / 8.0
         val r = Run(wifi()) { t -> if (t in 20_000 until 25_000) 1 * mbps else 6 * mbps }
         r.run(20_000)
@@ -64,7 +64,7 @@ class BitratePolicyWifiTest {
     @Test
     fun stepDownIsAtLeastThirtyPercentEvenIfDrainLooksHigh() {
         val p = wifi()
-        // бэклог большой, а слив (устаревший) говорит о быстром канале: всё равно шаг ×0.7
+        // 积压很大，而（过时的）排水速率却显示是快速信道：仍然按 ×0.7 降档
         assertEquals((3_000_000 * 0.7).toInt(), p.update(0, 2_000.0, 10.0 * 1024 * 1024))
         assertEquals("не чаще раза в 1 с", null, p.update(500, 2_000.0, 10.0 * 1024 * 1024))
         assertEquals((3_000_000 * 0.7 * 0.7).toInt(), p.update(1_000, 2_000.0, 10.0 * 1024 * 1024))

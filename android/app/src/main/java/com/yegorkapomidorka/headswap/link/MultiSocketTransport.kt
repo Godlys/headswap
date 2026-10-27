@@ -22,27 +22,27 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
-/** Порты беспроводного CarLife (Baidu MD 8.6.7, CommonParams): ГУ подключается к телефону как TCP-клиент. */
+/** 无线 CarLife 的端口（Baidu MD 8.6.7，CommonParams）：车机作为 TCP 客户端连接手机。 */
 object Tcp6Ports {
     val DEFAULT: Map<Int, Int> = linkedMapOf(
         Ch.CMD to 7240, Ch.VIDEO to 8240, Ch.MEDIA to 9240, Ch.TTS to 9241, Ch.VR to 9242, Ch.TOUCH to 9340,
     )
 
-    /** Канал Data: принимаем и игнорируем, в готовность 6/6 не входит. */
+    /** Data 通道：接受并忽略，不计入 6/6 就绪。 */
     const val DATA = 9440
 }
 
 class BadInnerHeader(msg: String) : IOException(msg)
 
 /**
- * Inner-сообщения из сокета одного канала, без внешнего заголовка: заголовок 8 байт (CMD, TOUCH: длина u16)
- * или 12 байт (VIDEO, MEDIA, TTS, VR: длина u32), затем тело по declared len (как ConnectSocket.readData у Baidu).
- * Резинка по типам нет: неверный заголовок = разрыв с причиной (U5 в плане, решается по H4).
+ * 来自单通道 socket 的 inner 消息，无外部头：头部为 8 字节（CMD、TOUCH：长度 u16）
+ * 或 12 字节（VIDEO、MEDIA、TTS、VR：长度 u32），随后按 declared len 读取正文（同 Baidu 的 ConnectSocket.readData）。
+ * 对类型没有弹性：非法的头 = 带原因断开（计划中的 U5，按 H4 解决）。
  */
 object InnerCodec {
     fun hdrLen(chan: Int) = if (Ch.isCmdStyle(chan)) 8 else 12
 
-    /** Следующее inner целиком; null = чистый EOF на границе сообщения. EOFException = обрыв посреди сообщения. */
+    /** 下一条完整的 inner；null = 在消息边界处干净的 EOF。EOFException = 消息中途断开。 */
     fun read(chan: Int, din: DataInputStream): ByteArray? {
         val hl = hdrLen(chan)
         val hdr = ByteArray(hl)
@@ -55,7 +55,7 @@ object InnerCodec {
         val type = Wire.u32(hdr, if (cmd) 4 else 8)
         val limit = if (cmd) InnerAssembler.MAX_CMD_DECLARED else Wire.MAX_OUTER_LEN
         if (declared !in 0..limit) throw BadInnerHeader("длина $declared вне 0..$limit (тип ${Msg.hex(type)}, заголовок ${hexBytes(hdr)})")
-        // VW CNS3 (Tiguan L Pro, h129) шлёт VIDEO_HEARTBEAT в CMD-сокет в CMD-кадре: 8 байт, длина 0
+        // VW CNS3（Tiguan L Pro，h129）以 CMD 帧向 CMD socket 发送 VIDEO_HEARTBEAT：8 字节，长度 0
         val cmdHb = chan == Ch.CMD && type == Msg.VIDEO_HEARTBEAT && declared == 0
         if (!cmdHb && type ushr 16 != chan) {
             throw BadInnerHeader("тип ${Msg.hex(type)} не канала ${Ch.name(chan)}, длина $declared, заголовок ${hexBytes(hdr)}")
@@ -68,9 +68,9 @@ object InnerCodec {
     }
 
     /**
-     * Heartbeat в CMD-сокете мог прийти и 12-байтным видео-заголовком [длина u32][тип u32][метка u32]: тогда после
-     * прочитанных 8 байт висят 4 байта метки. Смотрим вперёд, только если 12 байт уже в буфере (не блокируемся):
-     * следующий заголовок с CMD-типом через 4 байта, а не сразу, значит хвост есть, пропускаем.
+     * CMD socket 中的 heartbeat 也可能以 12 字节视频头 [长度 u32][类型 u32][标记 u32] 到来：那么读完 8 字节后
+     * 还挂着 4 字节标记。只有 12 字节已在缓冲区时才向前看（不阻塞）：下一个 CMD 类型头在 4 字节之后而非紧接，
+     * 说明有尾巴，跳过它。
      */
     private fun skipHeartbeatTail(din: DataInputStream) {
         if (!din.markSupported() || din.available() < 12) return
@@ -91,27 +91,26 @@ object InnerCodec {
 class LinkSetupException(msg: String) : Exception(msg)
 
 /**
- * Серверная сторона беспроводного CarLife: слушает 6 портов каналов (+ Data 9440) на одном адресе и ждёт ГУ.
- * Правила приёма: первое подключение на порт побеждает, повторное на тот же порт закрывается (у Baidu наоборот,
- * побеждает последнее); все сокеты должны прийти с адреса первого принятого. Слушатели живут до закрытия транспорта,
- * чтобы отбивать лишние подключения.
+ * 无线 CarLife 的服务端：在同一地址上监听 6 个通道端口（+ Data 9440）并等待车机。
+ * 接收规则：端口上的第一个连接获胜，同一端口的重复连接被关闭（Baidu 相反，最后一个获胜）；
+ * 所有 socket 必须来自第一个被接受者的地址。监听器存活到传输关闭为止，以挡掉多余连接。
  */
 class Tcp6Listener(
     private val bind: InetAddress,
     private val ports: Map<Int, Int> = Tcp6Ports.DEFAULT,
     private val dataPort: Int? = Tcp6Ports.DATA,
     private val clock: () -> Long = { SystemClock.elapsedRealtime() },
-    /** Кого пускать при bind на 0.0.0.0: ветка B пускает только адреса из подсетей, куда идёт маяк. */
+    /** 绑定 0.0.0.0 时放行谁：B 分支只放行信标所发往子网中的地址。 */
     private val peerOk: (InetAddress) -> Boolean = { true },
 ) {
     private val lock = Object()
-    private val servers = LinkedHashMap<Int, ServerSocket>()   // канал -> сервер; DATA_CHAN = порт Data
+    private val servers = LinkedHashMap<Int, ServerSocket>()   // 通道 -> 服务器；DATA_CHAN = Data 端口
     private val accepted = LinkedHashMap<Int, Socket>()
     private var dataSocket: Socket? = null
     private var peer: InetAddress? = null
     private var closed = false
 
-    /** Открыть все порты. Не открылся любой из шести: исключение с причиной, всё уже закрыто. */
+    /** 打开所有端口。六个中任何一个未打开：抛出带原因的异常，此时一切已关闭。 */
     fun open(): Tcp6Listener {
         val all = LinkedHashMap(ports)
         if (dataPort != null) all[DATA_CHAN] = dataPort
@@ -124,7 +123,7 @@ class Tcp6Listener(
                 } catch (e: IOException) {
                     s.close()
                     WLog.ev(WLog.TCP, "bind-fail", "chan" to chanName(chan), "port" to port, "err" to e.message)
-                    if (chan == DATA_CHAN) continue   // без Data жить можно
+                    if (chan == DATA_CHAN) continue   // 没有 Data 也能活
                     throw LinkSetupException("tcp6: порт ${chanName(chan)} $port не открылся: ${e.message}")
                 }
                 synchronized(lock) { servers[chan] = s }
@@ -140,13 +139,13 @@ class Tcp6Listener(
         return this
     }
 
-    /** Адрес первого принятого пира (после 6/6 - ГУ); до первого подключения null. */
+    /** 第一个被接受的对端的地址（6/6 之后为车机）；在首次连接之前为 null。 */
     val peerAddress: InetAddress? get() = synchronized(lock) { peer }
 
-    /** Фактический порт канала (в тестах порты 0). */
+    /** 通道的实际端口（测试中端口为 0）。 */
     fun boundPort(chan: Int): Int = synchronized(lock) { servers[chan]?.localPort ?: -1 }
 
-    /** Ждать все 6 сокетов. Не дождались: всё закрыто, исключение с причиной k/6 и списком недостающих. */
+    /** 等待全部 6 个 socket。未等到：全部关闭，抛出带原因 k/6 及缺失列表的异常。 */
     fun await(timeoutMs: Long, label: String): MultiSocketTransport {
         val start = clock()
         synchronized(lock) {
@@ -180,12 +179,12 @@ class Tcp6Listener(
         if (closed) return
         closed = true
         for (s in servers.values) quiet { s.close() }
-        // принятые, но не переданные транспорту сокеты закрываются здесь; переданные закрывает транспорт сам
+        // 已接受但未移交给传输层的 socket 在这里关闭；已移交的由传输层自行关闭
         dataSocket?.let { quiet { it.close() } }
         lock.notifyAll()
     }
 
-    /** Закрыть и сокеты каналов (подъём не состоялся). */
+    /** 同时关闭通道 socket（建立未成功）。 */
     private fun dropAccepted() {
         for (s in accepted.values) quiet { s.close() }
     }
@@ -195,7 +194,7 @@ class Tcp6Listener(
             val s = try {
                 server.accept()
             } catch (_: IOException) {
-                return   // сервер закрыт
+                return   // 服务器已关闭
             }
             onAccept(chan, s)
         }
@@ -221,8 +220,8 @@ class Tcp6Listener(
             if (peer == null) peer = addr
             setOptions(s)
             if (chan == Ch.VIDEO) {
-                // малый буфер отправки: иначе очередь прячется в ядре (до МиБ), запись не блокируется и слив не меряется,
-                // политика битрейта на воздухе слепнет (лог VW 15.10: слив 6-19 МиБ/с, битрейт ни разу не сдвинулся)
+                // 较小的发送缓冲区：否则队列藏在内核里（多达 MiB），写入不阻塞、排空无法测量，
+                // 无线环境下的码率策略会失明（VW 15.10 日志：排空 6-19 MiB/s，码率从未变动）
                 s.sendBufferSize = VIDEO_SNDBUF
                 WLog.ev(WLog.TCP, "sndbuf", "chan" to "VIDEO", "asked" to VIDEO_SNDBUF, "got" to s.sendBufferSize)
             }
@@ -238,7 +237,7 @@ class Tcp6Listener(
         }
     }
 
-    /** Data-канал Baidu (9440) нам не нужен: вычитываем, чтобы не забился буфер приёма ГУ. */
+    /** 我们不需要 Baidu 的 Data 通道（9440）：将其读出，以免车机的接收缓冲区被塞满。 */
     private fun drainData(s: Socket) {
         val buf = ByteArray(4096)
         var total = 0L
@@ -254,7 +253,7 @@ class Tcp6Listener(
         WLog.ev(WLog.TCP, "data-closed", "rx" to total)
     }
 
-    /** Отмена подъёма до 6/6 (сервис остановлен): закрыть всё, включая принятые сокеты. */
+    /** 在 6/6 之前取消建立（服务已停止）：关闭一切，包括已接受的 socket。 */
     fun abort() {
         synchronized(lock) {
             dropAccepted()
@@ -267,7 +266,7 @@ class Tcp6Listener(
     companion object {
         private const val DATA_CHAN = 0
 
-        /** SO_SNDBUF видео-сокета (ядро удваивает): ~250 мс при 4 Мбит/с. */
+        /** 视频 socket 的 SO_SNDBUF（内核会加倍）：4 Mbit/s 时约 250 ms。 */
         const val VIDEO_SNDBUF = 64 * 1024
 
         fun setOptions(s: Socket) {
@@ -286,10 +285,10 @@ class Tcp6Listener(
 }
 
 /**
- * Шесть TCP-сокетов в формате Baidu: каждый канал свой сокет, внешнего заголовка нет. Читатель и писатель на канал.
- * На video-сокет ГУ может слать VIDEO_HEARTBEAT (0x20002, 12 байт), VW CNS3 шлёт его в CMD-сокет (8 байт):
- * вычитываем и считаем, в протокол не отдаём.
- * Обрыв любого сокета закрывает все (ровно один onClosed с именем канала в причине).
+ * 六个 Baidu 格式的 TCP socket：每个通道一个 socket，无外部头。每个通道有一个读线程和一个写线程。
+ * 车机可能向 video socket 发送 VIDEO_HEARTBEAT（0x20002，12 字节），VW CNS3 将其发到 CMD socket（8 字节）：
+ * 我们读出并计数，不送入协议。
+ * 任一 socket 断开都会关闭所有（恰好一次 onClosed，原因中含通道名）。
  */
 class MultiSocketTransport internal constructor(
     private val sockets: Map<Int, Socket>,
@@ -313,7 +312,7 @@ class MultiSocketTransport internal constructor(
     private val t0 = clock()
     @Volatile private var onClosedCb: ((String) -> Unit)? = null
 
-    // heartbeat ГУ на video-сокете (VW CNS3 шлёт его в CMD-сокет, тогда считаем ещё и hbCmd)
+    // 车机在 video socket 上的 heartbeat（VW CNS3 将其发到 CMD socket，此时还要统计 hbCmd）
     @Volatile private var hbCount = 0L
     @Volatile private var hbCmd = 0L
     private var hbFirstMs = 0L
@@ -374,7 +373,7 @@ class MultiSocketTransport internal constructor(
     private fun closeAll() {
         Tcp6Listener.quiet { closeListener() }
         for (s in sockets.values) Tcp6Listener.quiet { s.close() }
-        // свою нить не прерываем: после fail() на ней идёт весь CarLifeSession.close() (остановка видео, onClosed)
+        // 不中断自己的线程：fail() 之后整个 CarLifeSession.close() 会在该线程上执行（停止视频、onClosed）
         val me = Thread.currentThread()
         for (t in threads) if (t !== me) t.interrupt()
     }
@@ -447,7 +446,7 @@ class MultiSocketTransport internal constructor(
     }
 }
 
-/** Для тестов и диагностики: inner из потока по одному (обёртка над InnerCodec). */
+/** 供测试和诊断使用：从流中逐个读取 inner（InnerCodec 的包装）。 */
 fun readInners(chan: Int, input: InputStream): List<ByteArray> {
     val din = DataInputStream(input)
     val out = ArrayList<ByteArray>()

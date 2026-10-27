@@ -34,7 +34,7 @@ import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-/** Раздаёт файлы логов и отчётов другим приложениям (ACTION_SEND); без AndroidX FileProvider. Только чтение. */
+/** 向其他应用分享日志和报告文件（ACTION_SEND）；不使用 AndroidX FileProvider。只读。 */
 class LogProvider : ContentProvider() {
     override fun onCreate() = true
 
@@ -83,7 +83,7 @@ object LogShare {
 
     fun dirs(ctx: Context): List<File> = listOf(logDir(ctx), reportDir(ctx))
 
-    /** Файлы headswap-*.log, новые первыми. */
+    /** headswap-*.log 文件，新的在前。 */
     fun logFiles(ctx: Context): List<File> =
         logDir(ctx).listFiles { f -> f.name.startsWith("headswap-") && f.name.endsWith(".log") }
             ?.sortedByDescending { it.name } ?: emptyList()
@@ -107,7 +107,7 @@ object LogShare {
         }
     }
 
-    /** Текущий файл headswap-*.log как есть. */
+    /** 原样分享当前的 headswap-*.log 文件。 */
     fun shareLog(ctx: Context) {
         val f = AppLog.file?.takeIf { it.isFile } ?: logFiles(ctx).firstOrNull()
         if (f == null) {
@@ -117,7 +117,7 @@ object LogShare {
         shareFile(ctx, f, "text/plain", ctx.getString(R.string.share_subject_log, f.name))
     }
 
-    /** Архив: логи + сведения об устройстве и настройках. Без контактов и геопозиции. */
+    /** 压缩包：日志 + 设备与设置信息。不含联系人和地理位置。 */
     fun shareReport(ctx: Context) {
         val zip = try {
             buildZip(ctx)
@@ -129,7 +129,7 @@ object LogShare {
         shareFile(ctx, zip, "application/zip", ctx.getString(R.string.share_subject_report))
     }
 
-    /** Архив в «Загрузки» (MediaStore, без разрешений); при неудаче - меню «Поделиться». */
+    /** 将压缩包保存到「下载」（通过 MediaStore，无需权限）；失败时改用「分享」菜单。 */
     fun saveZip(ctx: Context) {
         val zip = try {
             buildZip(ctx)
@@ -177,7 +177,7 @@ object LogShare {
         return out
     }
 
-    /** wireless.log: на каждый файл (от старых к новым) строка `== имя` и его WL-строки; везде пусто - «WL-строк нет». */
+    /** wireless.log：对每个文件（从旧到新）输出 `== 文件名` 行及其 WL 行；若全部为空则输出「无 WL 行」。 */
     fun wirelessLog(files: List<Pair<String, List<String>>>): String {
         val sb = StringBuilder()
         var any = false
@@ -191,12 +191,12 @@ object LogShare {
         return if (any) sb.toString() else "WL-строк нет\n"
     }
 
-    /** Строки беспровода: `HH:mm:ss.SSS WL <фаза> ...`, ищем метку с пробелами вокруг. */
+    /** 无线日志行：`HH:mm:ss.SSS WL <阶段> ...`，查找两侧带空格的标记。 */
     fun wirelessLines(lines: Sequence<String>): Sequence<String> = lines.filter { WL_MARK in it }
 
     fun wirelessLines(lines: List<String>): List<String> = wirelessLines(lines.asSequence()).toList()
 
-    /** Файл целиком или только последние MAX_FILE_BYTES (hexdump'ы раздувают лог). */
+    /** 整个文件或仅最后 MAX_FILE_BYTES 字节（hexdump 会把日志撑得很大）。 */
     private fun copyTail(f: File, to: java.io.OutputStream) {
         RandomAccessFile(f, "r").use { raf ->
             val len = raf.length()
@@ -254,12 +254,12 @@ object LogShare {
             appendLine("  сети: ${lanText()}")
             appendLine("  режим: ${CarLifeState.wireless ?: "выключен"}")
             appendLine("  Bluetooth carlife: ${CarLifeState.btProbe ?: "не запускался"}")
-            val car = CarProfile(ctx)      // без MAC и имени
+            val car = CarProfile(ctx)      // 不含 MAC 和名称
             appendLine("  машина: ${if (car.isSet) "выбрана (CDM id ${car.cdmAssociationId})" else "не выбрана"}")
             if (car.isSet) appendLine("  подключение машины: ${car.connMode}")
             appendLine("  триггер Bluetooth: ${if (CarProfile.triggerEnabled(ctx)) "включён" else "выключен"}")
             appendLine("  авто: ${if (CarLifeState.carAuto) "да" else "нет"}")
-            appendLine("  Wi-Fi машины: ${if (CarWifi(ctx).isSet) "задан" else "не задан"}")      // без SSID и пароля
+            appendLine("  Wi-Fi машины: ${if (CarWifi(ctx).isSet) "задан" else "не задан"}")      // 不含 SSID 和密码
             appendLine("  сеть машины: ${CarLifeState.carNet}")
         }
     }
@@ -270,7 +270,7 @@ object LogShare {
         "ошибка ${e.javaClass.simpleName}"
     }
 
-    /** Очистить: удалить старые файлы headswap-*.log (текущий оставить). */
+    /** 清理：删除旧的 headswap-*.log 文件（保留当前文件）。 */
     fun deleteOldLogs(ctx: Context): Int {
         val cur = AppLog.file
         var n = 0

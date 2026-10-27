@@ -3,9 +3,9 @@ package com.yegorkapomidorka.headswap.aa
 import java.io.ByteArrayOutputStream
 
 /**
- * Кадры AAP (порт pc-headunit/aap/framing.py):
- *   [chan][flags][len BE16] ; FIRST без LAST: ещё [total BE32] ; тело = TLS-record (после handshake)
- *   или [type BE16][data] (до него). Чистая JVM-логика.
+ * AAP 帧（移植自 pc-headunit/aap/framing.py）：
+ *   [chan][flags][len BE16]；FIRST 且非 LAST 时：另有 [total BE32]；消息体 = TLS-record（握手之后）
+ *   或 [type BE16][data]（握手之前）。纯 JVM 逻辑。
  */
 object AapFraming {
     const val FLAG_FIRST = 0x01
@@ -22,11 +22,11 @@ object AapFraming {
 
     const val CHANNEL_CONTROL = 0
 
-    /** Один TLS-record несёт до 16384 байт plaintext; сообщение больше режется на кадры такого размера. */
+    /** 单个 TLS-record 最多携带 16384 字节明文；更大的消息按此大小切成帧。 */
     const val MAX_FRAGMENT = 0x4000
     const val MAX_BODY = 0xFFFF
 
-    /** FIRST-кадр, который не LAST, несёт 4-байтный total. */
+    /** 非 LAST 的 FIRST 帧携带 4 字节的 total。 */
     fun hasTotalSize(flags: Int) = (flags and (FLAG_FIRST or FLAG_LAST)) == FLAG_FIRST
 
     fun buildFrame(chan: Int, flags: Int, body: ByteArray, total: Int? = null): ByteArray {
@@ -47,7 +47,7 @@ object AapFraming {
         return out.toByteArray()
     }
 
-    /** Нешифрованное сообщение: [chan][flags][len = 2 + data][type BE16][data]. */
+    /** 未加密消息：[chan][flags][len = 2 + data][type BE16][data]。 */
     fun buildPlain(chan: Int, msgType: Int, data: ByteArray = ByteArray(0), flags: Int = FLAGS_PLAIN_BULK): ByteArray =
         buildFrame(chan, flags, typed(msgType, data))
 
@@ -59,7 +59,7 @@ object AapFraming {
         return b
     }
 
-    /** headunit-revived AapMessage.flags(): control-типы 1..26 на не-control канале получают 0x04. */
+    /** headunit-revived 的 AapMessage.flags()：非 control 通道上的 control 类型 1..26 会加上 0x04。 */
     fun controlFlagNeeded(chan: Int, msgType: Int) = chan != CHANNEL_CONTROL && msgType in 1..26
 
     fun messageFlags(chan: Int, msgType: Int) =
@@ -68,8 +68,8 @@ object AapFraming {
     class Fragment(val flags: Int, val chunk: ByteArray, val total: Int?)
 
     /**
-     * Кадры одного сообщения. Влезает - один bulk-кадр (total null). Иначе FIRST (0x09, с total),
-     * MIDDLE (0x08)* и LAST (0x0a). Каждый chunk шифруется отдельно, по порядку.
+     * 将单个消息拆成帧。能装下时 - 一个 bulk 帧（total 为 null）。否则拆为 FIRST（0x09，带 total）、
+     * MIDDLE（0x08）* 和 LAST（0x0a）。每个 chunk 按顺序单独加密。
      */
     fun splitMessage(plaintext: ByteArray, chan: Int, msgType: Int, maxFragment: Int = MAX_FRAGMENT): List<Fragment> {
         if (plaintext.size <= maxFragment) return listOf(Fragment(messageFlags(chan, msgType), plaintext, null))
@@ -95,7 +95,7 @@ object AapFraming {
         val encrypted get() = (flags and FLAG_ENCRYPTED) != 0
     }
 
-    /** Поток байт -> кадры. TCP границ не даёт, feed() принимает любые куски. */
+    /** 字节流 → 帧。TCP 不提供边界，feed() 接受任意大小的数据块。 */
     class Parser {
         private var buf = ByteArray(0)
         private var len = 0
@@ -131,10 +131,10 @@ object AapFraming {
     }
 
     /**
-     * Склейка расшифрованных тел FIRST/MIDDLE/LAST в целые сообщения, по каналам. push() возвращает
-     * целый plaintext ([type BE16][payload]) или null, пока серия открыта. Нарушения порядка идут в warn:
-     * одинокий MIDDLE/LAST отбрасывается, FIRST поверх открытой серии заменяет её, несовпадение
-     * размера с total возвращается как есть.
+     * 按通道将解密后的 FIRST/MIDDLE/LAST 消息体拼接成完整消息。push() 返回完整的
+     * plaintext（[type BE16][payload]），或在该序列未完成时返回 null。顺序异常会记录到 warn：
+     * 孤立的 MIDDLE/LAST 被丢弃，在未完成的序列之上到达的 FIRST 会替换旧序列，
+     * 大小与 total 不符时按原样返回。
      */
     class Reassembler(private val warn: (String) -> Unit = {}) {
         private val runs = HashMap<Int, ByteArrayOutputStream>()

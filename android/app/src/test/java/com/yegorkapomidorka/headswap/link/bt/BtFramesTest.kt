@@ -20,7 +20,7 @@ class BtFramesTest {
         val body = PbWriter().int32(1, 2).int32(2, 5745).toByteArray()
         val a = BtMsg.frame(BtMsg.HU_WIRELESS_INFO, body)
         val b = BtMsg.frame(BtMsg.HU_STATUS, PbWriter().int32(1, 1).toByteArray())
-        val stream = byteArrayOf(0x7F) + a + b       // мусорный байт впереди
+        val stream = byteArrayOf(0x7F) + a + b       // 前面有一个垃圾字节
         val p = BtFrameParser()
         val got = ArrayList<BtFrame>()
         for (i in stream.indices) got += p.feed(byteArrayOf(stream[i]))

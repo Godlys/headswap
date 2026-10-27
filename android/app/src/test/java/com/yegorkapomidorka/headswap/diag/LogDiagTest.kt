@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Те же кейсы, что гоняет tools/test_logdiag.py (TestCases): Python и Android обязаны давать одинаковый ответ. */
+/** 与 tools/test_logdiag.py（TestCases）运行的相同用例：Python 与 Android 必须给出相同的答案。 */
 class LogDiagTest {
     private val toolsDir: File = run {
         var d: File? = File(System.getProperty("user.dir")!!).absoluteFile

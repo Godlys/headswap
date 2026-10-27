@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Запросы IDR у энкодера при отказе очереди CarLife: не чаще раза в 1.5 с, поток продолжается с IDR. */
+/** CarLife 队列拒绝时向编码器请求 IDR:每 1.5 秒最多一次,流从 IDR 继续。 */
 class OverflowIdrTest {
     private val aaCfg = Golden.hex("00000001 67 42c01f da0140") + Golden.hex("00000001 68 ce3c80")
     private val aaIdr = Golden.hex("00000001 65") + ByteArray(100) { (it + 1).toByte() }
@@ -33,20 +33,20 @@ class OverflowIdrTest {
         startStream()
         val base = tr.syncs.get()
         link.accept = false
-        core.onEncoderFrame(encP, false)                       // отказ на P: запрос IDR
+        core.onEncoderFrame(encP, false)                       // P 被拒：请求 IDR
         assertEquals(base + 1, tr.syncs.get())
         link.accept = true
-        core.onEncoderFrame(encP, false)                       // P до IDR выбрасываются без запросов
+        core.onEncoderFrame(encP, false)                       // IDR 之前的 P 帧被丢弃，不发起请求
         link.accept = false
         now += 1000
-        core.onEncoderFrame(encIdr, true)                      // IDR тоже отказали, но до 1.5 с запрос не повторяется
+        core.onEncoderFrame(encIdr, true)                      // IDR 也被拒绝，但 1.5 秒内不重复请求
         assertEquals(base + 1, tr.syncs.get())
         now += 600
         core.onEncoderFrame(encIdr, true)
         assertEquals(base + 2, tr.syncs.get())
         link.accept = true
         val sent = link.sent.size
-        core.onEncoderFrame(encP, false)                       // поток возобновляется только с IDR
+        core.onEncoderFrame(encP, false)                       // 流只能从 IDR 恢复
         assertEquals(sent, link.sent.size)
         core.onEncoderFrame(encIdr, true)
         assertEquals(sent + 1, link.sent.size)

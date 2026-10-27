@@ -5,7 +5,7 @@ import com.yegorkapomidorka.headswap.aa.NaviField6
 import com.yegorkapomidorka.headswap.aa.NaviTurnInfo
 import java.io.ByteArrayOutputStream
 
-/** Каналы внешнего заголовка (спека §2.2). */
+/** 外部头部的通道（规范 §2.2）。 */
 object Ch {
     const val CMD = 1
     const val VIDEO = 2
@@ -24,11 +24,11 @@ object Ch {
         else -> "CH$c"
     }
 
-    /** Внутренний заголовок: 8 байт (CMD, TOUCH) или 12 (остальные). */
+    /** 内部头部：8 字节（CMD、TOUCH）或 12 字节（其余）。 */
     fun isCmdStyle(c: Int) = c == CMD || c == TOUCH
 }
 
-/** Коды сообщений (спека §3, §5, §6, §7). */
+/** 消息代码（规范 §3、§5、§6、§7）。 */
 object Msg {
     const val HU_PROTOCOL_VERSION = 0x00018001
     const val PROTOCOL_VERSION_MATCH_STATUS = 0x00010002
@@ -85,7 +85,7 @@ object Msg {
     const val TTS_INIT = 0x00040001
     const val VR_INIT = 0x00050002
 
-    /** HU -> MD по каналу VR: PCM16 mono 16 кГц с микрофона ГУ (Baidu CommonParams.MSG_VR_DATA = 360449). */
+    /** 通过 VR 通道从 HU -> MD：车机麦克风的 PCM16 单声道 16 kHz（Baidu CommonParams.MSG_VR_DATA = 360449）。 */
     const val VR_MIC_DATA = 0x00058001
 
     const val TOUCH_ACTION = 0x00068001
@@ -233,14 +233,14 @@ object Msg {
     fun hex(type: Int): String = "0x%08X".format(type)
 }
 
-/** Разобранное CMD/TOUCH сообщение: заголовок 8 байт [len u16][resv u16][type u32] + body. */
+/** 解析后的 CMD/TOUCH 消息：8 字节头部 [len u16][resv u16][type u32] + 消息体。 */
 class CmdMsg(val type: Int, val resv: Int, val declaredLen: Int, val body: ByteArray, val truncated: Boolean)
 
-/** Разобранное VIDEO/MEDIA/TTS/VR сообщение: заголовок 12 байт [len u32][time u32][type u32] + data. */
+/** 解析后的 VIDEO/MEDIA/TTS/VR 消息：12 字节头部 [len u32][time u32][type u32] + 数据。 */
 class DataMsg(val type: Int, val time: Int, val declaredLen: Int, val data: ByteArray, val truncated: Boolean)
 
 object Wire {
-    /** Максимум одного куска bulk-записи (спека §1.4). */
+    /** 单次 bulk 写入块的最大值（规范 §1.4）。 */
     const val CHUNK = 16384
     const val MAX_OUTER_LEN = 64 * 1024 * 1024
 
@@ -262,7 +262,7 @@ object Wire {
         b[o + 3] = v.toByte()
     }
 
-    /** Внешний заголовок [chan u32 BE][len u32 BE]. */
+    /** 外部头部 [chan u32 BE][len u32 BE]。 */
     fun outerHeader(chan: Int, innerLen: Int): ByteArray {
         val h = ByteArray(8)
         putU32(h, 0, chan)
@@ -270,7 +270,7 @@ object Wire {
         return h
     }
 
-    /** Внутреннее CMD/TOUCH сообщение: [len u16][0 u16][type u32] + body. */
+    /** 内部 CMD/TOUCH 消息：[len u16][0 u16][type u32] + 消息体。 */
     fun cmdInner(type: Int, body: ByteArray?): ByteArray {
         val n = body?.size ?: 0
         require(n <= 0xFFFF) { "CMD body too long: $n" }
@@ -281,7 +281,7 @@ object Wire {
         return m
     }
 
-    /** Внутреннее VIDEO/... сообщение: [len u32][time u32][type u32] + data. */
+    /** 内部 VIDEO/... 消息：[len u32][time u32][type u32] + 数据。 */
     fun dataInner(type: Int, time: Int, data: ByteArray?): ByteArray {
         val n = data?.size ?: 0
         val m = ByteArray(12 + n)
@@ -293,8 +293,8 @@ object Wire {
     }
 
     /**
-     * Последовательность отдельных write(): сначала 8-байтный заголовок, затем тело кусками <= 16384
-     * (так делает HU Baidu и на это рассчитан f_accessory, спека §1.4).
+     * 一系列独立的 write()：先写 8 字节头部，然后按 <= 16384 的块写消息体
+     * （百度 HU 就是这样做的，f_accessory 也按此设计，规范 §1.4）。
      */
     fun writeSequence(chan: Int, inner: ByteArray): List<ByteArray> {
         val out = ArrayList<ByteArray>()
@@ -330,19 +330,19 @@ object Wire {
 }
 
 /**
- * Сборка data-сообщения, которое ГУ режет на несколько внешних кадров одного канала. VW CNS2 Delphi (h425) шлёт
- * MIC_DATA [12 + 1024 Б] кадрами по 256 Б: первый с заголовком, дальше голое продолжение.
- * feed() возвращает целое inner или null, пока сообщение не собрано.
+ * 组装被车机拆成同一通道多个外部帧的 data 消息。大众 CNS2 Delphi（h425）以 256 字节帧发送
+ * MIC_DATA [12 + 1024 字节]：第一帧带头部，后面是裸的续段。
+ * feed() 在消息未组装完成时返回 null，组装完成返回完整的 inner。
  */
 class DataReassembler(private val maxLen: Int = 64 * 1024) {
     private var buf: ByteArray? = null
     private var have = 0
 
-    /** Сколько сообщений собрано из кусков (для лога). */
+    /** 从分片中组装了多少条消息（用于日志）。 */
     var assembled = 0
         private set
 
-    /** Размер первого куска последнего собранного сообщения (для лога). */
+    /** 最近一次组装消息的第一片大小（用于日志）。 */
     var firstFragment = 0
         private set
 
@@ -372,15 +372,15 @@ class DataReassembler(private val maxLen: Int = 64 * 1024) {
 class ProtocolDesync(msg: String) : Exception(msg)
 
 /**
- * Накопительный разбор внешнего заголовка: читаемые из USB куски могут резаться как угодно,
- * сообщения собираются из потока байт, границы transfer не важны.
+ * 累积式解析外部头部：从 USB 读到的块可能被任意切割，
+ * 消息从字节流中组装，transfer 边界无关紧要。
  */
 class FrameParser {
     private var buf = ByteArray(32768)
     private var start = 0
     private var end = 0
 
-    /** Подать очередной кусок; sink вызывается на каждое полное сообщение. */
+    /** 送入下一个块；每组装完一条完整消息调用一次 sink。 */
     fun feed(data: ByteArray, off: Int, n: Int, sink: (chan: Int, inner: ByteArray) -> Unit) {
         ensure(n)
         System.arraycopy(data, off, buf, end, n)
@@ -404,7 +404,7 @@ class FrameParser {
         }
     }
 
-    /** Байт в буфере, ещё не составивших целое сообщение. */
+    /** 缓冲区中尚未构成完整消息的字节数。 */
     fun pending() = end - start
 
     private fun ensure(n: Int) {
@@ -423,14 +423,14 @@ class FrameParser {
 }
 
 /**
- * Сборка inner-сообщений по каналам. Часть ГУ (VW Tharu XR 2026) шлёт заголовок inner (8 байт для CMD/TOUCH,
- * 12 для data-каналов) и тело отдельными внешними кадрами. Если кадр - ровно заголовок с declared len > 0,
- * он удерживается, и кадры этого же канала дописываются, пока не наберётся declared len; потом уходит одно inner.
- * Тот же ГУ режет поток и в другую сторону: кадр = хвост тела + следующие inner целиком + заголовок следующего
- * (154 байта: конец MODULE_CONTROL, HU_AUTHEN_RESULT, STATISTIC_INFO). Поэтому после удержания канал разбирается
- * как поток по declared len, а кадр без удержания режется на несколько inner, если он целиком складывается
- * в цепочку заголовков с правильным типом (старшие 16 бит типа = номер канала).
- * Сообщения целиком в одном кадре (Honda Vezel) проходят как есть, в том числе с неверным declared len.
+ * 按通道组装 inner 消息。部分车机（大众途岳 XR 2026）把 inner 头部（CMD/TOUCH 为 8 字节，
+ * data 通道为 12 字节）和消息体用单独的外部帧发送。如果某帧正好是 declared len > 0 的头部，
+ * 则将其暂存，同一通道的后续帧持续追加，直到凑满 declared len；然后输出一条完整的 inner。
+ * 同一车机还会反向切割流：一帧 = 消息体尾部 + 后续完整的 inner + 下一条的头部
+ * （154 字节：MODULE_STATUS 结尾、HU_AUTHEN_RESULT、STATISTIC_INFO）。因此在暂存之后，
+ * 该通道按 declared len 作为流来解析；而未暂存的帧若整体能构成一条头部类型正确（type 的高 16 位 = 通道号）
+ * 的链，也会被切成多条 inner。
+ * 完整地放在单个帧里的消息（本田 Vezel）原样通过，包括 declared len 不正确的情况。
  */
 class InnerAssembler {
     private val pending = HashMap<Int, ByteArray>()
@@ -456,7 +456,7 @@ class InnerAssembler {
         sink(chan, inner)
     }
 
-    /** Отдать все целые inner из buf; неполный хвост удержать. Битый заголовок посреди потока: остаток уходит как есть. */
+    /** 从 buf 中送出所有完整的 inner；不完整的尾部暂存。流中间出现损坏的头部：剩余部分原样送出。 */
     private fun drain(chan: Int, buf: ByteArray, sink: (chan: Int, inner: ByteArray) -> Unit) {
         val hdrLen = hdrLen(chan)
         var off = 0
@@ -473,7 +473,7 @@ class InnerAssembler {
         if (off < buf.size) pending[chan] = buf.copyOfRange(off, buf.size)
     }
 
-    /** Кадр - цепочка inner с правильными заголовками; последний может быть неполным (или обрывком заголовка). */
+    /** 帧是头部正确的 inner 链；最后一个可能不完整（或是头部残片）。 */
     private fun chainOk(chan: Int, buf: ByteArray): Boolean {
         val hdrLen = hdrLen(chan)
         var off = 0
@@ -496,7 +496,7 @@ class InnerAssembler {
         return declared in 0..limit && type ushr 16 == chan
     }
 
-    /** Сколько каналов сейчас ждут тело. */
+    /** 当前有多少通道在等待消息体。 */
     fun waiting() = pending.size
 
     companion object {
@@ -505,8 +505,8 @@ class InnerAssembler {
 }
 
 /**
- * Данные для MD_INFO (поля CarlifeDeviceInfo).
- * Источник: CarlifeDeviceInfoManager.getCarlifeDeviceInfoBuilder (Baidu CarLife 8.6.7, :70-114).
+ * MD_INFO 的数据（CarlifeDeviceInfo 字段）。
+ * 来源：CarlifeDeviceInfoManager.getCarlifeDeviceInfoBuilder（百度 CarLife 8.6.7，:70-114）。
  */
 class DeviceInfo(
     val os: String = "Android",
@@ -536,15 +536,15 @@ class DeviceInfo(
 ) {
     companion object {
         /**
-         * Как в 8.6.7 (:90-98): при SDK_INT >= 33 MD врёт ГУ "29"/29, иначе шлёт настоящие значения.
-         * @return пара (sdk строкой, sdk_int)
+         * 与 8.6.7（:90-98）一致：SDK_INT >= 33 时 MD 向车机谎报 "29"/29，否则发送真实值。
+         * @return 一对值（sdk 字符串，sdk_int）
          */
         fun reportedSdk(realSdkInt: Int): Pair<String, Int> =
             if (realSdkInt >= 33) Pair("29", 29) else Pair(realSdkInt.toString(), realSdkInt)
     }
 }
 
-/** Тела сообщений (protobuf), байты сверены со спекой §9. */
+/** 消息体（protobuf），字节已与规范 §9 核对。 */
 object Msgs {
     fun protocolVersion(major: Int, minor: Int) =
         PbWriter().int32(1, major).int32(2, minor).toByteArray()
@@ -560,7 +560,7 @@ object Msgs {
 
     fun authenRequest(random: String) = PbWriter().string(1, random).toByteArray()
 
-    /** CarlifeTouchAction; pointerx/pointery (второй палец) optional, без них тело как у одного пальца. */
+    /** CarlifeTouchAction；pointerx/pointery（第二根手指）为可选，缺省时消息体与单指相同。 */
     fun touchAction(action: Int, x: Int, y: Int, pointerX: Int? = null, pointerY: Int? = null): ByteArray {
         val w = PbWriter().int32(1, action).int32(2, x).int32(3, y)
         if (pointerX != null) w.int32(4, pointerX)
@@ -570,7 +570,7 @@ object Msgs {
 
     fun deviceInfo(d: DeviceInfo): ByteArray {
         val w = PbWriter()
-        // поля optional: пустые строки не пишем
+        // optional 字段：空字符串不写入
         fun s(f: Int, v: String) {
             if (v.isNotEmpty()) w.string(f, v)
         }
@@ -586,8 +586,8 @@ object Msgs {
     }
 
     /**
-     * CarlifeModuleStatusList для MODULE_STATUS (ModuleStatusManage.sendCarlifeModuleListStatus, :158-221):
-     * модули 1,2,3,4,6 всегда, 8 и 9 только если у ГУ major >= 2; статус у всех 0.
+     * 用于 MODULE_STATUS 的 CarlifeModuleStatusList（ModuleStatusManage.sendCarlifeModuleListStatus, :158-221）：
+     * 模块 1、2、3、4、6 始终包含，8 和 9 仅在车机 major >= 2 时包含；状态全部为 0。
      */
     fun moduleStatusList(huMajor: Int): ByteArray {
         val ids = if (huMajor >= 2) intArrayOf(1, 2, 3, 4, 6, 8, 9) else intArrayOf(1, 2, 3, 4, 6)
@@ -597,16 +597,16 @@ object Msgs {
     }
 
     /**
-     * MODULE_STATUS об одном модуле (ModuleStatusManage.sendCarlifeModuleStatus, :260-273): cnt=1 и {moduleID, statusID}.
-     * Для VR (moduleID 4): 1 = голосовой помощник работает, 0 = нет.
+     * 关于单个模块的 MODULE_STATUS（ModuleStatusManage.sendCarlifeModuleStatus, :260-273）：cnt=1 和 {moduleID, statusID}。
+     * 对于 VR（moduleID 4）：1 = 语音助手工作中，0 = 未工作。
      */
     fun moduleStatusSingle(moduleId: Int, statusId: Int): ByteArray =
         PbWriter().int32(1, 1).bytes(2, PbWriter().int32(1, moduleId).int32(2, statusId).toByteArray()).toByteArray()
 
     /**
-     * CARLIFE_DATA_SUBSCRIBE_DONE на запрос ГУ (CarlifeDataSubscribe.handleMobileCarLifeInfoList, :18-53):
-     * moduleID зеркалится, supportFlag: 0 -> true, 1 -> false, 2 -> true, прочие false.
-     * null, если запрос не разобрался (Baidu в этом случае не отвечает).
+     * 对车机请求的 CARLIFE_DATA_SUBSCRIBE_DONE 响应（CarlifeDataSubscribe.handleMobileCarLifeInfoList, :18-53）：
+     * moduleID 原样返回，supportFlag：0 -> true、1 -> false、2 -> true，其余 false。
+     * 如果请求解析失败则返回 null（百度在这种情况下不响应）。
      */
     fun subscribeDone(req: ByteArray): ByteArray? {
         val f = PbReader.parse(req) ?: return null
@@ -620,7 +620,7 @@ object Msgs {
         return w.toByteArray()
     }
 
-    /** moduleID из запроса подписки (для лога START/STOP). */
+    /** 订阅请求中的 moduleID（用于 START/STOP 日志）。 */
     fun subscribeIds(req: ByteArray): List<Int> {
         val f = PbReader.parse(req) ?: return emptyList()
         return PbReader.all(f, 2).mapNotNull { it.data?.let { d -> PbReader.parse(d) }?.let { s -> PbReader.int(s, 1) } }
@@ -629,20 +629,20 @@ object Msgs {
     fun themeState(mode: Int) = PbWriter().int32(1, mode).toByteArray()
 
     /**
-     * CarlifeMediaInfo (MusicInfoSender.sendMusicInfoToVehicle :160-262). Все 9 полей proto2 required: пишем всегда,
-     * пустые строки тоже, иначе ГУ на protobuf с required выбросит сообщение. duration в секундах.
+     * CarlifeMediaInfo（MusicInfoSender.sendMusicInfoToVehicle :160-262）。全部 9 个字段都是 proto2 required：
+     * 始终写入，空字符串也写，否则车机会因带 required 的 protobuf 而丢弃消息。duration 单位为秒。
      */
     fun mediaInfo(i: CarlifeMediaInfo, albumArt: ByteArray): ByteArray =
         PbWriter().string(1, i.source).string(2, i.song).string(3, i.artist).string(4, i.album)
             .bytes(5, albumArt).int32(6, i.durationSeconds).int32(7, i.playlistNum).string(8, i.songId).int32(9, i.mode)
             .toByteArray()
 
-    /** CarlifeMediaProgressBar (MusicInfoSender :293-316). */
+    /** CarlifeMediaProgressBar（MusicInfoSender :293-316）。 */
     fun mediaProgress(progressBar: Int) = PbWriter().int32(1, progressBar).toByteArray()
 
     /**
-     * CarlifeNaviNextTurnInfo (RGEventHUDCollection :109-125). Поля 1-5 всегда; поле 6 по режиму [NaviField6]:
-     * bytes turnIconData (8.6.7) и/или int32 time (apollo-DuerOS / CarProjection) под одним номером 6.
+     * CarlifeNaviNextTurnInfo（RGEventHUDCollection :109-125）。字段 1-5 始终写入；字段 6 按 [NaviField6] 模式：
+     * 在同一个编号 6 下写入 bytes turnIconData（8.6.7）和/或 int32 time（apollo-DuerOS / CarProjection）。
      */
     fun naviNextTurn(t: NaviTurnInfo, field6: NaviField6, icon: ByteArray): ByteArray {
         val w = PbWriter().int32(1, t.action).int32(2, t.nextTurn).string(3, t.roadName)
@@ -655,7 +655,7 @@ object Msgs {
     fun frameRate(fps: Int) = PbWriter().int32(1, fps).toByteArray()
 }
 
-/** Разобранный HU_FEATURE_CONFIG_RESPONSE (CarlifeFeatureConfigList). */
+/** 解析后的 HU_FEATURE_CONFIG_RESPONSE（CarlifeFeatureConfigList）。 */
 class FeatureConfig(
     val items: List<Pair<String, Int>>,
     val huBtAudioSupport: Boolean?,
@@ -694,7 +694,7 @@ object Hex {
         return sb.toString()
     }
 
-    /** Классический дамп 16 байт в строке, первые max байт. */
+    /** 经典转储：每行 16 字节，最多前 max 字节。 */
     fun dump(b: ByteArray, max: Int = 256): String {
         val n = minOf(b.size, max)
         val sb = StringBuilder()
@@ -720,11 +720,11 @@ object Hex {
     }
 }
 
-/** Работа с H.264 Annex-B. */
+/** 处理 H.264 Annex-B。 */
 object AnnexB {
     private val SC4 = byteArrayOf(0, 0, 0, 1)
 
-    /** Позиции стартовых кодов: (начало кода, длина кода 3 или 4). */
+    /** 起始码的位置：（码起点，码长度 3 或 4）。 */
     private fun startCodes(d: ByteArray): List<IntArray> {
         val res = ArrayList<IntArray>()
         var i = 0
@@ -742,7 +742,7 @@ object AnnexB {
         return res
     }
 
-    /** Все стартовые коды приводятся к 4-байтным 00 00 00 01. Данные без стартовых кодов возвращаются как есть. */
+    /** 所有起始码统一为 4 字节的 00 00 00 01。没有起始码的数据原样返回。 */
     fun normalize(d: ByteArray): ByteArray {
         val sc = startCodes(d)
         if (sc.isEmpty() || sc.all { it[1] == 4 }) return d
@@ -757,7 +757,7 @@ object AnnexB {
         return out.toByteArray()
     }
 
-    /** NAL-типы (nal_unit_type) в порядке следования. */
+    /** 按出现顺序的 NAL 类型（nal_unit_type）。 */
     fun nalTypes(d: ByteArray): List<Int> {
         val res = ArrayList<Int>()
         for (s in startCodes(d)) {
@@ -770,8 +770,8 @@ object AnnexB {
     fun startsWithSps(d: ByteArray) = nalTypes(d).firstOrNull() == 7
 
     /**
-     * Минимальный level_idc H.264 для кадра w x h при 30 fps по MaxFS: 31 до 720p (3600 MB), 40 до 8192 MB (1080p),
-     * 42 до 8704 MB (2240x976 = 8540), 50 до 22080 MB (2560x1440 = 14400), выше 51.
+     * 按 MaxFS 计算 w x h 帧在 30 fps 下所需的最小 H.264 level_idc：31 最高 720p（3600 MB），40 最高 8192 MB（1080p），
+     * 42 最高 8704 MB（2240x976 = 8540），50 最高 22080 MB（2560x1440 = 14400），更高则为 51。
      */
     fun levelFor(w: Int, h: Int): Int {
         val mb = ((w + 15) / 16) * ((h + 15) / 16)
@@ -785,11 +785,11 @@ object AnnexB {
     }
 
     /**
-     * Подпись SPS Exynos (c2.exynos: Baseline, constraints 0x00, level_idc 52) старые ГУ CarLife не декодируют,
-     * экран остаётся чёрным (Desay G6S, Samsung A55). Приводим к подписи c2.qti: constraint_set0 = 1, level по размеру.
-     * Трогаем только SPS с level_idc > 41 (для наших размеров это ошибочная подпись), остальные отдаём как есть.
-     * Байты profile/constraints/level идут сразу за заголовком NAL, эмуляционных 0x03 перед ними нет, а новые значения
-     * (constraints 0x80, level >= 31) пару 00 00 не образуют. Возвращает исходный массив, если менять нечего.
+     * 老款 CarLife 车机无法解码 Exynos 的 SPS 签名（c2.exynos：Baseline，constraints 0x00，level_idc 52），
+     * 屏幕保持黑屏（德赛 G6S，三星 A55）。改为 c2.qti 的签名：constraint_set0 = 1，level 按尺寸计算。
+     * 只处理 level_idc > 41 的 SPS（对我们的尺寸而言这是错误的签名），其余原样返回。
+     * profile/constraints/level 字节紧跟在 NAL 头部之后，前面没有模拟防竞争字节 0x03，而新值
+     * （constraints 0x80，level >= 31）不会构成 00 00 字节对。无需修改时返回原数组。
      */
     fun fixSps(d: ByteArray, w: Int, h: Int): ByteArray {
         var out = d
@@ -801,7 +801,7 @@ object AnnexB {
             if (level <= 41) continue
             val cons = if (profile == 66) (d[p + 2].toInt() or 0x80).toByte() else d[p + 2]
             val lvl = levelFor(w, h).toByte()
-            // c2.qti на 2240x976 уже пишет 0x80/42: копия без изменений ломала поиск отличий в withFixedSps
+            // c2.qti 在 2240x976 上已经写入 0x80/42：不加修改的副本会破坏 withFixedSps 中的差异查找
             if (cons == d[p + 2] && lvl == d[p + 3]) continue
             if (out === d) out = d.copyOf()
             out[p + 2] = cons

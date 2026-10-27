@@ -10,7 +10,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Байтовые примеры взяты из docs/carlife-protocol.md §9.2. */
+/** 字节示例取自 docs/carlife-protocol.md §9.2。 */
 class ProtocolTest {
 
     private fun hex(s: String): ByteArray {
@@ -45,7 +45,7 @@ class ProtocolTest {
 
     @Test
     fun videoEncoderInitDone() {
-        // спека §9.1 шаг 8: 08 80 0A 10 D0 05 18 1E (1280x720, 30)
+        // 规范 §9.1 步骤 8: 08 80 0A 10 D0 05 18 1E (1280x720, 30)
         assertArrayEquals(hex("08 80 0A 10 D0 05 18 1E"), Msgs.videoEncoderInfo(1280, 720, 30))
         val inner = Wire.cmdInner(Msg.VIDEO_ENCODER_INIT_DONE, Msgs.videoEncoderInfo(1280, 720, 30))
         assertArrayEquals(hex("00 08 00 00 00 01 00 08 08 80 0A 10 D0 05 18 1E"), inner)
@@ -68,7 +68,7 @@ class ProtocolTest {
         assertArrayEquals(hex("08 01"), Msgs.authenResult(true))
         assertArrayEquals(hex("08 00"), Msgs.authenResult(false))
         assertArrayEquals(hex("00 02 00 00 00 01 00 4B 08 01"), Wire.cmdInner(Msg.MD_AUTHEN_RESULT, Msgs.authenResult(true)))
-        // пустой encryptValue: тег 0x0A, длина 0
+        // 空的 encryptValue: tag 0x0A, 长度 0
         assertArrayEquals(hex("0A 00"), Msgs.authenResponse(""))
         assertArrayEquals(hex("0A 03 61 62 63"), Msgs.authenResponse("abc"))
         val req = PbReader.parse(Msgs.authenRequest("CarLife_1.0.0"))!!
@@ -98,12 +98,12 @@ class ProtocolTest {
 
     @Test
     fun touchActionParse() {
-        // один палец: тело 8 байт, pointer-полей нет
+        // 单指: 消息体 8 字节, 没有 pointer 字段
         val one = CarlifeTouch.parse(Msg.TOUCH_ACTION, Msgs.touchAction(2, 640, 360))!!
         assertEquals(CarlifeTouch(2, 640, 360), one)
         assertEquals(1, one.fingers)
 
-        // POINTER_DOWN индекса 1 (261) со вторым пальцем в полях 4,5
+        // 索引 1 的 POINTER_DOWN (261), 第二根手指在字段 4、5 中
         val body = Msgs.touchAction(261, 100, 200, 300, 400)
         assertArrayEquals(hex("08 85 02 10 64 18 C8 01 20 AC 02 28 90 03"), body)
         val two = CarlifeTouch.parse(Msg.TOUCH_ACTION, body)!!
@@ -112,9 +112,9 @@ class ProtocolTest {
         assertEquals(2, two.fingers)
         assertEquals("{action=261 x=100 y=200 pointerx=300 pointery=400}", PbText.render(body, Schemas.touchAction))
 
-        // MOVE двумя пальцами
+        // 双指 MOVE
         assertEquals(2, CarlifeTouch.parse(Msg.TOUCH_ACTION, Msgs.touchAction(2, 1, 2, 3, 4))!!.fingers)
-        // POINTER_UP индекса 0 без координат второго: всё равно два пальца
+        // 索引 0 的 POINTER_UP 没有第二指的坐标: 仍算两指
         val up0 = CarlifeTouch.parse(Msg.TOUCH_ACTION, Msgs.touchAction(6, 1, 2))!!
         assertEquals(6, up0.action)
         assertEquals(2, up0.fingers)
@@ -144,7 +144,7 @@ class ProtocolTest {
         assertEquals(h264.size, m.declaredLen)
         assertArrayEquals(h264, m.data)
         assertFalse(m.truncated)
-        // heartbeat: len 0, тип 0x00020002
+        // heartbeat: len 0, 类型 0x00020002
         assertArrayEquals(hex("00 00 00 00  00 00 00 01  00 02 00 02"), Wire.dataInner(Msg.VIDEO_HEARTBEAT, 1, null))
     }
 
@@ -200,7 +200,7 @@ class ProtocolTest {
         assertEquals(big.size, Wire.u32(seq[0], 4))
         assertEquals(Ch.VIDEO, Wire.u32(seq[0], 0))
         assertTrue(seq.drop(1).all { it.size <= 16384 })
-        assertEquals(4, seq.size) // 8 + 3 куска: 16384 + 16384 + 7256
+        assertEquals(4, seq.size) // 8 + 3 块: 16384 + 16384 + 7256
         val joined = seq.drop(1).fold(ByteArray(0)) { acc, x -> acc + x }
         assertArrayEquals(big, joined)
     }
@@ -223,7 +223,7 @@ class ProtocolTest {
         assertEquals("unknown", PbReader.str(f, 16))
         assertEquals("36", PbReader.str(f, 20))
         assertEquals(36, PbReader.int(f, 21))
-        assertNull(PbReader.str(f, 2)) // пустые поля не пишутся
+        assertNull(PbReader.str(f, 2)) // 空字段不写入
     }
 
     @Test
@@ -246,31 +246,31 @@ class ProtocolTest {
 
     @Test
     fun annexBFixSpsExynos() {
-        // c2.exynos 1280x720: 67 42 00 34 -> подпись c2.qti 67 42 80 1F, PPS и IDR не трогаем
+        // c2.exynos 1280x720: 67 42 00 34 -> c2.qti 签名 67 42 80 1F, PPS 和 IDR 不动
         val exynos = hex("00 00 00 01 67 42 00 34 AB CD 00 00 00 01 68 CE 3C 80 00 00 00 01 65 88 84")
         val fixed = AnnexB.fixSps(exynos, 1280, 720)
         assertArrayEquals(hex("00 00 00 01 67 42 80 1F AB CD 00 00 00 01 68 CE 3C 80 00 00 00 01 65 88 84"), fixed)
         assertArrayEquals(hex("00 00 00 01 67 42 00 34 AB CD 00 00 00 01 68 CE 3C 80 00 00 00 01 65 88 84"), exynos)
-        // 1728x648 и 1920x720 больше 3600 макроблоков: level 4.0
+        // 1728x648 和 1920x720 超过 3600 宏块: level 4.0
         assertEquals(0x28, AnnexB.fixSps(exynos, 1728, 648)[7].toInt())
         assertEquals(0x28, AnnexB.fixSps(exynos, 1920, 720)[7].toInt())
         // 2240x976 (8540 MB) > MaxFS level 4.0: level 4.2; 2560x1440 (14400 MB): level 5.0
         assertEquals(0x2A, AnnexB.fixSps(exynos, 2240, 976)[7].toInt())
         assertEquals(0x32, AnnexB.fixSps(exynos, 2560, 1440)[7].toInt())
         assertEquals(0x28, AnnexB.fixSps(exynos, 1920, 1080)[7].toInt())
-        // qti (80/31), mtk (level 40), AA passthrough (00/31) и кадры без SPS - тот же массив
+        // qti (80/31), mtk (level 40), AA passthrough (00/31) 以及无 SPS 的帧 - 返回同一数组
         for (s in listOf("00 00 00 01 67 42 80 1F AB", "00 00 00 01 67 42 C0 28 AB", "00 00 00 01 67 42 00 1F AB", "00 00 00 01 41 9A 00 34")) {
             val d = hex(s)
             assertTrue(AnnexB.fixSps(d, 1280, 720) === d)
         }
-        // c2.qti на 2240x976 уже пишет 80/42: менять нечего, тот же массив (h57: копия без отличий валила заглушку)
+        // c2.qti 在 2240x976 上已写入 80/42: 无需改动, 返回同一数组 (h57: 无差异的拷贝曾导致 stub 失败)
         val qti976 = hex("00 00 00 01 67 42 80 2A AB")
         assertTrue(AnnexB.fixSps(qti976, 2240, 976) === qti976)
-        // Huawei Pura 70 на 2560x1440: 67 42 C0 32 уже совпадает с целевой подписью - тот же массив (h61: копия без отличий
-        // роняла withFixedSps на first{})
+        // Huawei Pura 70 在 2560x1440 上: 67 42 C0 32 已与目标签名一致 - 返回同一数组 (h61: 无差异的拷贝
+        // 曾导致 withFixedSps 在 first{} 处崩溃)
         val kirin = hex("00 00 00 01 67 42 C0 32 AB 00 00 00 01 68 CE")
         assertTrue(AnnexB.fixSps(kirin, 2560, 1440) === kirin)
-        // тот же SPS на 1280x720: level понижается до 3.1
+        // 同一 SPS 在 1280x720 上: level 会降到 3.1
         assertArrayEquals(hex("00 00 00 01 67 42 C0 1F AB 00 00 00 01 68 CE"), AnnexB.fixSps(kirin, 1280, 720))
     }
 
@@ -281,7 +281,7 @@ class ProtocolTest {
         assertArrayEquals(hex("00 00 00 01 67 AA 00 00 00 01 68 BB 00 00 00 01 65 CC"), norm)
         assertEquals(listOf(7, 8, 5), AnnexB.nalTypes(norm))
         assertTrue(AnnexB.startsWithSps(norm))
-        // уже 4-байтные не трогаем
+        // 已是 4 字节的不动
         val four = hex("00 00 00 01 41 11 22")
         assertTrue(AnnexB.normalize(four) === four)
         assertFalse(AnnexB.startsWithSps(four))
@@ -334,9 +334,9 @@ class ProtocolTest {
         assertEquals(7, PbReader.int(f, 1))
         val pairs = PbReader.all(f, 2).map { PbReader.parse(it.data!!)!! }.map { PbReader.int(it, 1) to PbReader.int(it, 2) }
         assertEquals(listOf(1, 2, 3, 4, 6, 8, 9).map { it to 0 }, pairs)
-        // первая запись целиком: moduleStatus{1,0}
+        // 第一条记录整体: moduleStatus{1,0}
         assertArrayEquals(hex("08 07 12 04 08 01 10 00"), body.copyOf(8))
-        // ГУ major 1: без 8 и 9
+        // 车机 major 1: 没有 8 和 9
         assertEquals(5, PbReader.int(PbReader.parse(Msgs.moduleStatusList(1))!!, 1))
         val inner = Wire.cmdInner(Msg.MODULE_STATUS, body)
         assertEquals(0x2C, Wire.u16(inner, 0))
@@ -345,7 +345,7 @@ class ProtocolTest {
 
     @Test
     fun subscribeDoneMirrorsRequest() {
-        // запрос из живого лога: cnt=1 {moduleID=0}
+        // 来自实机日志的请求: cnt=1 {moduleID=0}
         assertArrayEquals(hex("08 01 12 04 08 00 10 01"), Msgs.subscribeDone(hex("08 01 12 02 08 00")))
         // 0 -> true, 1 -> false, 2 -> true, 3 -> false
         val req = PbWriter().int32(1, 4)
@@ -359,7 +359,7 @@ class ProtocolTest {
         assertEquals(4, PbReader.int(f, 1))
         val flags = PbReader.all(f, 2).map { PbReader.parse(it.data!!)!! }.map { PbReader.int(it, 1) to PbReader.int(it, 2) }
         assertEquals(listOf(0 to 1, 1 to 0, 2 to 1, 3 to 0), flags)
-        // на мусор не отвечаем
+        // 对无效数据不响应
         assertNull(Msgs.subscribeDone(hex("12 05 01")))
         assertEquals(listOf(0), Msgs.subscribeIds(hex("08 01 12 02 08 00")))
         val inner = Wire.cmdInner(Msg.CARLIFE_DATA_SUBSCRIBE_DONE, done)
@@ -378,14 +378,14 @@ class ProtocolTest {
         assertNull(batch[1].body)
         assertNull(batch[2].body)
         assertTrue(batch[3].body!!.isNotEmpty())
-        // экран выключен: SCREEN_ON не шлём
+        // 屏幕关闭: 不发送 SCREEN_ON
         assertEquals(
             listOf(Msg.PROTOCOL_VERSION_MATCH_STATUS, Msg.FOREGROUND, Msg.MD_INFO),
             Handshake.startBatch(false, mdInfo()).map { it.type }
         )
-        // пустые тела: 8 байт, len=0, resv=0
+        // 空消息体: 8 字节, len=0, resv=0
         assertArrayEquals(hex("00 00 00 00 00 01 00 18"), Wire.cmdInner(batch[2].type, batch[2].body))
-        // MODULE_STATUS потом, через 500 мс
+        // MODULE_STATUS 随后发送, 延迟 500 毫秒
         assertEquals(500L, Handshake.MODULE_STATUS_DELAY_MS)
         assertEquals(Msg.MODULE_STATUS, Handshake.moduleStatus(2).type)
     }
@@ -407,7 +407,7 @@ class ProtocolTest {
         assertFalse(Handshake.isAuthV2(null))
     }
 
-    // ---------------- сборка inner по каналам ----------------
+    // ---------------- 按通道组装 inner ----------------
 
     private class Got(val chan: Int, val msg: CmdMsg)
 
@@ -428,7 +428,7 @@ class ProtocolTest {
 
     @Test
     fun splitVersionGivesMajor2AndFullModuleList() {
-        // VW Tharu XR 2026: HU_PROTOCOL_VERSION заголовком и телом в разных кадрах; раньше читалось null.null -> модули как для 1.x
+        // VW Tharu XR 2026: HU_PROTOCOL_VERSION 的头部和消息体在不同帧中; 以前读到 null.null -> 模块按 1.x 处理
         val got = runAssembler(hex("00 00 00 01 00 00 00 08 00 04 00 64 00 01 80 01 00 00 00 01 00 00 00 04 08 02 10 01"), 3)
         assertEquals(1, got.size)
         val f = PbReader.parse(got[0].msg.body)!!
@@ -463,8 +463,8 @@ class ProtocolTest {
 
     @Test
     fun assemblerSplitsTailOfBodyWithFollowingMessages() {
-        // VW Tharu XR 2026, лог 2026-10-11 15:02:46: заголовок MODULE_CONTROL отдельно, следом 154 байта =
-        // тело MODULE_CONTROL + HU_AUTHEN_RESULT + STATISTIC_INFO + HU_INFO; раньше всё после тела терялось
+        // VW Tharu XR 2026, 日志 2026-10-11 15:02:46: MODULE_CONTROL 的头部单独一帧, 随后 154 字节 =
+        // MODULE_CONTROL 消息体 + HU_AUTHEN_RESULT + STATISTIC_INFO + HU_INFO; 以前消息体之后的内容全部丢失
         val rest = hex(
             "08 06 10 00 00 02 00 68 00 01 80 4A 08 01 00 31 00 68 00 01 80 27 0A 14 " +
                 "56 57 58 39 47 45 30 31 30 32 34 36 31 20 20 20 20 20 20 20 12 03 32 2E 31 18 02 22 08 32 30 30 " +
@@ -489,7 +489,7 @@ class ProtocolTest {
 
     @Test
     fun assemblerSplitsWholeMessageWithTrailingHeader() {
-        // тот же ГУ, 15:03:06: кадр = MODULE_CONTROL целиком + заголовок HU_AUTHEN_RESULT, тело следующим кадром
+        // 同一车机, 15:03:06: 帧 = 完整的 MODULE_CONTROL + HU_AUTHEN_RESULT 头部, 消息体在下一帧
         val all = frame(Ch.CMD, hex("00 04 00 68 00 01 80 28 08 06 10 00 00 02 00 68 00 01 80 4A")) +
             frame(Ch.CMD, hex("08 01")) +
             frame(Ch.CMD, Wire.cmdInner(Msg.STATISTIC_INFO, null))
@@ -500,7 +500,7 @@ class ProtocolTest {
 
     @Test
     fun assemblerKeepsFrameWithForeignTailWhole() {
-        // хвост после первого inner не похож на заголовок этого канала -> кадр как есть, ничего не удерживается
+        // 第一个 inner 之后的尾部不像该通道的头部 -> 帧原样通过, 不暂存任何数据
         val whole = Wire.cmdInner(Msg.HU_PROTOCOL_VERSION, Msgs.protocolVersion(2, 0)) + hex("01 02 03 04 05 06 07 08 09")
         val got = runAssembler(frame(Ch.CMD, whole), 1000)
         assertEquals(1, got.size)
@@ -514,7 +514,7 @@ class ProtocolTest {
         val touch = Wire.cmdInner(Msg.TOUCH_ACTION, Msgs.touchAction(0, 640, 360))
         val all = frame(Ch.CMD, hdr) +
             frame(Ch.CMD, body.copyOfRange(0, 3)) +
-            frame(Ch.TOUCH, touch) + // другой канал не мешает
+            frame(Ch.TOUCH, touch) + // 其他通道不受影响
             frame(Ch.CMD, body.copyOfRange(3, 4)) +
             frame(Ch.CMD, body.copyOfRange(4, 10))
         val got = runAssembler(all, 5)
@@ -540,7 +540,7 @@ class ProtocolTest {
 
     @Test
     fun assemblerPassesWholeFramesAsBefore() {
-        // сообщение одним кадром; тело короче declared -> TRUNCATED как раньше; len=0 -> как есть
+        // 消息单帧送达; 消息体短于 declared -> 与之前一样为 TRUNCATED; len=0 -> 原样通过
         val whole = Wire.cmdInner(Msg.HU_PROTOCOL_VERSION, Msgs.protocolVersion(1, 0))
         val bad = hex("00 05 00 00 00 01 80 01 08 01")
         val empty = Wire.cmdInner(Msg.VIDEO_ENCODER_START, null)
@@ -551,7 +551,7 @@ class ProtocolTest {
         assertTrue(got[1].msg.truncated)
         assertEquals(5, got[1].msg.declaredLen)
         assertEquals(Msg.VIDEO_ENCODER_START, got[2].msg.type)
-        // чужой inner (меньше заголовка) тоже проходит без изменений
+        // 不认识的 inner (小于头部) 也原样通过
         val a = InnerAssembler()
         val seen = ArrayList<ByteArray>()
         a.feed(Ch.CMD, hex("00 01 02"), { _, i -> seen.add(i) })
@@ -562,34 +562,34 @@ class ProtocolTest {
     fun assemblerDoesNotHoldAbsurdDeclaredLen() {
         val a = InnerAssembler()
         val seen = ArrayList<ByteArray>()
-        // data: len = 0x7FFFFFFF > MAX_OUTER_LEN, и отрицательный (>= 2^31)
+        // data: len = 0x7FFFFFFF > MAX_OUTER_LEN, 以及负数 (>= 2^31)
         a.feed(Ch.VIDEO, hex("7F FF FF FF 00 00 00 01 00 02 00 01"), { _, i -> seen.add(i) })
         a.feed(Ch.VIDEO, hex("FF FF FF FF 00 00 00 01 00 02 00 01"), { _, i -> seen.add(i) })
         assertEquals(2, seen.size)
         assertEquals(0, a.waiting())
     }
 
-    // ---------------- ответ на HU_AUTHEN_REQUEST ----------------
+    // ---------------- 对 HU_AUTHEN_REQUEST 的响应 ----------------
 
     @Test
     fun versionVerifyLikeBaidu() {
         assertEquals("txGaIEnzYVCaFOEArS9O_00.00.00", HuAuth.versionVerify("txGaIEnzYVCaFOEArS9O_0"))
-        // длины равны (3 и 3): версия ГУ больше нашей -> обнуляется
+        // 长度相等 (3 和 3): 车机版本高于我们的 -> 被清零
         assertEquals("abc_00.00.00", HuAuth.versionVerify("abc_9.0.0"))
         assertEquals("abc_00.00.00", HuAuth.versionVerify("abc_8.6.8"))
-        // равна или меньше -> строка как есть
+        // 相等或更小 -> 字符串原样保留
         assertEquals("abc_8.6.7", HuAuth.versionVerify("abc_8.6.7"))
         assertEquals("abc_8.6.6", HuAuth.versionVerify("abc_8.6.6"))
         assertEquals("abc_1.9.9", HuAuth.versionVerify("abc_1.9.9"))
-        // старшая часть меньше решает, младшие не смотрим
+        // 高位部分更小即生效, 低位部分不看
         assertEquals("abc_8.5.99", HuAuth.versionVerify("abc_8.5.99"))
-        // нечисловая часть пропускается (у Baidu исключение гасится)
+        // 非数字部分被跳过 (Baidu 处异常被吞掉)
         assertEquals("abc_x.6.7", HuAuth.versionVerify("abc_x.6.7"))
-        // разная длина
+        // 长度不同
         assertEquals("abc_00.00.00", HuAuth.versionVerify("abc_1.0"))
-        // replace по всем вхождениям суффикса
+        // 对后缀的所有出现位置执行 replace
         assertEquals("a_00.00.00", HuAuth.versionVerify("a_1.0.0b_1.0.0"))
-        // без "_" подписывается как есть
+        // 没有 "_" 时原样返回
         assertEquals("plain", HuAuth.versionVerify("plain"))
     }
 
@@ -598,18 +598,18 @@ class ProtocolTest {
         assertTrue(HuAuth.isV2Branch("2.0;abcdef"))
         assertFalse(HuAuth.isV2Branch("txGaIEnzYVCaFOEArS9O_0"))
         assertFalse(HuAuth.isV2Branch("1.0;abc"))
-        assertFalse(HuAuth.isV2Branch("2.0;")) // split даёт одну часть
+        assertFalse(HuAuth.isV2Branch("2.0;")) // split 只得到一个部分
     }
 
     @Test
     fun v2VerifyCodeLikeLibEncryption() {
-        // md5("CARLIFE" + str) строчным hex
+        // md5("CARLIFE" + str) 以小写 hex 输出
         assertEquals("2fce147802726d1aeae532116434339d", HuAuth.verifyCode("HUAWEIADY-LX9312026-10-14-12-01-33"))
-        // запрос Honda CR-V 2026 (h61): ключ brand+model+sdk из MD_INFO + часть после ";"
+        // Honda CR-V 2026 的请求 (h61): 密钥 = MD_INFO 中的 brand+model+sdk + ";" 之后的部分
         val key = HuAuth.mdInfoKey(DeviceInfo(brand = "HUAWEI", model = "ADY-LX9", sdk = "31", sdkInt = 31))
         assertEquals("HUAWEIADY-LX931", key)
         assertEquals("2fce147802726d1aeae532116434339d", HuAuth.encryptValue("2.0;2026-10-14-12-01-33", key))
-        // третья часть после ";" в код не идёт (у Baidu strArrSplit[1])
+        // ";" 之后的第三部分不参与验证码 (Baidu 用 strArrSplit[1])
         assertEquals(HuAuth.verifyCode("ab"), HuAuth.encryptValue("2.0;b;c", "a"))
     }
 
@@ -626,7 +626,7 @@ class ProtocolTest {
         val c = javax.crypto.Cipher.getInstance("RSA/ECB/PKCS1Padding")
         c.init(javax.crypto.Cipher.DECRYPT_MODE, pub)
         assertEquals("txGaIEnzYVCaFOEArS9O_00.00.00", String(c.doFinal(sig), Charsets.UTF_8))
-        // тело ответа: поле 1, string
+        // 响应体: 字段 1, string
         val body = Msgs.authenResponse(enc)
         assertEquals(enc, PbReader.str(PbReader.parse(body)!!, 1))
         assertEquals(0x00010049, Msg.MD_AUTHEN_RESPONSE)
@@ -656,7 +656,7 @@ class ProtocolTest {
         assertArrayEquals(hex("08 00"), Msgs.themeState(0))
         assertEquals("RESPONSE_MD_THEME_STATE", Msg.name(0x10080))
         assertEquals("REQUEST_MD_THEME_STATE", Msg.name(0x18079))
-        // keepalive после START: VIDEO_DATA len=0, time = unix-секунды
+        // START 之后的 keepalive: VIDEO_DATA len=0, time = unix 秒
         assertArrayEquals(
             hex("00 00 00 00  65 00 00 00  00 02 00 01"),
             Wire.dataInner(Msg.VIDEO_DATA, 0x65000000, null)
@@ -669,7 +669,7 @@ class ProtocolTest {
 
     @Test
     fun chooseFpsAutoFollowsRequestInRange() {
-        // Авто: как Baidu - fps из INIT в 1..30, иначе 30 (Honda шлёт 0, Kia 15, Mazda 30)
+        // 自动: 与 Baidu 一致 - INIT 中的 fps 在 1..30 内则采用, 否则 30 (Honda 发 0, Kia 15, Mazda 30)
         val auto = FpsSetting.AUTO
         assertEquals(30, Handshake.chooseFps(auto, 0))
         assertEquals(15, Handshake.chooseFps(auto, 15))
@@ -694,7 +694,7 @@ class ProtocolTest {
 
     @Test
     fun chooseFpsHuCapForPioneer() {
-        // Pioneer RM56E8B (h277): потолок 10 и в Авто, и при фиксированных настройках; без потолка поведение прежнее
+        // Pioneer RM56E8B (h277): 自动和固定设置下上限均为 10; 无上限时行为不变
         val cap = AaBridgeCore.PIONEER_RM56_MAX_FPS
         assertEquals(10, cap)
         assertEquals(10, Handshake.chooseFps(FpsSetting.AUTO, 30, cap))
@@ -708,7 +708,7 @@ class ProtocolTest {
 
     @Test
     fun capFpsAppliesToFrameRateChange() {
-        // FRAME_RATE_CHANGE: max(fps, MIN_APPLIED_FPS), затем потолок ГУ
+        // FRAME_RATE_CHANGE: max(fps, MIN_APPLIED_FPS), 再应用车机上限
         val cap = AaBridgeCore.PIONEER_RM56_MAX_FPS
         fun applied(fps: Int, huMax: Int?) = Handshake.capFps(maxOf(fps, Handshake.MIN_APPLIED_FPS), huMax)
         assertEquals(10, applied(30, cap))
@@ -729,7 +729,7 @@ class ProtocolTest {
 
     @Test
     fun reassemblesVrMicDataSplitInto256ByteFrames() {
-        // h425: VW CNS2 Delphi шлёт MIC_DATA [12 + 1024] кадрами по 256 Б
+        // h425: VW CNS2 Delphi 以每帧 256 字节发送 MIC_DATA [12 + 1024]
         val pcm = ByteArray(1024) { (it * 7).toByte() }
         val inner = Wire.dataInner(Msg.VR_MIC_DATA, 0, pcm)
         val r = DataReassembler()
@@ -743,7 +743,7 @@ class ProtocolTest {
         assertEquals(Msg.VR_MIC_DATA, m.type)
         assertArrayEquals(pcm, m.data)
         assertEquals(1, r.assembled)
-        // целое сообщение проходит как есть
+        // 完整消息原样通过
         val small = Wire.dataInner(Msg.VR_MIC_DATA, 0, ByteArray(200))
         assertTrue(r.feed(small) === small)
     }

@@ -16,11 +16,11 @@ import com.yegorkapomidorka.headswap.aa.CarPreset
 import com.yegorkapomidorka.headswap.aa.CarSettings
 
 /**
- * Выбор машины: поле-выпадашка (список CarPreset раскрывается прямо под полем, его ширины) и под ним карточка «Будет применено» с названием каждой настройки.
- * Строки карточки фиксированной высоты, при выборе меняются только значения: ничего не прыгает.
- * Последний шаг онбординга (в настройках раздела нет). Сам ничего не пишет, только сообщает выбор в [onPick];
- * применяет экран по своей кнопке «Применить».
- * [withOther] - последним пунктом «Моей машины нет в списке» (выбор null, настройки не трогаются).
+ * 选择汽车：下拉字段（CarPreset 列表直接在字段下方展开，宽度与字段相同），其下方为“将要应用”卡片，列出每项设置的名称。
+ * 卡片各行高度固定，选择时仅值发生变化：界面不会跳动。
+ * 引导流程的最后一步（设置中没有对应分区）。它本身不写入任何内容，只通过 [onPick] 上报选择；
+ * 应用屏幕由它自己的“应用”按钮完成。
+ * [withOther] - 最后一项为“我的车不在列表中”（选择为 null，设置保持不变）。
  */
 class CarChooser(val ctx: Context, private val withOther: Boolean, private val onPick: (CarPreset?) -> Unit) {
     private val fieldValue = ctx.text("", 17f, 500).apply {
@@ -32,7 +32,7 @@ class CarChooser(val ctx: Context, private val withOther: Boolean, private val o
     private val field: LinearLayout
     private val opts: List<CarPreset?> = CarPreset.values().toList() + if (withOther) listOf(null) else emptyList()
 
-    /** false - ещё ничего не выбрано (поле «Выберите машину», значения «—»). */
+    /** false - 尚未选择任何内容（字段显示“选择汽车”，值为“—”）。 */
     var hasChoice = false
         private set
     var choice: CarPreset? = null
@@ -75,7 +75,7 @@ class CarChooser(val ctx: Context, private val withOther: Boolean, private val o
         show(null, has = false)
     }
 
-    /** Показать выбор (без вызова [onPick]). */
+    /** 显示选择（不调用 [onPick]）。 */
     fun show(p: CarPreset?, has: Boolean = true) {
         val c = ctx
         hasChoice = has
@@ -94,14 +94,14 @@ class CarChooser(val ctx: Context, private val withOther: Boolean, private val o
         for ((v, t) in values.zip(texts)) v.text = t
     }
 
-    /** Раскрытое поле: рамка цвета акцента той же толщины (ничего не сдвигается), шеврон вверх. */
+    /** 展开状态下的字段：同样粗细的强调色边框（界面无位移），箭头朝上。 */
     private fun setOpen(open: Boolean) {
         val c = ctx
         field.background = c.rippleBg(c.shape(c.clr(R.color.surf), 16, c.clr(if (open) R.color.acc else R.color.line), 1.5f), 16)
         chevron.rotation = if (open) -90f else 90f
     }
 
-    /** Список под полем: шириной с поле, до ~6 строк, дальше прокрутка; нажатие мимо закрывает. */
+    /** 字段下方的列表：宽度与字段相同，最多约 6 行，超出则滚动；点击外部即关闭。 */
     private fun openList() {
         val c = ctx
         val popup = ListPopupWindow(c)
@@ -128,7 +128,7 @@ class CarChooser(val ctx: Context, private val withOther: Boolean, private val o
         }
     }
 
-    /** Строка списка: выбранная залита pric, начертание у всех одно (не прыгает). */
+    /** 列表行：选中的行以 pric 填充，所有行字重统一（不跳动）。 */
     private inner class Adapter : BaseAdapter() {
         override fun getCount() = opts.size
 
@@ -157,12 +157,12 @@ class CarChooser(val ctx: Context, private val withOther: Boolean, private val o
     private companion object {
         const val ITEM_DP = 48
 
-        /** Подписи строк «Будет применено», в порядке [settingNames]. */
+        /** “将要应用”各行标签，顺序与 [settingNames] 一致。 */
         val LABELS = listOf(R.string.car_label_mode, R.string.set_resolution, R.string.set_aa_density, R.string.set_fps, R.string.set_music_rate)
     }
 }
 
-/** Названия настроек, как в разделах «Видео» и «Звук»: режим, разрешение, масштаб AA, кадры, музыка. */
+/** 设置名称，与“视频”和“声音”分区一致：模式、分辨率、AA 缩放、帧率、音乐。 */
 private fun Context.settingNames(s: CarSettings): List<String> = listOf(
     getString(if (s.transcode) R.string.set_transcode_title else R.string.set_direct_title),
     getString(s.videoMode.effective(s.transcode).titleRes),

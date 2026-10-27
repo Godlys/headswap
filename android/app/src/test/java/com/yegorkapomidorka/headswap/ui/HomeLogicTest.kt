@@ -39,7 +39,7 @@ class HomeLogicTest {
         assertEquals(Phase.OFF, s.phase)
         assertEquals(PrimaryAction.START_SERVER, s.primary)
         assertEquals(StageState.TODO, s.stages[0].second.first)
-        // сервер ГУ включает пользователь: янтарный тон (не warn), заголовок-призыв и блок из трёх пунктов
+        // 用户需自行启动车机端服务器：琥珀色色调（非 warn）、号召式标题与三步提示区块
         assertEquals(Tone.PRI, s.tone)
         assertEquals(UiText.res(R.string.home_title_off), s.title)
         assertEquals(UiText.res(R.string.home_sub_start_chain), s.sub)
@@ -91,7 +91,7 @@ class HomeLogicTest {
 
     @Test
     fun parkedAfterSessionEnded() {
-        // мост сам штатно закрыл установленную сессию: «Машина отключена», сервер ГУ в фоне «работает», без «проверяю» и кнопок
+        // 桥接器按流程自行关闭了已建立的会话：「汽车已断开」，车机服务器在后台「运行中」，无「检查中」提示与按钮
         val s = HomeLogic.compute(inp(ended = true))
         assertEquals(Phase.PARKED, s.phase)
         assertEquals(Tone.PRI, s.tone)
@@ -105,7 +105,7 @@ class HomeLogicTest {
         assertEquals(StageState.PEND, s.stages[1].second.first)
         assertEquals(UiText.res(R.string.home_stage_hu_parked), s.stages[1].second.second)
         assertEquals(UiText.res(R.string.notif_parked), s.notifText)
-        // отказы и зависания прошлых подключений PARKED не меняют: SERVER_DOWN только при живом мосте
+        // 以往连接的拒绝与挂起不会改变 PARKED 状态：仅当桥接器存活时才判为 SERVER_DOWN
         val stale = HomeLogic.compute(inp(ended = true, refusedMs = 60_000, hangs = 3, worked = true))
         assertEquals(Phase.PARKED, stale.phase)
     }
@@ -124,7 +124,7 @@ class HomeLogicTest {
         assertEquals(true, s.logLink)
         assertEquals(UiText.res(R.string.home_title_server_down), s.notifTitle)
         assertEquals(UiText.res(R.string.notif_server_down), s.notifText)
-        // короткий отказ (~6 с после ByeBye) норма: обычное «Подключаюсь», без красного и без «Запустите сервер ГУ»
+        // 短暂拒绝（ByeBye 后约 6 秒）属正常：显示普通「正在连接」，无红色提示，也无「启动车机服务器」
         val short = HomeLogic.compute(inp(running = true, status = status, protocol = true, refusedMs = HomeLogic.REFUSED_DOWN_MS - 1, worked = true))
         assertEquals(Phase.WAITING, short.phase)
         assertEquals(false, short.showChain)
@@ -137,7 +137,7 @@ class HomeLogicTest {
         assertEquals(Phase.ERROR, s.phase)
         assertEquals(UiText.res(R.string.home_title_server_down), s.title)
         assertEquals(UiText.res(R.string.notif_server_down), s.notifText)
-        // одно зависание ещё не вывод: обычное «Подключаюсь»
+        // 仅一次挂起尚不足以判定故障：仍显示普通「正在连接」
         val one = HomeLogic.compute(inp(running = true, status = status, protocol = true, hangs = 1, worked = true))
         assertEquals(Phase.WAITING, one.phase)
         assertEquals(UiText.res(R.string.home_title_connecting), one.title)
@@ -145,7 +145,7 @@ class HomeLogicTest {
 
     @Test
     fun serverDownNeedsEvidenceThatItWasUp() {
-        // новичок: сервер ни разу не работал, длинный отказ и зависания не дают красного - прежнее «Запустите сервер ГУ»
+        // 新用户场景：服务器从未成功运行过，长时间拒绝与挂起不会触发红色错误——仍是原来的「启动车机服务器」
         val fresh = HomeLogic.compute(inp(running = true, status = "мост: жду сервер ГУ AA", refusedMs = 60_000))
         assertEquals(Phase.OFF, fresh.phase)
         assertEquals(UiText.res(R.string.home_title_off), fresh.title)
@@ -155,12 +155,12 @@ class HomeLogicTest {
 
     @Test
     fun serverDownOnlyWhileBridgeAttemptsAndNotOnceConnected() {
-        // моста нет (кабеля нет): прошлые отказы ничего не значат
+        // 桥接器不存在（未插数据线）：以往的拒绝记录没有任何意义
         assertEquals(Phase.OFF, HomeLogic.compute(inp(refusedMs = 60_000, hangs = 3, worked = true)).phase)
-        // сессия идёт: обычное «Всё работает», даже если счётчики ещё не обнулились
+        // 会话进行中：即使计数器尚未清零，也显示普通的「一切正常」
         val connected = HomeLogic.compute(inp(running = true, status = "мост: AA -> CarLife", refusedMs = 60_000, hangs = 3, worked = true))
         assertEquals(Phase.CONNECTED, connected.phase)
-        // обрыв USB: grace держит сессию, отказов нет
+        // USB 断开：宽限期保持会话，不视为故障
         val grace = HomeLogic.compute(inp(running = true, status = "мост: USB потерян, AA жива 8 с", refusedMs = 60_000, worked = true))
         assertEquals(Phase.RECONNECTING, grace.phase)
     }

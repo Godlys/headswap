@@ -13,9 +13,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.CopyOnWriteArrayList
 
-/** Микрофон AA: форматы кадров, нарезка и окно, маршрутизация ГУ / телефон / fallback. */
+/** AA 麦克风：帧格式、切片与窗口、车机 / 手机 / fallback 路由。 */
 class AaMicTest {
-    // ---------------------------------------------------------------- форматы
+    // ---------------------------------------------------------------- 格式
     @Test
     fun dataPayloadIsU64BigEndianMicrosThenPcm() {
         val p = AaMicFormat.dataPayload(0x0102030405060708L, byteArrayOf(9, 8, 7))
@@ -24,7 +24,7 @@ class AaMicTest {
         assertEquals(M.CH_MIC, out.chan)
         assertEquals(M.MEDIA_DATA, out.type)
         assertEquals(8 + 4096, out.payload.size)
-        // кадр AAP: type 0 на канале MIC -> зашифрованный bulk без control-флага
+        // AAP 帧：MIC 通道上 type 0 -> 无 control 标志的加密 bulk
         assertEquals(AapFraming.FLAGS_ENC_BULK, AapFraming.messageFlags(M.CH_MIC, out.type))
     }
 
@@ -32,7 +32,7 @@ class AaMicTest {
     fun microphoneResponseBytes() {
         assertArrayEquals(Golden.hex("08 00 10 01"), M.micResponse(true, 1).payload)
         assertArrayEquals(Golden.hex("08 f9ffffffffffffffff01 10 02"), M.micResponse(false, 2).payload)
-        // MicrophoneRequest от телефона: open=1, max_unacked=4
+        // 来自手机的 MicrophoneRequest：open=1, max_unacked=4
         val f = PbReader.parse(AapPb().bool(1, true).v(4, 4).toByteArray())!!
         assertEquals(1, PbReader.int(f, 1))
         assertEquals(4, PbReader.int(f, 4))
@@ -45,7 +45,7 @@ class AaMicTest {
         assertEquals(32_000, AaMicFormat.BYTES_PER_SEC)
     }
 
-    // ---------------------------------------------------------------- uplink
+    // ---------------------------------------------------------------- 上行链路
     private class Emitted(val sid: Int, val ts: Long, val pcm: ByteArray)
 
     private fun uplink(out: MutableList<Emitted>, maxPending: Int = 4) = AaMicUplink({ sid, ts, pcm -> out.add(Emitted(sid, ts, pcm)) }, maxPending)
@@ -58,7 +58,7 @@ class AaMicTest {
         val u = uplink(out)
         u.open(1, 8)
         u.activate()
-        // 3 куска по 1500 Б: кадр набирается на 3-м (4096 = 1500+1500+1096), остаток 404 Б ждёт
+        // 3 块各 1500 字节：第 3 块凑满一帧 (4096 = 1500+1500+1096)，剩余 404 字节等待
         assertEquals(AaMicUplink.Feed.OK, u.feed(pcm(1500, 0), 1_000_000))
         assertEquals(AaMicUplink.Feed.OK, u.feed(pcm(1500, 1), 1_046_875))
         assertTrue(out.isEmpty())
@@ -66,7 +66,7 @@ class AaMicTest {
         assertEquals(1, out.size)
         assertEquals(4096, out[0].pcm.size)
         assertEquals("timestamp = момент первого байта кадра", 1_000_000L, out[0].ts)
-        // хвост закрытием отбрасывается, не дополняется нулями
+        // 尾部在关闭时被丢弃，不补零
         val s = u.close()
         assertNotNull(s)
         assertEquals(1, s!!.chunksSent)
@@ -79,8 +79,8 @@ class AaMicTest {
         val u = uplink(out)
         u.open(3, 8)
         u.activate()
-        u.feed(pcm(3000), 0)                                  // кадр 1 не набран
-        u.feed(pcm(6000), 100_000)                             // 1096 Б дополняют кадр 1; кадр 2 начинается с байта 1096 этой порции
+        u.feed(pcm(3000), 0)                                  // 帧 1 未凑满
+        u.feed(pcm(6000), 100_000)                             // 1096 字节补满帧 1；帧 2 从该块的第 1096 字节开始
         assertEquals(2, out.size)
         assertEquals(0L, out[0].ts)
         assertEquals(100_000L + AaMicFormat.usForBytes(1096), out[1].ts)
@@ -110,7 +110,7 @@ class AaMicTest {
         val out = ArrayList<Emitted>()
         val u = uplink(out)
         u.open(1, 4)
-        u.feed(pcm(4096 * 2), 0)                              // MicrophoneResponse ещё не в очереди
+        u.feed(pcm(4096 * 2), 0)                              // MicrophoneResponse 尚未入队
         assertTrue(out.isEmpty())
         u.activate()
         assertEquals(2, out.size)
@@ -122,7 +122,7 @@ class AaMicTest {
         val u = uplink(out)
         u.open(1, 1)
         u.activate()
-        // окно 1 + очередь 4 = 5 кадров, шестой переполняет
+        // 窗口 1 + 队列 4 = 5 帧，第 6 帧溢出
         assertEquals(AaMicUplink.Feed.OK, u.feed(pcm(4096 * 5), 0))
         assertEquals(1, out.size)
         assertEquals(AaMicUplink.Feed.OVERFLOW, u.feed(pcm(4096), 0))
@@ -150,7 +150,7 @@ class AaMicTest {
         assertEquals(500_000L, out[1].ts)
     }
 
-    // ---------------------------------------------------------------- роутер
+    // ---------------------------------------------------------------- 路由器
     private class Timer(val at: Long, val task: Runnable) : MicTimerHandle {
         var cancelled = false
         override fun cancel() {
@@ -260,7 +260,7 @@ class AaMicTest {
         assertEquals("запись на ГУ остановлена", listOf(true, false), r.record)
         assertEquals(1, r.phoneMic!!.starts)
         assertTrue(r.logs.any { it.contains("fallback на микрофон телефона") })
-        // дальше звук телефона идёт в AA, данные ГУ игнорируются
+        // 之后手机的声音进入 AA，车机数据被忽略
         r.nowUs = 70_000_000L
         r.phoneMic.sink!!.invoke(ByteArray(4096))
         assertEquals(listOf(4096 to 70_000_000L - 128_000L), r.toAa)
@@ -316,7 +316,7 @@ class AaMicTest {
     fun phoneModeRefusedWhenAudioRecordDoesNotStart() {
         assertFalse(Rig(MicMode.PHONE, phone = FakePhoneMic(startOk = false)).router.open())
         assertFalse(Rig(MicMode.PHONE, phone = null).router.open())
-        // авто: ГУ молчит, телефон не запустился - остаёмся без звука, но без падения
+        // 自动模式：车机无声、手机未启动 - 保持无声音，但不崩溃
         val r = Rig(MicMode.AUTO, phone = FakePhoneMic(startOk = false))
         assertTrue(r.router.open())
         r.nowMs += 2000
@@ -333,7 +333,7 @@ class AaMicTest {
         r.router.onCarlifeLost()
         assertEquals(AaMicRouter.State.PHONE, r.router.current)
         assertEquals("CarLife мёртв: MIC_RECORD_END слать некуда", listOf(true), r.record)
-        // режим «машина»: остаёмся ждать ГУ
+        // 「汽车」模式：继续等待车机
         val c = Rig(MicMode.CAR)
         c.router.open()
         c.router.onCarlifeLost()
@@ -349,7 +349,7 @@ class AaMicTest {
         r.router.open()
         assertEquals(listOf(true, false, true), r.record)
         assertTrue(old.cancelled)
-        old.task.run()                                         // поздний таймер прошлого open не должен переключать
+        old.task.run()                                         // 上次 open 的迟到定时器不应触发切换
         assertEquals(AaMicRouter.State.HU_WAIT, r.router.current)
         assertEquals(0, r.phoneMic!!.starts)
     }
@@ -372,15 +372,15 @@ class AaMicTest {
         assertEquals(MicMode.AUTO, MicMode.parse("мусор"))
     }
 
-    // ---------------------------------------------------------------- CarLife-сторона
+    // ---------------------------------------------------------------- CarLife 侧
     @Test
     fun carlifeVrMicMessageParsesAsBaiduSendsIt() {
-        // HU -> MD: канал VR, внутренний заголовок 12 байт [len][time=0][type 0x58001] + PCM
+        // HU -> MD：VR 通道，内部头部 12 字节 [len][time=0][type 0x58001] + PCM
         val pcm = ByteArray(640) { it.toByte() }
         val inner = Wire.dataInner(Msg.VR_MIC_DATA, 0, pcm)
         val m = Wire.parseData(inner)!!
         assertEquals(0x00058001, m.type)
-        assertEquals(360449, Msg.VR_MIC_DATA)                   // CommonParams.MSG_VR_DATA в Baidu 8.6.7
+        assertEquals(360449, Msg.VR_MIC_DATA)                   // Baidu 8.6.7 中的 CommonParams.MSG_VR_DATA
         assertEquals(640, m.declaredLen)
         assertFalse(m.truncated)
         assertArrayEquals(pcm, m.data)
@@ -392,15 +392,15 @@ class AaMicTest {
         assertEquals(65570, Msg.MIC_RECORD_WAKEUP_START)        // CommonParams.MSG_CMD_MIC_RECORD_WAKEUP_START
         assertEquals(65571, Msg.MIC_RECORD_END)
         assertEquals(65572, Msg.MIC_RECORD_RECOG_START)
-        // CMD без тела: [len=0][resv=0][type]
+        // 无实体的 CMD：[len=0][resv=0][type]
         assertArrayEquals(Golden.hex("0000 0000 00010024"), Wire.cmdInner(Msg.MIC_RECORD_RECOG_START, null))
         assertArrayEquals(Golden.hex("0000 0000 00010023"), Wire.cmdInner(Msg.MIC_RECORD_END, null))
-        // MODULE_STATUS VR=1 / VR=0: cnt=1 и {moduleID=4, statusID}
+        // MODULE_STATUS VR=1 / VR=0：cnt=1 且 {moduleID=4, statusID}
         assertArrayEquals(Golden.hex("0801 1204 0804 1001"), Msgs.moduleStatusSingle(4, 1))
         assertArrayEquals(Golden.hex("0801 1204 0804 1000"), Msgs.moduleStatusSingle(4, 0))
     }
 
-    // ---------------------------------------------------------------- ядро моста: сквозной путь
+    // ---------------------------------------------------------------- 桥接核心：贯通路径
     private class MicLink : CarlifeLink {
         val record = ArrayList<Boolean>()
         override fun sendVideo(payload: ByteArray) = true
@@ -461,7 +461,7 @@ class AaMicTest {
         assertTrue(core.onMicOpen())
         core.onCarlifeClosed(link)
         assertFalse(core.hasCarlifeLink)
-        // роутер остаётся в ожидании ГУ (режим «машина»), открытый AA-микрофон не падает при закрытии
+        // 路由器保持等待车机（「汽车」模式），打开的 AA 麦克风在关闭时不崩溃
         core.onMicClose("AA закрыла")
         assertEquals("после обрыва MIC_RECORD_END слать некуда", listOf(true), link.record)
     }
