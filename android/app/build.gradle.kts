@@ -18,8 +18,8 @@ android {
         applicationId = "com.yegorkapomidorka.headswap"
         minSdk = 29
         targetSdk = 37
-        versionCode = 63
-        versionName = "2.6.0"
+        versionCode = 1
+        versionName = "0.0.1"
         // CI 只出 arm64-v8a（armv8）包：纯 Kotlin 无 native 库，将来若有 .so 也只打 arm64
         ndk {
             abiFilters += listOf("arm64-v8a")

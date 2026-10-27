@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -74,3 +74,26 @@ jobs:
           name: headswap-arm64-v8a
           path: android/app/build/outputs/apk/release/headswap-arm64-v8a.apk
           if-no-files-found: error
+
+      - name: Create GitHub Release
+        # 仅 push 触发（版本更新）时自动发布；手动 dispatch 调试不发 release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: android/app/build/outputs/apk/release
+        run: |
+          VERSION_NAME=$(grep -oP 'versionName = "\K[^"]+' ../../../../../build.gradle.kts)
+          TAG="v${VERSION_NAME}"
+          APK="headswap-${VERSION_NAME}.apk"
+          # 与 UpdateLogic.assetUrl 格式一致：releases/download/<tag>/headswap-<version>.apk
+          cp headswap-arm64-v8a.apk "$APK"
+          echo "version=$VERSION_NAME tag=$TAG apk=$APK"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG 已存在，删除后重建（--cleanup-tag 会同时删 tag）"
+            gh release delete "$TAG" --yes --cleanup-tag
+          fi
+          gh release create "$TAG" "$APK" \
+            --title "Headswap ${VERSION_NAME}" \
+            --notes "自动构建发布 (arm64-v8a)" \
+            --repo "$GITHUB_REPOSITORY"
+          echo "release $TAG 已发布"

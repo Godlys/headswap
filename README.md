@@ -1,6 +1,6 @@
 # Headswap — 在 CarLife 车机上运行 Android Auto
 
-**简体中文版。** Headswap 是一款 Android 应用，可让仅支持百度 CarLife 2.0（USB 连接，常见于中国市场的汽车）的车机运行 Android Auto。手机以「车机」的身份连接 Android Auto 的 head unit server（127.0.0.1:5277），将 1280x720 视频重新编码，并通过 USB（AOA）以 CarLife 手机的身份呈现给汽车。触摸映射为 1:1，音频和麦克风走 USB。无需任何外接硬件。已在 2024 款本田 Vezel 上验证。非官方项目，与 Google、百度或本田均无关联。GPL-3.0 协议。
+Headswap 是一款 Android 应用，可让仅支持百度 CarLife 2.0（USB 连接，常见于中国市场的汽车）的车机运行 Android Auto。手机以「车机」的身份连接 Android Auto 的 head unit server（127.0.0.1:5277），将 1280x720 视频重新编码，并通过 USB（AOA）以 CarLife 手机的身份呈现给汽车。触摸映射为 1:1，音频和麦克风走 USB。无需任何外接硬件。已在 2024 款本田 Vezel 上验证。非官方项目，与 Google、百度或本田均无关联。GPL-3.0 协议。
 
 ![Android Auto 在本田 Vezel 原厂车机上](docs/screenshot.jpg)
 
