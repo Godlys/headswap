@@ -82,7 +82,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         working-directory: android/app/build/outputs/apk/release
         run: |
-          VERSION_NAME=$(grep -oP 'versionName = "\K[^"]+' ../../../../../build.gradle.kts)
+          VERSION_NAME=$(grep -oP 'versionName = "\K[^"]+' "$GITHUB_WORKSPACE/android/app/build.gradle.kts")
           TAG="v${VERSION_NAME}"
           APK="headswap-${VERSION_NAME}.apk"
           # 与 UpdateLogic.assetUrl 格式一致：releases/download/<tag>/headswap-<version>.apk
