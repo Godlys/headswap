@@ -28,13 +28,11 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install SDK 37
+        # runner 预装完整 Android SDK（ANDROID_HOME=/usr/local/lib/android/sdk），只需补 platform 37
         run: |
-          sdkmanager --install "platforms;android-37" "build-tools;36.0.0" --sdk_root="$ANDROID_HOME"
-          yes | sdkmanager --licenses --sdk_root="$ANDROID_HOME" || true
+          sdkmanager --install "platforms;android-37" "build-tools;36.0.0"
+          sdkmanager --licenses >/dev/null 2>&1 || true
 
       - name: Restore AA head unit certs (hur/jvc)
         # release 构建硬依赖证书，缺失直接失败；从 secret 注入
